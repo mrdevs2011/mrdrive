@@ -8,6 +8,21 @@ const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("file-input");
 const fileListEl = document.getElementById("file-list");
 const uploadProgressEl = document.getElementById("upload-progress");
+const bootLoader = document.getElementById("boot-loader");
+
+const ICON_DOWNLOAD = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V16M12 16L7 11M12 16L17 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const ICON_DELETE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 7L7 19C7 19.5523 7.44772 20 8 20H16C16.5523 20 17 19.5523 17 19L18 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7V4C9 3.44772 9.44772 3 10 3H14C14.5523 3 15 3.44772 15 4V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+
+// Boot: session bor-yo'qligini avval tekshirib, keyingina to'g'ri ekranni ko'rsatamiz
+sb.auth.getSession().then(({ data: { session } }) => {
+  bootLoader.style.display = "none";
+  if (session) {
+    authScreen.style.display = "none";
+    appScreen.style.display = "block";
+  } else {
+    authScreen.style.display = "flex";
+  }
+});
 
 const BUCKET = "files";
 const TABLE = "files";
@@ -98,6 +113,7 @@ async function logout() {
 }
 
 sb.auth.onAuthStateChange((event, session) => {
+  if (bootLoader.style.display !== "none") return; // boot tugagunicha bu ishlamasin
   if (session) {
     authScreen.style.display = "none";
     appScreen.style.display = "block";
@@ -214,8 +230,8 @@ async function loadFiles() {
         <span class="file-meta">${formatSize(f.size)} · ${formatDate(f.uploaded_at)}</span>
       </div>
       <div class="file-actions">
-        <button onclick="downloadFile('${f.storage_path}', '${escapeHtml(f.filename)}')" title="Yuklab olish">⬇</button>
-        <button onclick="deleteFile(${f.id}, '${f.storage_path}')" title="O'chirish">🗑</button>
+        <button onclick="downloadFile('${f.storage_path}', '${escapeHtml(f.filename)}')" title="Yuklab olish">${ICON_DOWNLOAD}</button>
+        <button onclick="deleteFile(${f.id}, '${f.storage_path}')" title="O'chirish">${ICON_DELETE}</button>
       </div>
     </div>
   `).join("");

@@ -9,12 +9,18 @@
 <body>
 
   <!-- AUTH SCREEN -->
-  <div id="auth-screen" class="screen">
+  <div id="auth-screen" class="screen" style="display:none;">
     <div class="auth-box">
+      <div class="logo">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="10" fill="#18181b"/>
+          <path d="M10 26V14L20 22L30 14V26" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
       <h1>MRdrive</h1>
 
       <div id="login-form">
-        <p>Kirish</p>
+        <p class="form-title">Kirish</p>
         <input type="text" id="login-username" placeholder="Username" />
         <input type="password" id="login-password" placeholder="Parol" />
         <button onclick="login()">Kirish</button>
@@ -22,7 +28,7 @@
       </div>
 
       <div id="signup-form" style="display:none;">
-        <p>Ro'yxatdan o'tish</p>
+        <p class="form-title">Ro'yxatdan o'tish</p>
         <input type="text" id="signup-name" placeholder="Ismingiz" />
         <input type="text" id="signup-username" placeholder="Username" />
         <input type="password" id="signup-password" placeholder="Parol (min 6 belgi)" />
@@ -34,10 +40,24 @@
     </div>
   </div>
 
+  <!-- INITIAL LOADER -->
+  <div id="boot-loader">
+    <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+      <rect width="40" height="40" rx="10" fill="#18181b"/>
+      <path d="M10 26V14L20 22L30 14V26" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+  </div>
+
   <!-- APP SCREEN -->
   <div id="app" class="screen" style="display:none;">
     <header>
-      <h1>MRdrive</h1>
+      <div class="brand">
+        <svg width="26" height="26" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="10" fill="#18181b"/>
+          <path d="M10 26V14L20 22L30 14V26" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <h1>MRdrive</h1>
+      </div>
       <div>
         <span id="user-email"></span>
         <button onclick="logout()">Chiqish</button>
@@ -45,7 +65,11 @@
     </header>
 
     <div id="dropzone" class="dropzone">
-      Drag and drop yoki CTRL+V yoki <label for="file-input" class="upload-label">fayl tanlash</label>
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" class="dz-icon">
+        <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 16V18C4 19.1046 4.89543 20 6 20H18C19.1046 20 20 19.1046 20 18V16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p>Drag and drop yoki CTRL+V yoki <label for="file-input" class="upload-label">fayl tanlash</label></p>
       <input type="file" id="file-input" multiple hidden />
     </div>
 
