@@ -16,16 +16,18 @@ const ICON_LINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><
 const ICON_LINK_ACTIVE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/></svg>`;
 const ICON_UNLINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3L21 21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_SEARCH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21L16.5 16.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
-const ICON_FOLDER = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 7C3 5.89543 3.89543 5 5 5H9L11 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+const ICON_FOLDER = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7C3 5.89543 3.89543 5 5 5H9L11 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
 
 const BUCKET = "files";
 const TABLE = "files";
+const FOLDERS_TABLE = "folders";
 const FAKE_EMAIL_DOMAIN = "mrdrive.local";
 
 // State
 let allFiles = [];
+let allFolders = [];
 let currentSearch = "";
-let currentFolder = null; // null = "All files"
+let currentFolder = null;
 
 // ==========================================
 // PUBLIC LINK MODAL
@@ -89,7 +91,6 @@ function showPublicDownloadModal(token) {
         return;
       }
 
-      // Muddat tekshirish
       if (data.expires_at && new Date(data.expires_at) < new Date()) {
         filenameEl.textContent = "Muddati o'tgan";
         metaEl.textContent = "Bu linkning muddati tugagan.";
@@ -129,7 +130,6 @@ function showPublicDownloadModal(token) {
         a.click();
         a.remove();
 
-        // Yuklab olishlar sonini oshirish
         sb.rpc("increment_download_count", { file_id: data.id });
 
         statusEl.textContent = "Yuklab olindi";
@@ -267,7 +267,6 @@ async function uploadFile(file) {
     return;
   }
 
-  // Agar papka tanlangan bo'lsa — shu papkaga qo'shamiz
   const insertData = {
     user_id: user.id,
     filename: file.name,
@@ -314,35 +313,32 @@ window.addEventListener("paste", (e) => {
 });
 
 // ==========================================
-// LIST — qidiruv + papkalar bilan
+// LIST + TOOLBAR + FOLDERS
 // ==========================================
 
 async function loadFiles() {
-  const { data: files, error } = await sb
-    .from(TABLE)
-    .select("*")
-    .order("uploaded_at", { ascending: false });
+  const [filesRes, foldersRes] = await Promise.all([
+    sb.from(TABLE).select("*").order("uploaded_at", { ascending: false }),
+    sb.from(FOLDERS_TABLE).select("*").order("created_at", { ascending: true })
+  ]);
 
-  if (error) {
-    fileListEl.innerHTML = `<p>Xato: ${error.message}</p>`;
+  if (filesRes.error) {
+    fileListEl.innerHTML = `<p>Xato: ${filesRes.error.message}</p>`;
     return;
   }
 
-  allFiles = files;
+  allFiles = filesRes.data;
+  allFolders = foldersRes.data || [];
   renderToolbar();
   renderFiles();
 }
 
 function renderToolbar() {
-  // Papka ro'yxatini yig'amiz
-  const folders = [...new Set(allFiles.map(f => f.folder).filter(Boolean))].sort();
-
   let toolbar = document.getElementById("toolbar");
   if (!toolbar) {
     toolbar = document.createElement("div");
     toolbar.id = "toolbar";
     toolbar.className = "toolbar";
-    // Dropzone'dan keyin joylashtiramiz
     dropzone.parentNode.insertBefore(toolbar, dropzone.nextSibling);
   }
 
@@ -355,16 +351,20 @@ function renderToolbar() {
       <button class="folder-tab ${currentFolder === null ? 'active' : ''}" onclick="setFolder(null)">
         ${ICON_FOLDER} Hammasi
       </button>
-      ${folders.map(f => `
-        <button class="folder-tab ${currentFolder === f ? 'active' : ''}" onclick="setFolder('${escapeJs(f)}')">
-          ${ICON_FOLDER} ${escapeHtml(f)}
-        </button>
+      ${allFolders.map(f => `
+        <div class="folder-tab-wrap">
+          <button class="folder-tab ${currentFolder === f.name ? 'active' : ''}" onclick="setFolder('${escapeJs(f.name)}')">
+            ${ICON_FOLDER} ${escapeHtml(f.name)}
+          </button>
+          <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}')" title="Papkani o'chirish">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
       `).join("")}
       <button class="folder-tab new-folder-btn" onclick="createFolder()">+ Papka</button>
     </div>
   `;
 
-  // Search input event
   const searchInput = document.getElementById("search-input");
   searchInput.addEventListener("input", (e) => {
     currentSearch = e.target.value;
@@ -378,28 +378,66 @@ function setFolder(folder) {
   renderFiles();
 }
 
-function createFolder() {
+async function createFolder() {
   const name = prompt("Papka nomi:");
   if (!name || !name.trim()) return;
   const trimmed = name.trim();
 
-  // Agar bo'sh papka bo'lsa, uni faqat keyingi yuklashda ko'ramiz.
-  // Hozircha state sifatida saqlaymiz va foydalanuvchini o'sha papkaga o'tkazamiz.
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+
+  if (allFolders.some(f => f.name.toLowerCase() === trimmed.toLowerCase())) {
+    showToast("Bu nomdagi papka allaqachon mavjud");
+    return;
+  }
+
+  const { error } = await sb.from(FOLDERS_TABLE).insert({
+    user_id: user.id,
+    name: trimmed
+  });
+
+  if (error) {
+    alert("Xato: " + error.message);
+    return;
+  }
+
   currentFolder = trimmed;
-  renderToolbar();
-  renderFiles();
-  showToast(`Papka tanlandi: ${trimmed}. Endi fayl yuklang.`);
+  showToast(`Papka yaratildi: ${trimmed}`);
+  loadFiles();
+}
+
+async function deleteFolder(id, name) {
+  const filesInFolder = allFiles.filter(f => f.folder === name);
+  let msg = `"${name}" papkasi o'chirilsinmi?`;
+  if (filesInFolder.length > 0) {
+    msg += `\n\nDiqqat: bu papkada ${filesInFolder.length} ta fayl bor. Ular "Hammasi" bo'limiga o'tadi (o'chmaydi).`;
+  }
+
+  if (!confirm(msg)) return;
+
+  if (filesInFolder.length > 0) {
+    await sb.from(TABLE).update({ folder: null }).eq("folder", name);
+  }
+
+  const { error } = await sb.from(FOLDERS_TABLE).delete().eq("id", id);
+
+  if (error) {
+    alert("Xato: " + error.message);
+    return;
+  }
+
+  if (currentFolder === name) currentFolder = null;
+  showToast("Papka o'chirildi");
+  loadFiles();
 }
 
 function renderFiles() {
   let filtered = allFiles;
 
-  // Papka filtri
   if (currentFolder !== null) {
     filtered = filtered.filter(f => f.folder === currentFolder);
   }
 
-  // Qidiruv
   if (currentSearch.trim()) {
     const q = currentSearch.toLowerCase();
     filtered = filtered.filter(f => f.filename.toLowerCase().includes(q));
@@ -421,7 +459,6 @@ function renderFiles() {
     const linkTitle = isPublic ? "Yangi link yaratish (eskisi o'chadi)" : "Public link yaratish";
     const linkClass = isPublic ? "link-btn active" : "link-btn";
 
-    // Meta
     let meta = `${formatSize(f.size)} · ${formatDate(f.uploaded_at)}`;
     if (f.download_count > 0) {
       meta += ` · ${f.download_count} yuklab olish`;
@@ -476,11 +513,10 @@ async function downloadFile(id, path, filename) {
   a.click();
   a.remove();
 
-  // Counter
   sb.rpc("increment_download_count", { file_id: id });
-  // Local state'da ham oshiramiz
   const file = allFiles.find(f => f.id === id);
   if (file) file.download_count = (file.download_count || 0) + 1;
+  renderFiles();
 }
 
 async function deleteFile(id, path) {
@@ -506,7 +542,6 @@ async function togglePublicLink(fileId) {
     return;
   }
 
-  // Muddat tanlash modali
   showDurationPicker(async (duration) => {
     const newToken = generateToken();
     const expiresAt = computeExpiry(duration);
@@ -556,7 +591,6 @@ async function unpublishFile(fileId) {
 }
 
 function showDurationPicker(onSelect) {
-  // Mavjud modalni o'chirish
   const existing = document.getElementById("duration-modal");
   if (existing) existing.remove();
 
