@@ -192,7 +192,7 @@ window.addEventListener("paste", (e) => {
 // ---------- LIST + DOWNLOAD + DELETE ----------
 
 async function loadFiles() {
-  const { data: files, error } = await supabase
+  const { data: files, error } = await sb
     .from(TABLE)
     .select("*")
     .order("uploaded_at", { ascending: false });
