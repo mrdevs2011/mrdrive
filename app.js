@@ -13,8 +13,8 @@ const bootLoader = document.getElementById("boot-loader");
 const ICON_DOWNLOAD = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V16M12 16L7 11M12 16L17 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_DELETE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 7L7 19C7 19.5523 7.44772 20 8 20H16C16.5523 20 17 19.5523 17 19L18 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7V4C9 3.44772 9.44772 3 10 3H14C14.5523 3 15 3.44772 15 4V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_LINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const ICON_LINK_ACTIVE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/></svg>`;
 const ICON_UNLINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3L21 21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const ICON_COPY = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15V5C5 4.44772 5.44772 4 6 4H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_SEARCH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21L16.5 16.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_FOLDER = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7C3 5.89543 3.89543 5 5 5H9L11 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
 const ICON_CLOSE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
@@ -28,6 +28,10 @@ let allFiles = [];
 let allFolders = [];
 let currentSearch = "";
 let currentFolder = null;
+
+// ==========================================
+// PUBLIC LINK MODAL
+// ==========================================
 
 const urlParams = new URLSearchParams(window.location.search);
 const shareToken = urlParams.get("share");
@@ -140,6 +144,10 @@ function closePublicModal() {
   window.location.href = window.location.pathname;
 }
 
+// ==========================================
+// AUTH
+// ==========================================
+
 function usernameToEmail(username) {
   return username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "") + "@" + FAKE_EMAIL_DOMAIN;
 }
@@ -229,6 +237,10 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
+// ==========================================
+// UPLOAD
+// ==========================================
+
 const BLOCKED_EXTENSIONS = [
   "exe", "bat", "cmd", "sh", "msi", "com", "scr",
   "vbs", "js", "jar", "ps1", "app", "dmg", "apk"
@@ -306,6 +318,10 @@ window.addEventListener("paste", (e) => {
   const items = e.clipboardData.files;
   if (items.length) handleFiles(items);
 });
+
+// ==========================================
+// LIST + TOOLBAR + FOLDERS
+// ==========================================
 
 async function loadFiles() {
   const [filesRes, foldersRes] = await Promise.all([
@@ -446,9 +462,6 @@ function renderFiles() {
   fileListEl.innerHTML = filtered.map(f => {
     const isPublic = f.is_public && f.public_token;
     const isExpired = f.expires_at && new Date(f.expires_at) < new Date();
-    const linkIcon = isPublic ? ICON_LINK_ACTIVE : ICON_LINK;
-    const linkTitle = isPublic ? "Yangi link yaratish (eskisi o'chadi)" : "Public link yaratish";
-    const linkClass = isPublic ? "link-btn active" : "link-btn";
 
     let meta = `${formatSize(f.size)} · ${formatDate(f.uploaded_at)}`;
     if (f.download_count > 0) {
@@ -476,8 +489,11 @@ function renderFiles() {
         <span class="file-meta">${meta}</span>
       </div>
       <div class="file-actions">
-        <button class="${linkClass}" onclick="togglePublicLink(${f.id})" title="${linkTitle}">${linkIcon}</button>
-        ${isPublic ? `<button class="unlink-btn" onclick="unpublishFile(${f.id})" title="Public'dan olib tashlash">${ICON_UNLINK}</button>` : ''}
+        ${isPublic
+          ? `<button class="copy-btn" onclick="copyPublicLink(${f.id})" title="Linkni nusxalash">${ICON_COPY}</button>
+             <button class="unlink-btn" onclick="unpublishFile(${f.id})" title="Public'dan olib tashlash">${ICON_UNLINK}</button>`
+          : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Public link yaratish">${ICON_LINK}</button>`
+        }
         <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Yuklab olish">${ICON_DOWNLOAD}</button>
         <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}')" title="O'chirish">${ICON_DELETE}</button>
       </div>
@@ -517,7 +533,11 @@ async function deleteFile(id, path) {
   loadFiles();
 }
 
-async function togglePublicLink(fileId) {
+// ==========================================
+// PUBLIC LINK — CREATE / COPY / UNPUBLISH
+// ==========================================
+
+async function createPublicLink(fileId) {
   const { data: file, error } = await sb
     .from(TABLE)
     .select("*")
@@ -550,14 +570,26 @@ async function togglePublicLink(fileId) {
     const url = `${window.location.origin}${window.location.pathname}?share=${newToken}`;
     await copyToClipboard(url);
 
-    if (file.is_public && file.public_token) {
-      showToast("Yangi link yaratildi, eskisi o'chdi");
-    } else {
-      showToast("Public link yaratildi va nusxalandi");
-    }
-
+    showToast("Public link yaratildi va nusxalandi");
     loadFiles();
   });
+}
+
+async function copyPublicLink(fileId) {
+  const { data: file, error } = await sb
+    .from(TABLE)
+    .select("public_token")
+    .eq("id", fileId)
+    .single();
+
+  if (error || !file || !file.public_token) {
+    alert("Xato: link topilmadi.");
+    return;
+  }
+
+  const url = `${window.location.origin}${window.location.pathname}?share=${file.public_token}`;
+  await copyToClipboard(url);
+  showToast("Link nusxalandi");
 }
 
 async function unpublishFile(fileId) {
@@ -649,6 +681,10 @@ function showToast(msg) {
     setTimeout(() => toast.remove(), 300);
   }, 2500);
 }
+
+// ==========================================
+// HELPERS
+// ==========================================
 
 function formatSize(bytes) {
   if (!bytes) return "0 B";
