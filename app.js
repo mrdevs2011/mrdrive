@@ -15,6 +15,7 @@ const ICON_DELETE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 const ICON_LINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ICON_UNLINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3L21 21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_COPY = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15V5C5 4.44772 5.44772 4 6 4H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const ICON_REFRESH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 4V9H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20V15H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9C4 9 6 4 12 4C16 4 19 6 20 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 15C20 15 18 20 12 20C8 20 5 18 4 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_SEARCH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21L16.5 16.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_FOLDER = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7C3 5.89543 3.89543 5 5 5H9L11 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
 const ICON_CLOSE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
@@ -490,8 +491,11 @@ function renderFiles() {
       </div>
       <div class="file-actions">
         ${isPublic
-          ? `<button class="copy-btn" onclick="copyPublicLink(${f.id})" title="Linkni nusxalash">${ICON_COPY}</button>
-             <button class="unlink-btn" onclick="unpublishFile(${f.id})" title="Public'dan olib tashlash">${ICON_UNLINK}</button>`
+          ? `<div class="toggle-group">
+               <button class="toggle-btn copy-btn" onclick="copyPublicLink(${f.id})" title="Linkni nusxalash">${ICON_COPY}</button>
+               <button class="toggle-btn refresh-btn" onclick="refreshPublicLink(${f.id})" title="Yangi link yaratish (eskisi o'chadi)">${ICON_REFRESH}</button>
+               <button class="toggle-btn unlink-btn" onclick="unpublishFile(${f.id})" title="Public'dan olib tashlash">${ICON_UNLINK}</button>
+             </div>`
           : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Public link yaratish">${ICON_LINK}</button>`
         }
         <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Yuklab olish">${ICON_DOWNLOAD}</button>
@@ -534,7 +538,7 @@ async function deleteFile(id, path) {
 }
 
 // ==========================================
-// PUBLIC LINK — CREATE / COPY / UNPUBLISH
+// PUBLIC LINK — CREATE / COPY / REFRESH / UNPUBLISH
 // ==========================================
 
 async function createPublicLink(fileId) {
@@ -590,6 +594,44 @@ async function copyPublicLink(fileId) {
   const url = `${window.location.origin}${window.location.pathname}?share=${file.public_token}`;
   await copyToClipboard(url);
   showToast("Link nusxalandi");
+}
+
+async function refreshPublicLink(fileId) {
+  if (!confirm("Yangi link yaratilsinmi? Eski link endi ishlamaydi.")) return;
+
+  const { data: file, error } = await sb
+    .from(TABLE)
+    .select("*")
+    .eq("id", fileId)
+    .single();
+
+  if (error || !file) {
+    alert("Xato: fayl topilmadi.");
+    return;
+  }
+
+  const currentExpiry = file.expires_at;
+  const newToken = generateToken();
+
+  const { error: updateError } = await sb
+    .from(TABLE)
+    .update({
+      is_public: true,
+      public_token: newToken,
+      expires_at: currentExpiry
+    })
+    .eq("id", fileId);
+
+  if (updateError) {
+    alert("Xato: " + updateError.message);
+    return;
+  }
+
+  const url = `${window.location.origin}${window.location.pathname}?share=${newToken}`;
+  await copyToClipboard(url);
+
+  showToast("Yangi link yaratildi va nusxalandi");
+  loadFiles();
 }
 
 async function unpublishFile(fileId) {
