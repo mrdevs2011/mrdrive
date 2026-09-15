@@ -298,7 +298,7 @@ async function loadFiles() {
   fileListEl.innerHTML = files.map(f => {
     const isPublic = f.is_public && f.public_token;
     const linkIcon = isPublic ? ICON_LINK_ACTIVE : ICON_LINK;
-    const linkTitle = isPublic ? "Public link (copy)" : "Public link yaratish";
+    const linkTitle = isPublic ? "Yangi link yaratish (eskisi o'chadi)" : "Public link yaratish";
     const linkClass = isPublic ? "link-btn active" : "link-btn";
 
     return `
@@ -334,7 +334,7 @@ async function deleteFile(id, path) {
 }
 
 // ==========================================
-// PUBLIC LINK TOGGLE
+// PUBLIC LINK — har bosganda yangi token
 // ==========================================
 
 async function togglePublicLink(fileId) {
@@ -349,18 +349,12 @@ async function togglePublicLink(fileId) {
     return;
   }
 
-  if (file.is_public && file.public_token) {
-    const url = `${window.location.origin}${window.location.pathname}?share=${file.public_token}`;
-    await copyToClipboard(url);
-    showToast("Already created public link — nusxalandi ✓");
-    return;
-  }
-
-  const token = generateToken();
+  // Har doim yangi token yaratamiz (eski link o'chadi)
+  const newToken = generateToken();
 
   const { error: updateError } = await sb
     .from(TABLE)
-    .update({ is_public: true, public_token: token })
+    .update({ is_public: true, public_token: newToken })
     .eq("id", fileId);
 
   if (updateError) {
@@ -368,9 +362,15 @@ async function togglePublicLink(fileId) {
     return;
   }
 
-  const url = `${window.location.origin}${window.location.pathname}?share=${token}`;
+  const url = `${window.location.origin}${window.location.pathname}?share=${newToken}`;
   await copyToClipboard(url);
-  showToast("Public link yaratildi va nusxalandi ✓");
+
+  if (file.is_public && file.public_token) {
+    showToast("Yangi link yaratildi — eskisi o'chdi ✓");
+  } else {
+    showToast("Public link yaratildi va nusxalandi ✓");
+  }
+
   loadFiles();
 }
 
