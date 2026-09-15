@@ -20,7 +20,6 @@
 }
 
 body { background: var(--bg); color: var(--text); }
-
 .screen { min-height: 100vh; }
 
 /* BOOT LOADER */
@@ -141,7 +140,7 @@ header button:hover { background: var(--bg); }
 }
 .upload-label:hover { border-color: var(--text); }
 
-/* TOOLBAR — qidiruv + papkalar */
+/* TOOLBAR */
 .toolbar {
   margin: 0 40px 16px;
   display: flex;
@@ -158,6 +157,7 @@ header button:hover { background: var(--bg); }
   left: 12px;
   color: var(--text-muted);
   pointer-events: none;
+  display: flex;
 }
 #search-input {
   width: 100%;
@@ -175,6 +175,7 @@ header button:hover { background: var(--bg); }
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: stretch;
 }
 .folder-tab {
   display: flex;
@@ -191,13 +192,35 @@ header button:hover { background: var(--bg); }
   transition: all 0.15s;
 }
 .folder-tab:hover { border-color: var(--border-strong); color: var(--text); }
-.folder-tab.active {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-.folder-tab svg { width: 14px; height: 14px; }
+.folder-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
 .new-folder-btn { color: var(--text); font-weight: 600; }
+
+.folder-tab-wrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.folder-tab-wrap .folder-tab {
+  border: none;
+  border-radius: 0;
+}
+.folder-tab-wrap .folder-tab.active { background: var(--accent); color: white; }
+.folder-del-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  border-left: 1px solid var(--border);
+}
+.folder-del-btn:hover { background: var(--red-bg); color: var(--red-text); }
 
 /* UPLOAD PROGRESS */
 #upload-progress {
@@ -313,7 +336,7 @@ header button:hover { background: var(--bg); }
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* PUBLIC MODAL (share link) */
+/* PUBLIC MODAL */
 .public-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -377,7 +400,7 @@ header button:hover { background: var(--bg); }
 .public-modal-box button:disabled { opacity: 0.4; cursor: not-allowed; }
 .public-status { margin-top: 14px; font-size: 13px; color: var(--text-muted); min-height: 16px; }
 
-/* DURATION PICKER MODAL */
+/* DURATION MODAL */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -399,16 +422,8 @@ header button:hover { background: var(--bg); }
   animation: slideUp 0.2s ease;
   text-align: center;
 }
-.modal-box h3 {
-  font-size: 17px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.modal-desc {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-bottom: 18px;
-}
+.modal-box h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+.modal-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
 .duration-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -437,10 +452,7 @@ header button:hover { background: var(--bg); }
   color: var(--green-text);
   border-color: var(--green);
 }
-.duration-options .default-opt:hover {
-  background: var(--green);
-  color: white;
-}
+.duration-options .default-opt:hover { background: var(--green); color: white; }
 .modal-cancel {
   width: 100%;
   padding: 10px;
@@ -453,38 +465,6 @@ header button:hover { background: var(--bg); }
 }
 .modal-cancel:hover { background: var(--bg); color: var(--text); }
 
-.folder-tab-wrap {
-  display: flex;
-  align-items: stretch;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--surface);
-}
-.folder-tab-wrap .folder-tab {
-  border: none;
-  border-radius: 0;
-}
-.folder-tab-wrap .folder-tab.active {
-  background: var(--accent);
-  color: white;
-}
-.folder-del-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  padding: 0 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s;
-  border-left: 1px solid var(--border);
-}
-.folder-del-btn:hover {
-  background: var(--red-bg);
-  color: var(--red-text);
-}
 /* RESPONSIVE */
 @media (max-width: 600px) {
   header { padding: 14px 20px; }
