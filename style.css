@@ -453,6 +453,38 @@ header button:hover { background: var(--bg); }
 }
 .modal-cancel:hover { background: var(--bg); color: var(--text); }
 
+.folder-tab-wrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.folder-tab-wrap .folder-tab {
+  border: none;
+  border-radius: 0;
+}
+.folder-tab-wrap .folder-tab.active {
+  background: var(--accent);
+  color: white;
+}
+.folder-del-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  border-left: 1px solid var(--border);
+}
+.folder-del-btn:hover {
+  background: var(--red-bg);
+  color: var(--red-text);
+}
 /* RESPONSIVE */
 @media (max-width: 600px) {
   header { padding: 14px 20px; }
