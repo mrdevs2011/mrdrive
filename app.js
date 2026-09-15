@@ -12,24 +12,110 @@ const bootLoader = document.getElementById("boot-loader");
 
 const ICON_DOWNLOAD = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V16M12 16L7 11M12 16L17 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_DELETE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 7L7 19C7 19.5523 7.44772 20 8 20H16C16.5523 20 17 19.5523 17 19L18 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7V4C9 3.44772 9.44772 3 10 3H14C14.5523 3 15 3.44772 15 4V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
-
-// Boot: session bor-yo'qligini avval tekshirib, keyingina to'g'ri ekranni ko'rsatamiz
-sb.auth.getSession().then(({ data: { session } }) => {
-  bootLoader.style.display = "none";
-  if (session) {
-    authScreen.style.display = "none";
-    appScreen.style.display = "block";
-  } else {
-    authScreen.style.display = "flex";
-  }
-});
+const ICON_LINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_LINK_ACTIVE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/></svg>`;
 
 const BUCKET = "files";
 const TABLE = "files";
-
-// ---------- AUTH ----------
-
 const FAKE_EMAIL_DOMAIN = "mrdrive.local";
+
+// ==========================================
+// PUBLIC LINK MODAL — URL parametri orqali
+// ==========================================
+
+// Sahifa yuklanganda URL'da ?share=TOKEN bor-yo'qligini tekshiramiz
+const urlParams = new URLSearchParams(window.location.search);
+const shareToken = urlParams.get("share");
+
+if (shareToken) {
+  // Auth ekranlarini yashirib, faqat modal ko'rsatamiz
+  bootLoader.style.display = "none";
+  authScreen.style.display = "none";
+  appScreen.style.display = "none";
+  showPublicDownloadModal(shareToken);
+} else {
+  // Oddiy boot
+  sb.auth.getSession().then(({ data: { session } }) => {
+    bootLoader.style.display = "none";
+    if (session) {
+      authScreen.style.display = "none";
+      appScreen.style.display = "block";
+      const name = session.user.user_metadata?.name || session.user.user_metadata?.username || "";
+      userEmailEl.textContent = name;
+      loadFiles();
+    } else {
+      authScreen.style.display = "flex";
+    }
+  });
+}
+
+function showPublicDownloadModal(token) {
+  // Modal HTML'ini yaratamiz
+  const modal = document.createElement("div");
+  modal.id = "public-modal";
+  modal.innerHTML = `
+    <div class="public-modal-backdrop">
+      <div class="public-modal-box">
+        <div class="public-modal-icon">${ICON_DOWNLOAD}</div>
+        <h2 id="public-filename">Yuklanmoqda...</h2>
+        <p id="public-meta" class="public-meta"></p>
+        <button id="public-download-btn" disabled>Yuklab olish</button>
+        <p id="public-status" class="public-status"></p>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const filenameEl = document.getElementById("public-filename");
+  const metaEl = document.getElementById("public-meta");
+  const statusEl = document.getElementById("public-status");
+  const downloadBtn = document.getElementById("public-download-btn");
+
+  // Token orqali fayl ma'lumotini olamiz
+  sb.from(TABLE)
+    .select("*")
+    .eq("public_token", token)
+    .eq("is_public", true)
+    .single()
+    .then(({ data, error }) => {
+      if (error || !data) {
+        filenameEl.textContent = "Fayl topilmadi";
+        metaEl.textContent = "Bu link o'chirilgan yoki mavjud emas.";
+        statusEl.textContent = "";
+        return;
+      }
+
+      filenameEl.textContent = data.filename;
+      metaEl.textContent = `${formatSize(data.size)} · ${formatDate(data.uploaded_at)}`;
+      downloadBtn.disabled = false;
+
+      downloadBtn.onclick = async () => {
+        statusEl.textContent = "Yuklanmoqda...";
+        const { data: urlData, error: urlError } = await sb.storage
+          .from(BUCKET)
+          .createSignedUrl(data.storage_path, 60);
+
+        if (urlError) {
+          statusEl.textContent = "Xato: " + urlError.message;
+          return;
+        }
+
+        // Avtomatik yuklab olish
+        const a = document.createElement("a");
+        a.href = urlData.signedUrl;
+        a.download = data.filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        statusEl.textContent = "Yuklab olindi ✓";
+      };
+    });
+}
+
+// ==========================================
+// AUTH (avvalgidek)
+// ==========================================
 
 function usernameToEmail(username) {
   return username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "") + "@" + FAKE_EMAIL_DOMAIN;
@@ -62,7 +148,6 @@ async function signup() {
   }
 
   authStatus.textContent = "Ro'yxatdan o'tkazilmoqda...";
-
   const fakeEmail = usernameToEmail(username);
 
   const { data, error } = await sb.auth.signUp({
@@ -80,11 +165,7 @@ async function signup() {
     return;
   }
 
-  if (data.session) {
-    authStatus.textContent = "";
-  } else {
-    authStatus.textContent = "Ro'yxatdan o'tdi. Kirish sahifasiga o't.";
-  }
+  authStatus.textContent = data.session ? "" : "Ro'yxatdan o'tdi. Kirish sahifasiga o't.";
 }
 
 async function login() {
@@ -97,7 +178,6 @@ async function login() {
   }
 
   authStatus.textContent = "Tekshirilmoqda...";
-
   const fakeEmail = usernameToEmail(username);
   const { error } = await sb.auth.signInWithPassword({ email: fakeEmail, password });
 
@@ -113,7 +193,7 @@ async function logout() {
 }
 
 sb.auth.onAuthStateChange((event, session) => {
-  if (bootLoader.style.display !== "none") return; // boot tugagunicha bu ishlamasin
+  if (bootLoader.style.display !== "none") return;
   if (session) {
     authScreen.style.display = "none";
     appScreen.style.display = "block";
@@ -126,9 +206,10 @@ sb.auth.onAuthStateChange((event, session) => {
   }
 });
 
-// ---------- UPLOAD ----------
+// ==========================================
+// UPLOAD (avvalgidek)
+// ==========================================
 
-// Ishga tushiriladigan / zararli bo'lishi mumkin bo'lgan kengaytmalar - bloklanadi
 const BLOCKED_EXTENSIONS = [
   "exe", "bat", "cmd", "sh", "msi", "com", "scr",
   "vbs", "js", "jar", "ps1", "app", "dmg", "apk"
@@ -155,9 +236,7 @@ async function uploadFile(file) {
   progressLine.textContent = `Yuklanmoqda: ${file.name}...`;
   uploadProgressEl.appendChild(progressLine);
 
-  const { error: uploadError } = await sb.storage
-    .from(BUCKET)
-    .upload(path, file);
+  const { error: uploadError } = await sb.storage.from(BUCKET).upload(path, file);
 
   if (uploadError) {
     progressLine.textContent = `Xato (${file.name}): ${uploadError.message}`;
@@ -190,9 +269,7 @@ dropzone.addEventListener("dragover", (e) => {
   e.preventDefault();
   dropzone.classList.add("dragover");
 });
-dropzone.addEventListener("dragleave", () => {
-  dropzone.classList.remove("dragover");
-});
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
 dropzone.addEventListener("drop", (e) => {
   e.preventDefault();
   dropzone.classList.remove("dragover");
@@ -205,7 +282,9 @@ window.addEventListener("paste", (e) => {
   if (items.length) handleFiles(items);
 });
 
-// ---------- LIST + DOWNLOAD + DELETE ----------
+// ==========================================
+// LIST + DOWNLOAD + DELETE + PUBLIC LINK
+// ==========================================
 
 async function loadFiles() {
   const { data: files, error } = await sb
@@ -223,25 +302,30 @@ async function loadFiles() {
     return;
   }
 
-  fileListEl.innerHTML = files.map(f => `
+  fileListEl.innerHTML = files.map(f => {
+    const isPublic = f.is_public && f.public_token;
+    const linkIcon = isPublic ? ICON_LINK_ACTIVE : ICON_LINK;
+    const linkTitle = isPublic ? "Public link (copy)" : "Public link yaratish";
+    const linkClass = isPublic ? "link-btn active" : "link-btn";
+
+    return `
     <div class="file-card">
       <div class="file-info">
         <span class="file-name">${escapeHtml(f.filename)}</span>
-        <span class="file-meta">${formatSize(f.size)} · ${formatDate(f.uploaded_at)}</span>
+        <span class="file-meta">${formatSize(f.size)} · ${formatDate(f.uploaded_at)}${isPublic ? ' · <span class="public-badge">Public</span>' : ''}</span>
       </div>
       <div class="file-actions">
+        <button class="${linkClass}" onclick="togglePublicLink(${f.id})" title="${linkTitle}">${linkIcon}</button>
         <button onclick="downloadFile('${f.storage_path}', '${escapeHtml(f.filename)}')" title="Yuklab olish">${ICON_DOWNLOAD}</button>
         <button onclick="deleteFile(${f.id}, '${f.storage_path}')" title="O'chirish">${ICON_DELETE}</button>
       </div>
     </div>
-  `).join("");
+  `;
+  }).join("");
 }
 
 async function downloadFile(path, filename) {
-  const { data, error } = await sb.storage
-    .from(BUCKET)
-    .createSignedUrl(path, 60);
-
+  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, 60);
   if (error) {
     alert("Xato: " + error.message);
     return;
@@ -251,13 +335,93 @@ async function downloadFile(path, filename) {
 
 async function deleteFile(id, path) {
   if (!confirm("O'chirasanmi?")) return;
-
   await sb.storage.from(BUCKET).remove([path]);
   await sb.from(TABLE).delete().eq("id", id);
   loadFiles();
 }
 
-// ---------- HELPERS ----------
+// ==========================================
+// PUBLIC LINK TOGGLE
+// ==========================================
+
+async function togglePublicLink(fileId) {
+  // Faylning hozirgi holatini olamiz
+  const { data: file, error } = await sb
+    .from(TABLE)
+    .select("*")
+    .eq("id", fileId)
+    .single();
+
+  if (error || !file) {
+    alert("Xato: fayl topilmadi.");
+    return;
+  }
+
+  // Agar allaqachon public bo'lsa — faqat copy qilamiz
+  if (file.is_public && file.public_token) {
+    const url = `${window.location.origin}${window.location.pathname}?share=${file.public_token}`;
+    await copyToClipboard(url);
+    showToast("Already created public link — nusxalandi ✓");
+    return;
+  }
+
+  // Yangi token yaratamiz
+  const token = generateToken();
+
+  const { error: updateError } = await sb
+    .from(TABLE)
+    .update({ is_public: true, public_token: token })
+    .eq("id", fileId);
+
+  if (updateError) {
+    alert("Xato: " + updateError.message);
+    return;
+  }
+
+  const url = `${window.location.origin}${window.location.pathname}?share=${token}`;
+  await copyToClipboard(url);
+  showToast("Public link yaratildi va nusxalandi ✓");
+  loadFiles();
+}
+
+function generateToken() {
+  // Kriptografik xavfsiz token (16 bayt = 32 hex belgi)
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    // Fallback
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+}
+
+function showToast(msg) {
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.classList.add("show"), 10);
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
+
+// ==========================================
+// HELPERS
+// ==========================================
 
 function formatSize(bytes) {
   if (!bytes) return "0 B";
