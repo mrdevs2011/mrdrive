@@ -23,18 +23,15 @@ const FAKE_EMAIL_DOMAIN = "mrdrive.local";
 // PUBLIC LINK MODAL — URL parametri orqali
 // ==========================================
 
-// Sahifa yuklanganda URL'da ?share=TOKEN bor-yo'qligini tekshiramiz
 const urlParams = new URLSearchParams(window.location.search);
 const shareToken = urlParams.get("share");
 
 if (shareToken) {
-  // Auth ekranlarini yashirib, faqat modal ko'rsatamiz
   bootLoader.style.display = "none";
   authScreen.style.display = "none";
   appScreen.style.display = "none";
   showPublicDownloadModal(shareToken);
 } else {
-  // Oddiy boot
   sb.auth.getSession().then(({ data: { session } }) => {
     bootLoader.style.display = "none";
     if (session) {
@@ -50,7 +47,6 @@ if (shareToken) {
 }
 
 function showPublicDownloadModal(token) {
-  // Modal HTML'ini yaratamiz
   const modal = document.createElement("div");
   modal.id = "public-modal";
   modal.innerHTML = `
@@ -71,7 +67,6 @@ function showPublicDownloadModal(token) {
   const statusEl = document.getElementById("public-status");
   const downloadBtn = document.getElementById("public-download-btn");
 
-  // Token orqali fayl ma'lumotini olamiz
   sb.from(TABLE)
     .select("*")
     .eq("public_token", token)
@@ -81,7 +76,6 @@ function showPublicDownloadModal(token) {
       if (error || !data) {
         filenameEl.textContent = "Fayl topilmadi";
         metaEl.textContent = "Bu link o'chirilgan yoki mavjud emas.";
-        statusEl.textContent = "";
         return;
       }
 
@@ -100,7 +94,6 @@ function showPublicDownloadModal(token) {
           return;
         }
 
-        // Avtomatik yuklab olish
         const a = document.createElement("a");
         a.href = urlData.signedUrl;
         a.download = data.filename;
@@ -114,7 +107,7 @@ function showPublicDownloadModal(token) {
 }
 
 // ==========================================
-// AUTH (avvalgidek)
+// AUTH
 // ==========================================
 
 function usernameToEmail(username) {
@@ -207,7 +200,7 @@ sb.auth.onAuthStateChange((event, session) => {
 });
 
 // ==========================================
-// UPLOAD (avvalgidek)
+// UPLOAD
 // ==========================================
 
 const BLOCKED_EXTENSIONS = [
@@ -345,7 +338,6 @@ async function deleteFile(id, path) {
 // ==========================================
 
 async function togglePublicLink(fileId) {
-  // Faylning hozirgi holatini olamiz
   const { data: file, error } = await sb
     .from(TABLE)
     .select("*")
@@ -357,7 +349,6 @@ async function togglePublicLink(fileId) {
     return;
   }
 
-  // Agar allaqachon public bo'lsa — faqat copy qilamiz
   if (file.is_public && file.public_token) {
     const url = `${window.location.origin}${window.location.pathname}?share=${file.public_token}`;
     await copyToClipboard(url);
@@ -365,7 +356,6 @@ async function togglePublicLink(fileId) {
     return;
   }
 
-  // Yangi token yaratamiz
   const token = generateToken();
 
   const { error: updateError } = await sb
@@ -385,7 +375,6 @@ async function togglePublicLink(fileId) {
 }
 
 function generateToken() {
-  // Kriptografik xavfsiz token (16 bayt = 32 hex belgi)
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
@@ -395,7 +384,6 @@ async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text);
   } catch (e) {
-    // Fallback
     const ta = document.createElement("textarea");
     ta.value = text;
     ta.style.position = "fixed";
