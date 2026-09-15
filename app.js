@@ -1,4 +1,4 @@
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const authScreen = document.getElementById("auth-screen");
 const appScreen = document.getElementById("app");
@@ -50,7 +50,7 @@ async function signup() {
 
   const fakeEmail = usernameToEmail(username);
 
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await sb.auth.signUp({
     email: fakeEmail,
     password,
     options: { data: { name, username } }
@@ -84,7 +84,7 @@ async function login() {
   authStatus.textContent = "Tekshirilmoqda...";
 
   const fakeEmail = usernameToEmail(username);
-  const { error } = await supabase.auth.signInWithPassword({ email: fakeEmail, password });
+  const { error } = await sb.auth.signInWithPassword({ email: fakeEmail, password });
 
   if (error) {
     authStatus.textContent = "Xato: username yoki parol noto'g'ri.";
@@ -94,10 +94,10 @@ async function login() {
 }
 
 async function logout() {
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
 }
 
-supabase.auth.onAuthStateChange((event, session) => {
+sb.auth.onAuthStateChange((event, session) => {
   if (session) {
     authScreen.style.display = "none";
     appScreen.style.display = "block";
@@ -129,7 +129,7 @@ async function uploadFile(file) {
     return;
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await sb.auth.getUser();
   if (!user) return;
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -139,7 +139,7 @@ async function uploadFile(file) {
   progressLine.textContent = `Yuklanmoqda: ${file.name}...`;
   uploadProgressEl.appendChild(progressLine);
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await sb.storage
     .from(BUCKET)
     .upload(path, file);
 
@@ -148,7 +148,7 @@ async function uploadFile(file) {
     return;
   }
 
-  const { error: dbError } = await supabase.from(TABLE).insert({
+  const { error: dbError } = await sb.from(TABLE).insert({
     user_id: user.id,
     filename: file.name,
     storage_path: path,
@@ -222,7 +222,7 @@ async function loadFiles() {
 }
 
 async function downloadFile(path, filename) {
-  const { data, error } = await supabase.storage
+  const { data, error } = await sb.storage
     .from(BUCKET)
     .createSignedUrl(path, 60);
 
@@ -236,8 +236,8 @@ async function downloadFile(path, filename) {
 async function deleteFile(id, path) {
   if (!confirm("O'chirasanmi?")) return;
 
-  await supabase.storage.from(BUCKET).remove([path]);
-  await supabase.from(TABLE).delete().eq("id", id);
+  await sb.storage.from(BUCKET).remove([path]);
+  await sb.from(TABLE).delete().eq("id", id);
   loadFiles();
 }
 
