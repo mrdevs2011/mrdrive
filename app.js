@@ -85,9 +85,13 @@ function showPublicDownloadModal(token) {
 
       downloadBtn.onclick = async () => {
         statusEl.textContent = "Yuklanmoqda...";
+
+        // download parametri bilan — brauzer yuklab oladi (ochmaydi)
         const { data: urlData, error: urlError } = await sb.storage
           .from(BUCKET)
-          .createSignedUrl(data.storage_path, 60);
+          .createSignedUrl(data.storage_path, 60, {
+            download: data.filename
+          });
 
         if (urlError) {
           statusEl.textContent = "Xato: " + urlError.message;
@@ -97,6 +101,7 @@ function showPublicDownloadModal(token) {
         const a = document.createElement("a");
         a.href = urlData.signedUrl;
         a.download = data.filename;
+        a.rel = "noopener";
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -318,12 +323,24 @@ async function loadFiles() {
 }
 
 async function downloadFile(path, filename) {
-  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, 60);
+  const { data, error } = await sb.storage
+    .from(BUCKET)
+    .createSignedUrl(path, 60, {
+      download: filename  // BU MUHIM: brauzer yuklab oladi, ochmaydi
+    });
+
   if (error) {
     alert("Xato: " + error.message);
     return;
   }
-  window.open(data.signedUrl, "_blank");
+
+  const a = document.createElement("a");
+  a.href = data.signedUrl;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 async function deleteFile(id, path) {
@@ -349,7 +366,6 @@ async function togglePublicLink(fileId) {
     return;
   }
 
-  // Har doim yangi token yaratamiz (eski link o'chadi)
   const newToken = generateToken();
 
   const { error: updateError } = await sb
