@@ -363,17 +363,28 @@ function isBlockedFile(filename) {
 }
 
 // --- Deduplication -------------------------------------------------------
-// A file is "the same" if name + size + lastModified (seconds) match.
-// The ID is added to the Set SYNCHRONOUSLY (before any `await`), so 3x CTRL+V
-// in a row can never slip through. After a successful upload the ID stays
-// blocked for DUPLICATE_COOLDOWN_MS (fast uploads finish before the 2nd paste
-// arrives, so in-flight tracking alone is not enough). On error it is freed
-// immediately so the user can retry.
+// A file is "the same" if name + size match. lastModified is deliberately NOT
+// part of the key: a pasted clipboard image ("image.png") gets a brand-new
+// lastModified on every paste, so including it made every CTRL+V look unique.
+// The ID is added to the Set SYNCHRONOUSLY (before any `await`), so a burst of
+// pastes can never slip through. After a successful upload the ID stays blocked
+// for DUPLICATE_COOLDOWN_MS (fast uploads finish before the next paste arrives,
+// so in-flight tracking alone is not enough). On error it is freed immediately
+// so the user can retry. A skipped duplicate is never silent: a toast tells why.
 const uploadingFileIds = new Set();
-const DUPLICATE_COOLDOWN_MS = 3000;
+const DUPLICATE_COOLDOWN_MS = 15000;
+let lastDuplicateToastAt = 0;
 
 function getFileUniqueId(file) {
-  return `${file.name}:::${file.size}:::${Math.round(file.lastModified / 1000)}`;
+  return `${file.name}:::${file.size}`;
+}
+
+function notifyDuplicate(file) {
+  console.warn(`Skipped duplicate: ${file.name}`);
+  const now = Date.now();
+  if (now - lastDuplicateToastAt < 2000) return; // one toast per burst
+  lastDuplicateToastAt = now;
+  showToast("Duplicate skipped", "warning", `${file.name} was just uploaded`);
 }
 
 // --- Progress UI ---------------------------------------------------------
@@ -477,7 +488,7 @@ async function uploadFile(file) {
 
   const fileId = getFileUniqueId(file);
   if (uploadingFileIds.has(fileId)) {
-    console.warn(`Skipped duplicate: ${file.name}`);
+    notifyDuplicate(file);
     return;
   }
   uploadingFileIds.add(fileId); // must stay BEFORE the first await
