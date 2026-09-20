@@ -510,7 +510,7 @@ async function createFolder() {
   if (!user) return;
 
   if (allFolders.some(f => f.name.toLowerCase() === trimmed.toLowerCase())) {
-    showToast("A folder with this name already exists");
+    showToast("Folder already exists", "warning", "Pick a different name.");
     return;
   }
 
@@ -699,9 +699,9 @@ async function deleteFile(id, path) {
   // 2) Then the stored file
   const { data: removed, error: storageError } = await sb.storage.from(BUCKET).remove([path]);
   if (storageError) {
-    showToast("Deleted, but storage cleanup failed: " + storageError.message);
+    showToast("File deleted", "warning", "Storage cleanup failed: " + storageError.message);
   } else if (!removed || removed.length === 0) {
-    showToast("Deleted from the list, but the stored file may still exist (check the storage delete policy)");
+    showToast("File deleted", "warning", "It's gone from your list, but the stored copy may still be in storage.");
   } else {
     showToast("File deleted");
   }
@@ -959,16 +959,45 @@ async function copyToClipboard(text) {
   }
 }
 
-function showToast(msg) {
+const TOAST_ICONS = {
+  success: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5L10 17.5L19 7.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  warning: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 6.5V13" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="17.5" r="1.4" fill="currentColor"/></svg>`,
+  error: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M7 7L17 17M17 7L7 17" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`
+};
+
+// type: "success" | "warning" | "error". detail = optional second line (muted).
+// Click a toast to dismiss it early. Toasts with a detail / non-success stay longer.
+function showToast(msg, type = "success", detail = "") {
+  let stack = document.getElementById("toast-stack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.id = "toast-stack";
+    document.body.appendChild(stack);
+  }
+
   const toast = document.createElement("div");
-  toast.className = "toast";
-  toast.textContent = msg;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.classList.add("show"), 10);
-  setTimeout(() => {
+  toast.className = `toast toast-${type}`;
+  toast.setAttribute("role", type === "error" ? "alert" : "status");
+  toast.innerHTML = `
+    <span class="toast-icon">${TOAST_ICONS[type] || TOAST_ICONS.success}</span>
+    <div class="toast-body">
+      <div class="toast-title"></div>
+      ${detail ? '<div class="toast-detail"></div>' : ""}
+    </div>
+  `;
+  toast.querySelector(".toast-title").textContent = msg;
+  if (detail) toast.querySelector(".toast-detail").textContent = detail;
+  stack.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add("show"));
+
+  const hide = () => {
+    clearTimeout(timer);
     toast.classList.remove("show");
     setTimeout(() => toast.remove(), 300);
-  }, 2500);
+  };
+  const timer = setTimeout(hide, detail || type !== "success" ? 6000 : 2500);
+  toast.addEventListener("click", hide);
 }
 
 // ==========================================
