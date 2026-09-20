@@ -640,6 +640,39 @@ async function downloadFile(id, path, filename) {
   renderFiles();
 }
 
+// The DB said "0 rows deleted" without an error (that's how RLS blocks a delete).
+// Work out WHY, so the message says something useful instead of a generic guess.
+async function explainDeleteFailure(id) {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) {
+    return { message: "Error: your session is gone. Log out, log in again, then retry." };
+  }
+
+  const { data: row } = await sb.from(TABLE).select("user_id, is_public").eq("id", id).maybeSingle();
+
+  if (!row) {
+    return { refresh: true, message: "This file record no longer exists (already deleted?). The list was refreshed." };
+  }
+
+  const me = user.user_metadata?.username || user.user_metadata?.name || "this account";
+
+  if (row.user_id !== user.id) {
+    return {
+      message:
+        "Error: this file belongs to a DIFFERENT account, so you can't delete it.\n\n" +
+        `You are logged in as "${me}". It only shows up here because it is public. ` +
+        "Log in with the account that uploaded it."
+    };
+  }
+
+  return {
+    message:
+      "Error: you own this file, but the database still refuses the delete.\n\n" +
+      "The delete policy on the \"files\" table is missing or different. " +
+      "It has to be fixed in the Supabase dashboard (fix-delete.sql)."
+  };
+}
+
 async function deleteFile(id, path) {
   if (!(await showConfirm("Delete this file?", "Delete"))) return;
 
@@ -652,10 +685,9 @@ async function deleteFile(id, path) {
     return;
   }
   if (!deletedRows || deletedRows.length === 0) {
-    showAlert(
-      "Error: the file record was NOT deleted. The database is refusing the delete " +
-      "(missing RLS delete policy). Run fix-delete.sql in the Supabase SQL Editor."
-    );
+    const reason = await explainDeleteFailure(id);
+    if (reason.refresh) loadFiles();
+    showAlert(reason.message);
     return;
   }
 
