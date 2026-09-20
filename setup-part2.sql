@@ -1,6 +1,6 @@
--- MRdrive qo'shimcha ustunlar (agar hali qo'shilmagan bo'lsa)
--- Supabase Dashboard -> SQL Editor -> shu faylni ishga tushir
--- Xavfsiz: allaqachon mavjud bo'lsa, hech narsa buzilmaydi.
+-- MRdrive extra columns (if they haven't been added yet)
+-- Supabase Dashboard -> SQL Editor -> run this file
+-- Safe: if they already exist, nothing breaks.
 
 alter table files add column if not exists is_public boolean default false;
 alter table files add column if not exists public_token text unique;
@@ -29,7 +29,7 @@ do $$ begin
   create policy "users delete own folders" on folders for delete using (auth.uid() = user_id);
 exception when duplicate_object then null; end $$;
 
--- Public link orqali fayl ochilganda ko'rish uchun (autentifikatsiyasiz)
+-- Lets a file be viewed through a public link (without authentication)
 do $$ begin
   create policy "anyone can read public files"
     on files for select

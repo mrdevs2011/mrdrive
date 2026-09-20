@@ -1,46 +1,43 @@
 # MRdrive Supabase Proxy
 
-Bu kichik loyiha — Supabase'ga to'g'ridan-to'g'ri kira olmaganingda, brauzer
-o'rniga shu proxy Supabase bilan gaplashadi. MRdrive frontend'i endi
-`*.supabase.co`ga emas, shu proxy manziliga murojaat qiladi, proxy esa
-Supabase'ga forward qiladi.
+This small project is for when you can't reach Supabase directly: instead of
+the browser, this proxy talks to Supabase. The MRdrive frontend calls this
+proxy address instead of `*.supabase.co`, and the proxy forwards the requests
+to Supabase.
 
-## O'rnatish
+## Setup
 
-1. **Bu papkani (`mrdrive-proxy`) alohida GitHub repo qilib yukla** (yoki
-   to'g'ridan-to'g'ri Vercel CLI bilan deploy qil).
+1. **Upload this folder (`mrdrive-proxy`) as a separate GitHub repo** (or
+   deploy it directly with the Vercel CLI).
 
-2. **Vercel'da yangi loyiha sifatida import qil**
-   - vercel.com -> Add New -> Project -> shu repo'ni tanla -> Deploy.
-   - Hech qanday build sozlamasi kerak emas, default holicha ishlaydi.
+2. **Import it into Vercel as a new project**
+   - vercel.com -> Add New -> Project -> pick this repo -> Deploy.
+   - No build settings are needed, the defaults work.
 
-3. **`api/[...path].js` ichidagi `SUPABASE_PROJECT_URL`ni tekshir** — u
-   allaqachon sening haqiqiy Supabase project URL'ing bilan to'ldirilgan
-   (`config.js`dan olindi). Agar Supabase project'ni almashtirsang, shu
-   yerni yangila.
+3. **Check `SUPABASE_PROJECT_URL` inside `api/[...path].js`** — it is already
+   filled in with your real Supabase project URL (taken from `config.js`).
+   If you ever switch Supabase projects, update it there.
 
-4. Deploy tugagach, senga shunga o'xshash manzil beriladi:
+4. After the deploy finishes, you'll get an address like:
    `https://mrdrive-proxy-xxxx.vercel.app`
 
-5. **MRdrive'ning `config.js` faylida** `SUPABASE_URL`ni proxy manziliga
-   almashtir:
+5. **In MRdrive's `config.js`** replace `SUPABASE_URL` with the proxy address:
    ```js
    const SUPABASE_URL = "https://mrdrive-proxy-xxxx.vercel.app";
-   const SUPABASE_ANON_KEY = "..."; // bu o'zgarmaydi
+   const SUPABASE_ANON_KEY = "..."; // this stays the same
    ```
 
-Shu bilan tamom — endi MRdrive brauzerdan to'g'ridan-to'g'ri Supabase'ga
-emas, shu Vercel manziliga murojaat qiladi, u esa orqa fonda Supabase bilan
-gaplashadi. Login, fayl yuklash, yuklab olish, public link — hammasi shu
-proxy orqali ishlaydi (chunki signed URL'lar ham SUPABASE_URL asosida
-generatsiya qilinadi, ya'ni ular ham proxy manzilida bo'ladi).
+That's it — MRdrive now talks to this Vercel address instead of hitting
+Supabase directly, and the proxy talks to Supabase in the background. Login,
+file upload, download, public links — everything goes through the proxy
+(signed URLs are generated from SUPABASE_URL too, so they use the proxy
+address as well).
 
-## Eslatma
+## Notes
 
-- Bu faqat auth/rest/storage (oddiy HTTP) so'rovlarini proxy qiladi.
-  MRdrive'da realtime (websocket) ishlatilmagani uchun bu yetarli.
-- `SUPABASE_ANON_KEY` hali ham public — xavfsizlik Supabase RLS orqali
-  ta'minlanadi, proxy buni o'zgartirmaydi.
-- Agar Vercel domenlari ham bloklansa, xuddi shu `api/[...path].js`
-  mantig'ini Cloudflare Worker sifatida ham joylashtirish mumkin — aytsang,
-  o'sha versiyasini ham tayyorlab beraman.
+- This only proxies auth/rest/storage (plain HTTP) requests.
+  MRdrive doesn't use realtime (websockets), so that's enough.
+- `SUPABASE_ANON_KEY` is still public — security is enforced through Supabase
+  RLS, the proxy doesn't change that.
+- If Vercel domains get blocked too, the same `api/[...path].js` logic can be
+  deployed as a Cloudflare Worker — just ask and I'll prepare that version.

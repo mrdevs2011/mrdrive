@@ -1,5 +1,5 @@
 -- MRdrive setup
--- Supabase Dashboard -> SQL Editor -> shu faylni ishga tushir
+-- Supabase Dashboard -> SQL Editor -> run this file
 
 create table if not exists files (
   id bigint generated always as identity primary key,
@@ -24,8 +24,8 @@ create policy "users delete own files"
   on files for delete
   using (auth.uid() = user_id);
 
--- STORAGE: Dashboard -> Storage -> "New bucket" -> nomi: files -> Private qilib qo'y
--- Keyin quyidagi policy'larni Storage -> Policies bo'limida yoki shu yerda qo'sh:
+-- STORAGE: Dashboard -> Storage -> "New bucket" -> name: files -> set it to Private
+-- Then add the policies below in Storage -> Policies, or right here:
 
 create policy "users upload own folder"
   on storage.objects for insert

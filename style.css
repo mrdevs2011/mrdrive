@@ -293,7 +293,7 @@ header button:hover { background: var(--bg); }
   color: var(--red-text);
 }
 
-/* LINK tugmasi (public bo'lmaganda) */
+/* LINK button (when not public) */
 .link-btn {
   width: 34px;
   height: 34px;
@@ -360,7 +360,7 @@ header button:hover { background: var(--bg); }
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* PUBLIC MODAL — to'liq ekran, alohida sahifa kabi (yopish tugmasi yo'q) */
+/* PUBLIC MODAL — fullscreen, like a standalone page (no close button) */
 .public-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -414,7 +414,7 @@ header button:hover { background: var(--bg); }
 }
 .public-modal-icon svg { width: 24px; height: 24px; }
 
-/* Rasm/video: butun ekranni to'ldiradi, pastda info + yuklab olish */
+/* Image/video: fills the whole screen, info + download at the bottom */
 #public-preview-wrap {
   display: none;
 }
@@ -466,7 +466,7 @@ header button:hover { background: var(--bg); }
   background: transparent;
 }
 
-/* Video native fullscreen — overflow ota-elementlar to'sib qo'ymasligi */
+/* Native video fullscreen — parents' overflow must not clip it */
 .public-preview video:fullscreen,
 .public-preview video:-webkit-full-screen {
   width: 100vw;
@@ -493,7 +493,7 @@ header button:hover { background: var(--bg); }
   min-height: 0;
 }
 
-/* Actions qatori: Yuklab olish + Fullscreen (previewdan tashqarida) */
+/* Actions row: Download + Fullscreen (outside the preview) */
 .public-actions {
   display: flex;
   gap: 8px;
@@ -512,7 +512,7 @@ header button:hover { background: var(--bg); }
 }
 .public-modal-box .public-fs-btn:hover:not(:disabled) { background: #e4e4e7; opacity: 1; }
 
-/* "No thanks" uslubidagi kichik link */
+/* Small "No thanks"-style link */
 .public-go-link {
   display: inline-block;
   margin-top: 12px;
@@ -527,7 +527,7 @@ header button:hover { background: var(--bg); }
 .public-modal-box.has-preview .public-go-link { margin-top: 6px; }
 .public-modal-box .public-status { margin-top: 6px; }
 
-/* Haqiqiy fullscreen (faqat preview; tugma tashqarida qoladi) */
+/* Real fullscreen (preview only; the button stays outside) */
 .public-preview:fullscreen,
 .public-preview:-webkit-full-screen {
   background: #000;
@@ -543,7 +543,7 @@ header button:hover { background: var(--bg); }
   cursor: zoom-out;
 }
 
-/* iPhone fallback: matnlar yashirinadi, preview maksimal joy oladi, tugma pastda qoladi */
+/* iPhone fallback: text hidden, preview gets max space, button stays at the bottom */
 .public-modal-box.focus-mode h2,
 .public-modal-box.focus-mode .public-meta,
 .public-modal-box.focus-mode .public-expiry,
@@ -640,6 +640,37 @@ header button:hover { background: var(--bg); }
   border-radius: 8px;
 }
 .modal-cancel:hover { background: var(--bg); color: var(--text); }
+
+/* CONFIRM DIALOG */
+.confirm-msg {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-line;
+  margin-bottom: 20px;
+}
+.confirm-actions { display: flex; gap: 8px; }
+.confirm-actions button {
+  flex: 1;
+  padding: 11px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+.confirm-cancel {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+}
+.confirm-cancel:hover { background: var(--bg); }
+.confirm-ok {
+  background: var(--accent);
+  color: white;
+  border: 1px solid var(--accent);
+}
+.confirm-ok:hover { opacity: 0.85; }
 
 /* RESPONSIVE */
 @media (max-width: 600px) {

@@ -81,12 +81,12 @@ function showPublicDownloadModal(token) {
         <div id="public-preview-wrap"></div>
         <div class="public-info">
           <div class="public-modal-icon" id="public-modal-icon">${ICON_DOWNLOAD}</div>
-          <h2 id="public-filename">Yuklanmoqda...</h2>
+          <h2 id="public-filename">Loading...</h2>
           <p id="public-meta" class="public-meta"></p>
           <p id="public-expiry" class="public-expiry"></p>
           <div class="public-actions">
-            <button id="public-download-btn" disabled>Yuklab olish</button>
-            <button id="public-fs-btn" class="public-fs-btn" title="To'liq ekran" aria-label="To'liq ekran" style="display:none;">${ICON_FULLSCREEN}</button>
+            <button id="public-download-btn" disabled>Download</button>
+            <button id="public-fs-btn" class="public-fs-btn" title="Fullscreen" aria-label="Fullscreen" style="display:none;">${ICON_FULLSCREEN}</button>
           </div>
           <a class="public-go-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer">Go MRdrive</a>
           <p id="public-status" class="public-status"></p>
@@ -95,7 +95,7 @@ function showPublicDownloadModal(token) {
     </div>
   `;
   document.body.appendChild(modal);
-  // Alohida sahifa kabi: orqadagi scroll bo'lmasin
+  // Behave like a standalone page: no scrolling of the page behind
   document.documentElement.style.overflow = "hidden";
   document.body.style.overflow = "hidden";
 
@@ -116,14 +116,14 @@ function showPublicDownloadModal(token) {
     .single()
     .then(async ({ data, error }) => {
       if (error || !data) {
-        filenameEl.textContent = "Fayl topilmadi";
-        metaEl.textContent = "Bu link o'chirilgan yoki mavjud emas.";
+        filenameEl.textContent = "File not found";
+        metaEl.textContent = "This link was removed or doesn't exist.";
         return;
       }
 
       if (data.expires_at && new Date(data.expires_at) < new Date()) {
-        filenameEl.textContent = "Muddati o'tgan";
-        metaEl.textContent = "Bu linkning muddati tugagan.";
+        filenameEl.textContent = "Expired";
+        metaEl.textContent = "This link has expired.";
         return;
       }
 
@@ -131,9 +131,9 @@ function showPublicDownloadModal(token) {
       metaEl.textContent = `${formatSize(data.size)} · ${formatDate(data.uploaded_at)}`;
 
       if (data.expires_at) {
-        expiryEl.textContent = `Muddat: ${formatDate(data.expires_at)} gacha`;
+        expiryEl.textContent = `Valid until: ${formatDate(data.expires_at)}`;
       } else {
-        expiryEl.textContent = "Muddat: cheksiz";
+        expiryEl.textContent = "No expiry";
       }
 
       downloadBtn.disabled = false;
@@ -168,7 +168,7 @@ function showPublicDownloadModal(token) {
       }
 
       downloadBtn.onclick = async () => {
-        statusEl.textContent = "Yuklanmoqda...";
+        statusEl.textContent = "Preparing download...";
 
         const { data: urlData, error: urlError } = await sb.storage
           .from(BUCKET)
@@ -177,7 +177,7 @@ function showPublicDownloadModal(token) {
           });
 
         if (urlError) {
-          statusEl.textContent = "Xato: " + urlError.message;
+          statusEl.textContent = "Error: " + urlError.message;
           return;
         }
 
@@ -191,14 +191,14 @@ function showPublicDownloadModal(token) {
 
         sb.rpc("increment_download_count", { file_id: data.id });
 
-        statusEl.textContent = "Yuklab olindi";
+        statusEl.textContent = "Downloaded";
       };
     });
 }
 
-// Fullscreen: tugma preview USTIDA emas, pastdagi panelda turadi.
-// Desktop/Android: haqiqiy Fullscreen API. iPhone (div fullscreen yo'q): video uchun native player,
-// rasm uchun "focus mode" (matn yashirinadi, preview maksimal joy oladi).
+// Fullscreen: the button sits in the bottom panel, never on top of the preview.
+// Desktop/Android: real Fullscreen API. iPhone (no element fullscreen): native player for video,
+// "focus mode" for images (text hidden, preview gets the max space).
 function setupPublicFullscreen(btn, modalBox, previewWrap) {
   const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
   const canReal = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
@@ -206,7 +206,7 @@ function setupPublicFullscreen(btn, modalBox, previewWrap) {
   const sync = () => {
     const active = !!fsEl() || modalBox.classList.contains("focus-mode");
     btn.innerHTML = active ? ICON_EXIT_FULLSCREEN : ICON_FULLSCREEN;
-    const label = active ? "To'liq ekrandan chiqish" : "To'liq ekran";
+    const label = active ? "Exit fullscreen" : "Fullscreen";
     btn.title = label;
     btn.setAttribute("aria-label", label);
   };
@@ -214,7 +214,7 @@ function setupPublicFullscreen(btn, modalBox, previewWrap) {
   document.addEventListener("fullscreenchange", sync);
   document.addEventListener("webkitfullscreenchange", sync);
 
-  // Fullscreenda rasmni bosish ham chiqaradi
+  // Clicking the image while in fullscreen also exits
   previewWrap.addEventListener("click", (e) => {
     if (fsEl() && e.target.tagName === "IMG") {
       (document.exitFullscreen || document.webkitExitFullscreen).call(document);
@@ -281,15 +281,15 @@ async function signup() {
   const password = document.getElementById("signup-password").value;
 
   if (!name || !username || !password) {
-    authStatus.textContent = "Hammasini to'ldir, bratan.";
+    authStatus.textContent = "Please fill in all fields.";
     return;
   }
   if (password.length < 6) {
-    authStatus.textContent = "Parol kamida 6 ta belgi bo'lsin.";
+    authStatus.textContent = "Password must be at least 6 characters.";
     return;
   }
 
-  authStatus.textContent = "Ro'yxatdan o'tkazilmoqda...";
+  authStatus.textContent = "Signing you up...";
   const fakeEmail = usernameToEmail(username);
 
   const { data, error } = await sb.auth.signUp({
@@ -300,14 +300,14 @@ async function signup() {
 
   if (error) {
     if (error.message.includes("already registered")) {
-      authStatus.textContent = "Bu username band, boshqasini tanla.";
+      authStatus.textContent = "This username is taken. Pick another one.";
     } else {
-      authStatus.textContent = "Xato: " + error.message;
+      authStatus.textContent = "Error: " + error.message;
     }
     return;
   }
 
-  authStatus.textContent = data.session ? "" : "Ro'yxatdan o'tdi. Kirish sahifasiga o't.";
+  authStatus.textContent = data.session ? "" : "Signed up. Go to the login page.";
 }
 
 async function login() {
@@ -315,16 +315,16 @@ async function login() {
   const password = document.getElementById("login-password").value;
 
   if (!username || !password) {
-    authStatus.textContent = "Username va parolni kirit.";
+    authStatus.textContent = "Enter your username and password.";
     return;
   }
 
-  authStatus.textContent = "Tekshirilmoqda...";
+  authStatus.textContent = "Checking...";
   const fakeEmail = usernameToEmail(username);
   const { error } = await sb.auth.signInWithPassword({ email: fakeEmail, password });
 
   if (error) {
-    authStatus.textContent = "Xato: username yoki parol noto'g'ri.";
+    authStatus.textContent = "Error: incorrect username or password.";
   } else {
     authStatus.textContent = "";
   }
@@ -364,7 +364,7 @@ function isBlockedFile(filename) {
 
 async function uploadFile(file) {
   if (isBlockedFile(file.name)) {
-    alert(`Bloklangan: ${file.name} — bu turdagi fayllar xavfsizlik sababli ruxsat etilmagan.`);
+    showAlert(`Blocked: ${file.name} — this file type isn't allowed for security reasons.`);
     return;
   }
 
@@ -375,13 +375,13 @@ async function uploadFile(file) {
   const path = `${user.id}/${Date.now()}_${safeName}`;
 
   const progressLine = document.createElement("div");
-  progressLine.textContent = `Yuklanmoqda: ${file.name}...`;
+  progressLine.textContent = `Uploading: ${file.name}...`;
   uploadProgressEl.appendChild(progressLine);
 
   const { error: uploadError } = await sb.storage.from(BUCKET).upload(path, file);
 
   if (uploadError) {
-    progressLine.textContent = `Xato (${file.name}): ${uploadError.message}`;
+    progressLine.textContent = `Error (${file.name}): ${uploadError.message}`;
     return;
   }
 
@@ -399,7 +399,7 @@ async function uploadFile(file) {
   const { error: dbError } = await sb.from(TABLE).insert(insertData);
 
   if (dbError) {
-    progressLine.textContent = `DB xato (${file.name}): ${dbError.message}`;
+    progressLine.textContent = `DB error (${file.name}): ${dbError.message}`;
     return;
   }
 
@@ -441,7 +441,7 @@ async function loadFiles() {
   ]);
 
   if (filesRes.error) {
-    fileListEl.innerHTML = `<p>Xato: ${filesRes.error.message}</p>`;
+    fileListEl.innerHTML = `<p>Error: ${filesRes.error.message}</p>`;
     return;
   }
 
@@ -463,23 +463,23 @@ function renderToolbar() {
   toolbar.innerHTML = `
     <div class="search-wrap">
       <span class="search-icon">${ICON_SEARCH}</span>
-      <input type="text" id="search-input" placeholder="Fayl qidirish..." value="${escapeHtml(currentSearch)}" />
+      <input type="text" id="search-input" placeholder="Search files..." value="${escapeHtml(currentSearch)}" />
     </div>
     <div class="folder-tabs">
       <button class="folder-tab ${currentFolder === null ? 'active' : ''}" onclick="setFolder(null)">
-        ${ICON_FOLDER} Hammasi
+        ${ICON_FOLDER} All
       </button>
       ${allFolders.map(f => `
         <div class="folder-tab-wrap">
           <button class="folder-tab ${currentFolder === f.name ? 'active' : ''}" onclick="setFolder('${escapeJs(f.name)}')">
             ${ICON_FOLDER} ${escapeHtml(f.name)}
           </button>
-          <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}')" title="Papkani o'chirish">
+          <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}')" title="Delete folder">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
         </div>
       `).join("")}
-      <button class="folder-tab new-folder-btn" onclick="createFolder()">+ Papka</button>
+      <button class="folder-tab new-folder-btn" onclick="createFolder()">+ Folder</button>
     </div>
   `;
 
@@ -497,7 +497,7 @@ function setFolder(folder) {
 }
 
 async function createFolder() {
-  const name = prompt("Papka nomi:");
+  const name = prompt("Folder name:");
   if (!name || !name.trim()) return;
   const trimmed = name.trim();
 
@@ -505,7 +505,7 @@ async function createFolder() {
   if (!user) return;
 
   if (allFolders.some(f => f.name.toLowerCase() === trimmed.toLowerCase())) {
-    showToast("Bu nomdagi papka allaqachon mavjud");
+    showToast("A folder with this name already exists");
     return;
   }
 
@@ -515,23 +515,23 @@ async function createFolder() {
   });
 
   if (error) {
-    alert("Xato: " + error.message);
+    showAlert("Error: " + error.message);
     return;
   }
 
   currentFolder = trimmed;
-  showToast(`Papka yaratildi: ${trimmed}`);
+  showToast(`Folder created: ${trimmed}`);
   loadFiles();
 }
 
 async function deleteFolder(id, name) {
   const filesInFolder = allFiles.filter(f => f.folder === name);
-  let msg = `"${name}" papkasi o'chirilsinmi?`;
+  let msg = `Delete folder "${name}"?`;
   if (filesInFolder.length > 0) {
-    msg += `\n\nDiqqat: bu papkada ${filesInFolder.length} ta fayl bor. Ular "Hammasi" bo'limiga o'tadi (o'chmaydi).`;
+    msg += `\n\nHeads up: this folder has ${filesInFolder.length} ${filesInFolder.length === 1 ? "file" : "files"}. ${filesInFolder.length === 1 ? "It" : "They"} will move to "All" (not deleted).`;
   }
 
-  if (!confirm(msg)) return;
+  if (!(await showConfirm(msg, "Delete"))) return;
 
   if (filesInFolder.length > 0) {
     await sb.from(TABLE).update({ folder: null }).eq("folder", name);
@@ -540,12 +540,12 @@ async function deleteFolder(id, name) {
   const { error } = await sb.from(FOLDERS_TABLE).delete().eq("id", id);
 
   if (error) {
-    alert("Xato: " + error.message);
+    showAlert("Error: " + error.message);
     return;
   }
 
   if (currentFolder === name) currentFolder = null;
-  showToast("Papka o'chirildi");
+  showToast("Folder deleted");
   loadFiles();
 }
 
@@ -563,9 +563,9 @@ function renderFiles() {
 
   if (!filtered.length) {
     if (allFiles.length === 0) {
-      fileListEl.innerHTML = `<p class="empty">Hali fayl yo'q.</p>`;
+      fileListEl.innerHTML = `<p class="empty">No files yet.</p>`;
     } else {
-      fileListEl.innerHTML = `<p class="empty">Hech narsa topilmadi.</p>`;
+      fileListEl.innerHTML = `<p class="empty">Nothing found.</p>`;
     }
     return;
   }
@@ -576,18 +576,18 @@ function renderFiles() {
 
     let meta = `${formatSize(f.size)} · ${formatDate(f.uploaded_at)}`;
     if (f.download_count > 0) {
-      meta += ` · ${f.download_count} yuklab olish`;
+      meta += ` · ${f.download_count} ${f.download_count === 1 ? "download" : "downloads"}`;
     }
     if (isPublic && !isExpired) {
       meta += ` · <span class="public-badge">Public</span>`;
       if (f.expires_at) {
-        meta += ` · <span class="expiry-badge">${formatDate(f.expires_at)} gacha</span>`;
+        meta += ` · <span class="expiry-badge">Until ${formatDate(f.expires_at)}</span>`;
       } else {
-        meta += ` · <span class="expiry-badge">Cheksiz</span>`;
+        meta += ` · <span class="expiry-badge">Unlimited</span>`;
       }
     }
     if (isExpired) {
-      meta += ` · <span class="expired-badge">Muddati o'tgan</span>`;
+      meta += ` · <span class="expired-badge">Expired</span>`;
     }
     if (f.folder) {
       meta += ` · <span class="folder-badge">${escapeHtml(f.folder)}</span>`;
@@ -602,14 +602,14 @@ function renderFiles() {
       <div class="file-actions">
         ${isPublic
           ? `<div class="toggle-group">
-               <button class="toggle-btn copy-btn" onclick="copyPublicLink(${f.id})" title="Linkni nusxalash">${ICON_COPY}</button>
-               <button class="toggle-btn refresh-btn" onclick="refreshPublicLink(${f.id})" title="Yangi link yaratish (eskisi o'chadi)">${ICON_REFRESH}</button>
-               <button class="toggle-btn unlink-btn" onclick="unpublishFile(${f.id})" title="Public'dan olib tashlash">${ICON_UNLINK}</button>
+               <button class="toggle-btn copy-btn" onclick="copyPublicLink(${f.id})" title="Copy link">${ICON_COPY}</button>
+               <button class="toggle-btn refresh-btn" onclick="refreshPublicLink(${f.id})" title="Create a new link (the old one stops working)">${ICON_REFRESH}</button>
+               <button class="toggle-btn unlink-btn" onclick="unpublishFile(${f.id})" title="Remove from public">${ICON_UNLINK}</button>
              </div>`
-          : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Public link yaratish">${ICON_LINK}</button>`
+          : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Create public link">${ICON_LINK}</button>`
         }
-        <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Yuklab olish">${ICON_DOWNLOAD}</button>
-        <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}')" title="O'chirish">${ICON_DELETE}</button>
+        <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Download">${ICON_DOWNLOAD}</button>
+        <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}')" title="Delete">${ICON_DELETE}</button>
       </div>
     </div>
   `;
@@ -622,7 +622,7 @@ async function downloadFile(id, path, filename) {
     .createSignedUrl(path, 60, { download: filename });
 
   if (error) {
-    alert("Xato: " + error.message);
+    showAlert("Error: " + error.message);
     return;
   }
 
@@ -641,9 +641,34 @@ async function downloadFile(id, path, filename) {
 }
 
 async function deleteFile(id, path) {
-  if (!confirm("O'chirasanmi?")) return;
-  await sb.storage.from(BUCKET).remove([path]);
-  await sb.from(TABLE).delete().eq("id", id);
+  if (!(await showConfirm("Delete this file?", "Delete"))) return;
+
+  // 1) Database row first. .select() returns the rows that were actually deleted,
+  //    so a silent RLS block (0 rows, no error) can be detected instead of ignored.
+  const { data: deletedRows, error } = await sb.from(TABLE).delete().eq("id", id).select();
+
+  if (error) {
+    showAlert("Error: " + error.message);
+    return;
+  }
+  if (!deletedRows || deletedRows.length === 0) {
+    showAlert(
+      "Error: the file record was NOT deleted. The database is refusing the delete " +
+      "(missing RLS delete policy). Run fix-delete.sql in the Supabase SQL Editor."
+    );
+    return;
+  }
+
+  // 2) Then the stored file
+  const { data: removed, error: storageError } = await sb.storage.from(BUCKET).remove([path]);
+  if (storageError) {
+    showToast("Deleted, but storage cleanup failed: " + storageError.message);
+  } else if (!removed || removed.length === 0) {
+    showToast("Deleted from the list, but the stored file may still exist (check the storage delete policy)");
+  } else {
+    showToast("File deleted");
+  }
+
   loadFiles();
 }
 
@@ -659,7 +684,7 @@ async function createPublicLink(fileId) {
     .single();
 
   if (error || !file) {
-    alert("Xato: fayl topilmadi.");
+    showAlert("Error: file not found.");
     return;
   }
 
@@ -677,14 +702,14 @@ async function createPublicLink(fileId) {
       .eq("id", fileId);
 
     if (updateError) {
-      alert("Xato: " + updateError.message);
+      showAlert("Error: " + updateError.message);
       return;
     }
 
     const url = `${window.location.origin}${window.location.pathname}?share=${newToken}`;
     await copyToClipboard(url);
 
-    showToast("Public link yaratildi va nusxalandi");
+    showToast("Public link created and copied");
     loadFiles();
   });
 }
@@ -697,17 +722,17 @@ async function copyPublicLink(fileId) {
     .single();
 
   if (error || !file || !file.public_token) {
-    alert("Xato: link topilmadi.");
+    showAlert("Error: link not found.");
     return;
   }
 
   const url = `${window.location.origin}${window.location.pathname}?share=${file.public_token}`;
   await copyToClipboard(url);
-  showToast("Link nusxalandi");
+  showToast("Link copied");
 }
 
 async function refreshPublicLink(fileId) {
-  if (!confirm("Yangi link yaratilsinmi? Eski link endi ishlamaydi.")) return;
+  if (!(await showConfirm("Create a new link? The old link will stop working.", "Create new link"))) return;
 
   const { data: file, error } = await sb
     .from(TABLE)
@@ -716,7 +741,7 @@ async function refreshPublicLink(fileId) {
     .single();
 
   if (error || !file) {
-    alert("Xato: fayl topilmadi.");
+    showAlert("Error: file not found.");
     return;
   }
 
@@ -733,19 +758,19 @@ async function refreshPublicLink(fileId) {
     .eq("id", fileId);
 
   if (updateError) {
-    alert("Xato: " + updateError.message);
+    showAlert("Error: " + updateError.message);
     return;
   }
 
   const url = `${window.location.origin}${window.location.pathname}?share=${newToken}`;
   await copyToClipboard(url);
 
-  showToast("Yangi link yaratildi va nusxalandi");
+  showToast("New link created and copied");
   loadFiles();
 }
 
 async function unpublishFile(fileId) {
-  if (!confirm("Public'dan olib tashlansinmi? Link endi ishlamaydi.")) return;
+  if (!(await showConfirm("Remove from public? The link will stop working.", "Remove"))) return;
 
   const { error } = await sb
     .from(TABLE)
@@ -753,12 +778,87 @@ async function unpublishFile(fileId) {
     .eq("id", fileId);
 
   if (error) {
-    alert("Xato: " + error.message);
+    showAlert("Error: " + error.message);
     return;
   }
 
-  showToast("Public'dan olib tashlandi");
+  showToast("Removed from public");
   loadFiles();
+}
+
+// In-app confirm dialog. Native confirm() can be suppressed by the browser
+// ("prevent additional dialogs"), in which case it silently returns false.
+function showConfirm(message, okLabel = "OK") {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("confirm-modal");
+    if (existing) existing.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "confirm-modal";
+    modal.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-box">
+          <p class="confirm-msg"></p>
+          <div class="confirm-actions">
+            <button type="button" class="confirm-cancel">Cancel</button>
+            <button type="button" class="confirm-ok"></button>
+          </div>
+        </div>
+      </div>
+    `;
+    modal.querySelector(".confirm-msg").textContent = message;
+    modal.querySelector(".confirm-ok").textContent = okLabel;
+    document.body.appendChild(modal);
+
+    const onKey = (e) => { if (e.key === "Escape") done(false); };
+    const done = (value) => {
+      document.removeEventListener("keydown", onKey);
+      modal.remove();
+      resolve(value);
+    };
+    document.addEventListener("keydown", onKey);
+
+    modal.querySelector(".confirm-cancel").onclick = () => done(false);
+    modal.querySelector(".confirm-ok").onclick = () => done(true);
+    modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
+      if (e.target.classList.contains("modal-backdrop")) done(false);
+    });
+    modal.querySelector(".confirm-cancel").focus();
+  });
+}
+
+// In-app alert dialog (native alert() is suppressed together with confirm()
+// when the browser blocks dialogs, which would hide every error message).
+function showAlert(message) {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("alert-modal");
+    if (existing) existing.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "alert-modal";
+    modal.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-box">
+          <p class="confirm-msg"></p>
+          <div class="confirm-actions">
+            <button type="button" class="confirm-ok">OK</button>
+          </div>
+        </div>
+      </div>
+    `;
+    modal.querySelector(".confirm-msg").textContent = message;
+    document.body.appendChild(modal);
+
+    const onKey = (e) => { if (e.key === "Escape" || e.key === "Enter") done(); };
+    const done = () => {
+      document.removeEventListener("keydown", onKey);
+      modal.remove();
+      resolve();
+    };
+    document.addEventListener("keydown", onKey);
+    modal.querySelector(".confirm-ok").onclick = done;
+    modal.querySelector(".confirm-ok").focus();
+  });
 }
 
 function showDurationPicker(onSelect) {
@@ -770,15 +870,15 @@ function showDurationPicker(onSelect) {
   modal.innerHTML = `
     <div class="modal-backdrop">
       <div class="modal-box">
-        <h3>Link muddati</h3>
-        <p class="modal-desc">Link qancha vaqt ishlaydi?</p>
+        <h3>Link expiry</h3>
+        <p class="modal-desc">How long should the link work?</p>
         <div class="duration-options">
-          <button data-value="1">1 kun</button>
-          <button data-value="7">7 kun</button>
-          <button data-value="30">30 kun</button>
-          <button data-value="unlimited" class="default-opt">Cheksiz</button>
+          <button data-value="1">1 day</button>
+          <button data-value="7">7 days</button>
+          <button data-value="30">30 days</button>
+          <button data-value="unlimited" class="default-opt">Unlimited</button>
         </div>
-        <button class="modal-cancel" onclick="document.getElementById('duration-modal').remove()">Bekor qilish</button>
+        <button class="modal-cancel" onclick="document.getElementById('duration-modal').remove()">Cancel</button>
       </div>
     </div>
   `;
@@ -851,7 +951,7 @@ function formatSize(bytes) {
 
 function formatDate(dateStr) {
   const d = new Date(dateStr);
-  return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString("en-US") + " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
 function escapeHtml(str) {

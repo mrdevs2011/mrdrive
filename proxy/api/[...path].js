@@ -1,8 +1,8 @@
 export const config = { runtime: "edge" };
 
 // ==========================================
-// O'ZINGNING SUPABASE PROJECT URL'INGNI QO'Y
-// (config.js dagi eski SUPABASE_URL shu yerga ko'chadi)
+// PUT YOUR OWN SUPABASE PROJECT URL HERE
+// (the old SUPABASE_URL from config.js goes here)
 // ==========================================
 const SUPABASE_PROJECT_URL = "https://hharvpgnqmjbbgnfsauq.supabase.co";
 
@@ -14,14 +14,14 @@ const CORS_HEADERS = {
 };
 
 export default async function handler(req) {
-  // Preflight so'rovlarga tezda javob
+  // Answer preflight requests right away
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
   const url = new URL(req.url);
-  // vercel.json rewrite orqali /foo/bar -> /api/foo/bar bo'lib keladi,
-  // shuning uchun /api prefiksini olib tashlab, asl Supabase yo'lini tiklaymiz
+  // vercel.json rewrite turns /foo/bar into /api/foo/bar,
+  // so we strip the /api prefix to restore the original Supabase path
   const targetPath = url.pathname.replace(/^\/api/, "") || "/";
   const targetUrl = SUPABASE_PROJECT_URL + targetPath + url.search;
 
@@ -38,12 +38,12 @@ export default async function handler(req) {
       method: req.method,
       headers: outHeaders,
       body: hasBody ? req.body : undefined,
-      // Node/Edge fetch talab qiladi: body stream bo'lsa duplex kerak
+      // Node/Edge fetch requires this: a streamed body needs duplex
       duplex: hasBody ? "half" : undefined,
     });
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: "Proxy xatosi: " + err.message }),
+      JSON.stringify({ error: "Proxy error: " + err.message }),
       {
         status: 502,
         headers: { "content-type": "application/json", ...CORS_HEADERS },
@@ -52,7 +52,7 @@ export default async function handler(req) {
   }
 
   const respHeaders = new Headers(upstreamResp.headers);
-  // Streaming bilan mos kelmasligi mumkin bo'lgan header'larni olib tashlaymiz
+  // Drop headers that may conflict with streaming
   respHeaders.delete("content-encoding");
   respHeaders.delete("content-length");
   for (const [k, v] of Object.entries(CORS_HEADERS)) {

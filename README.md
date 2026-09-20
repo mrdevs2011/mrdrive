@@ -1,41 +1,46 @@
 # MRdrive
 
-Oddiy HTML/JS/CSS drive app — Supabase auth (email/magic link) + storage + Postgres.
+A simple HTML/JS/CSS drive app — Supabase auth + storage + Postgres.
 
-## Ishga tushirish qadamlari
+## Setup steps
 
-1. **Supabase project yarat** — supabase.com/dashboard -> New project
+1. **Create a Supabase project** — supabase.com/dashboard -> New project
 
-2. **SQL ishga tushir** — Dashboard -> SQL Editor -> `setup.sql` faylini copy-paste qil -> Run
+2. **Run the SQL** — Dashboard -> SQL Editor -> copy-paste `setup.sql` -> Run
 
-3. **Storage bucket yarat** — Dashboard -> Storage -> New bucket
-   - Nomi: `files`
-   - Public: **OFF** (private qilib qo'y!)
+3. **Create a storage bucket** — Dashboard -> Storage -> New bucket
+   - Name: `files`
+   - Public: **OFF** (keep it private!)
 
-4. **Auth sozla** — Dashboard -> Authentication -> Providers -> Email yoqilganini tekshir
-   (default holatda yoqilgan bo'ladi, tegma)
+4. **Configure auth** — Dashboard -> Authentication -> Providers -> make sure Email is enabled
+   (it is enabled by default, leave it alone)
 
-5. **API kalitlarni ol** — Dashboard -> Settings -> API
+5. **Get the API keys** — Dashboard -> Settings -> API
    - Project URL
    - anon public key
 
-6. **config.js ni to'ldir** — shu ikkitasini o'sha faylga qo'y
+6. **Fill in config.js** — put those two values into that file
 
-7. **Ishga tushir** — `index.html` ni brauzerda och, yoki:
+7. **Run it** — open `index.html` in a browser, or:
    ```
    npx serve .
    ```
-   (to'g'ridan-to'g'ri file:// orqali ochsa ham ishlaydi, lekin serve orqali ochish tavsiya etiladi)
+   (opening it directly via file:// works too, but serving it is recommended)
 
-## Muhim eslatma
+## Important notes
 
-- `SUPABASE_ANON_KEY` public bo'lishi mumkin — xavfsizlik RLS orqali ta'minlanadi
-- `service_role` key'ni HECH QACHON frontendga qo'yma
-- Har bir user faqat o'zining fayllarini ko'radi/o'chiradi (RLS policy shuni ta'minlaydi)
+- `SUPABASE_ANON_KEY` can be public — security is enforced through RLS
+- NEVER put the `service_role` key in the frontend
+- Each user can only see/delete their own files (the RLS policies guarantee this)
 
-## Schema yangilash (agar avval o'rnatgan bo'lsang)
+## Updating the schema (if you installed earlier)
 
-Agar public link/papka funksiyalari ishlamasa, `setup-part2.sql`ni ham
-Supabase SQL Editor'da ishga tushir — u yetishmayotgan ustunlarni
-(is_public, public_token va h.k.) xavfsiz qo'shadi. Public link funksiyasi
-hozir ishlab turgan bo'lsa, bu qadam kerak emas — ustunlar allaqachon bor.
+If the public link / folder features don't work, also run `setup-part2.sql`
+in the Supabase SQL Editor — it safely adds the missing columns
+(is_public, public_token, etc.). If the public link feature is already
+working for you, you don't need this step — the columns are already there.
+
+## Delete button does nothing?
+
+Run `fix-delete.sql` in the Supabase SQL Editor. It re-creates the delete
+policies for the `files` table and the storage bucket (safe to run repeatedly).
