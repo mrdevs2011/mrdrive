@@ -349,7 +349,7 @@ sb.auth.onAuthStateChange((event, session) => {
 });
 
 // ==========================================
-// UPLOAD
+// UPLOAD  (dedup + real progress bar)
 // ==========================================
 
 const BLOCKED_EXTENSIONS = [
@@ -362,56 +362,182 @@ function isBlockedFile(filename) {
   return BLOCKED_EXTENSIONS.includes(ext);
 }
 
+// --- Deduplication -------------------------------------------------------
+// A file is "the same" if name + size + lastModified (seconds) match.
+// The ID is added to the Set SYNCHRONOUSLY (before any `await`), so 3x CTRL+V
+// in a row can never slip through. After a successful upload the ID stays
+// blocked for DUPLICATE_COOLDOWN_MS (fast uploads finish before the 2nd paste
+// arrives, so in-flight tracking alone is not enough). On error it is freed
+// immediately so the user can retry.
+const uploadingFileIds = new Set();
+const DUPLICATE_COOLDOWN_MS = 3000;
+
+function getFileUniqueId(file) {
+  return `${file.name}:::${file.size}:::${Math.round(file.lastModified / 1000)}`;
+}
+
+// --- Progress UI ---------------------------------------------------------
+// One DOM item per upload (NOT keyed by filename - two files can share a name).
+// Everything goes through textContent, never innerHTML: file names are user input.
+function createProgressItem(filename) {
+  const item = document.createElement("div");
+  item.className = "upload-item";
+
+  const top = document.createElement("div");
+  top.className = "upload-item-top";
+
+  const name = document.createElement("span");
+  name.className = "upload-item-name";
+  name.textContent = filename;
+
+  const status = document.createElement("span");
+  status.className = "upload-item-status";
+  status.textContent = "0%";
+
+  top.append(name, status);
+
+  const track = document.createElement("div");
+  track.className = "upload-bar";
+  const fill = document.createElement("div");
+  fill.className = "upload-bar-fill";
+  track.appendChild(fill);
+
+  item.append(top, track);
+  uploadProgressEl.appendChild(item);
+
+  return {
+    setPercent(p) {
+      const v = Math.max(0, Math.min(100, Math.round(p)));
+      fill.style.width = v + "%";
+      status.textContent = v + "%";
+    },
+    setSaving() {
+      fill.style.width = "100%";
+      status.textContent = "Saving…";
+      item.classList.add("saving");
+    },
+    setDone() {
+      item.classList.remove("saving");
+      item.classList.add("done");
+      fill.style.width = "100%";
+      status.textContent = "Done";
+      setTimeout(() => item.remove(), 1200);
+    },
+    setError(message) {
+      item.classList.remove("saving");
+      item.classList.add("error");
+      fill.style.width = "100%";
+      status.textContent = message || "Error";
+      item.title = "Click to dismiss";
+      item.addEventListener("click", () => item.remove());
+      setTimeout(() => item.remove(), 10000);
+    }
+  };
+}
+
+// --- Real upload progress --------------------------------------------------
+// supabase-js has no progress callback, so we POST to the Storage REST endpoint
+// ourselves with XMLHttpRequest (xhr.upload.onprogress = real bytes sent).
+// Same endpoint / headers / body format that supabase-js uses internally.
+function uploadToStorage(path, file, accessToken, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+    xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
+    xhr.setRequestHeader("x-upsert", "false");
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      let msg = `HTTP ${xhr.status}`;
+      try {
+        const j = JSON.parse(xhr.responseText);
+        msg = j.message || j.error || msg;
+      } catch (_) { /* keep HTTP status */ }
+      reject(new Error(msg));
+    };
+    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.onabort = () => reject(new Error("Upload cancelled"));
+
+    const form = new FormData();
+    form.append("cacheControl", "3600");
+    form.append("", file);
+    xhr.send(form);
+  });
+}
+
 async function uploadFile(file) {
   if (isBlockedFile(file.name)) {
     showAlert(`Blocked: ${file.name} — this file type isn't allowed for security reasons.`);
     return;
   }
 
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) return;
-
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `${user.id}/${Date.now()}_${safeName}`;
-
-  const progressLine = document.createElement("div");
-  progressLine.textContent = `Uploading: ${file.name}...`;
-  uploadProgressEl.appendChild(progressLine);
-
-  const { error: uploadError } = await sb.storage.from(BUCKET).upload(path, file);
-
-  if (uploadError) {
-    progressLine.textContent = `Error (${file.name}): ${uploadError.message}`;
+  const fileId = getFileUniqueId(file);
+  if (uploadingFileIds.has(fileId)) {
+    console.warn(`Skipped duplicate: ${file.name}`);
     return;
   }
+  uploadingFileIds.add(fileId); // must stay BEFORE the first await
 
-  const insertData = {
-    user_id: user.id,
-    filename: file.name,
-    storage_path: path,
-    size: file.size
-  };
+  let keepBlocked = false;
+  const ui = createProgressItem(file.name);
+  let path = null;
 
-  if (currentFolder) {
-    insertData.folder = currentFolder;
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error("Not logged in");
+    const user = session.user;
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    path = `${user.id}/${Date.now()}_${safeName}`;
+
+    await uploadToStorage(path, file, session.access_token, (ratio) => {
+      if (ratio >= 1) ui.setSaving();   // bytes sent, server still working
+      else ui.setPercent(ratio * 100);
+    });
+    ui.setSaving();
+
+    const insertData = {
+      user_id: user.id,
+      filename: file.name,
+      storage_path: path,
+      size: file.size
+    };
+    if (currentFolder) insertData.folder = currentFolder;
+
+    const { error: dbError } = await sb.from(TABLE).insert(insertData);
+    if (dbError) {
+      // Don't leave an orphan in the bucket that no row points to
+      await sb.storage.from(BUCKET).remove([path]).catch(() => {});
+      throw new Error(`DB error: ${dbError.message}`);
+    }
+
+    ui.setDone();
+    keepBlocked = true;
+    loadFiles();
+  } catch (err) {
+    console.error(`Upload error (${file.name}):`, err);
+    ui.setError(err.message);
+  } finally {
+    if (keepBlocked) {
+      setTimeout(() => uploadingFileIds.delete(fileId), DUPLICATE_COOLDOWN_MS);
+    } else {
+      uploadingFileIds.delete(fileId);
+    }
   }
-
-  const { error: dbError } = await sb.from(TABLE).insert(insertData);
-
-  if (dbError) {
-    progressLine.textContent = `DB error (${file.name}): ${dbError.message}`;
-    return;
-  }
-
-  progressLine.remove();
-  loadFiles();
 }
 
 function handleFiles(fileListObj) {
   [...fileListObj].forEach(uploadFile);
 }
 
-fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+fileInput.addEventListener("change", (e) => {
+  handleFiles(e.target.files);
+  e.target.value = ""; // allow picking the same file again later
+});
 
 dropzone.addEventListener("dragover", (e) => {
   e.preventDefault();

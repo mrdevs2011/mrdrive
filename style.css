@@ -207,8 +207,67 @@ header button:hover { background: var(--bg); }
   color: var(--text-muted);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
 }
+#upload-progress:empty { margin-bottom: 0; }
+
+.upload-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: uploadIn 0.2s ease-out;
+}
+@keyframes uploadIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.upload-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.upload-item-name {
+  color: var(--text);
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upload-item-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.upload-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.upload-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.15s linear, background 0.2s;
+}
+.upload-item.saving .upload-bar-fill { animation: uploadPulse 1s ease-in-out infinite; }
+@keyframes uploadPulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.upload-item.done .upload-bar-fill { background: var(--green); }
+.upload-item.done .upload-item-status { color: var(--green-text); }
+.upload-item.error { border-color: var(--red-text); cursor: pointer; }
+.upload-item.error .upload-bar-fill { background: var(--red-text); }
+.upload-item.error .upload-item-status { color: var(--red-text); }
 
 /* FILE LIST */
 .file-list { margin: 0 40px 40px; display: flex; flex-direction: column; gap: 8px; }
