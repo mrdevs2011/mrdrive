@@ -144,13 +144,13 @@ function showPublicDownloadModal(token) {
           if (kind === "image") {
             previewWrap.innerHTML = `
               <div class="public-preview is-image">
-                <img src="${previewUrlData.signedUrl}" alt="${escapeHtml(data.filename)}" />
+                <img src="${previewUrlData.signedUrl}" alt="${escapeHtml(data.filename)}" loading="eager" />
               </div>
             `;
           } else {
             previewWrap.innerHTML = `
               <div class="public-preview is-video">
-                <video src="${previewUrlData.signedUrl}" controls playsinline></video>
+                <video src="${previewUrlData.signedUrl}" controls playsinline webkit-playsinline preload="metadata"></video>
               </div>
             `;
           }

@@ -364,13 +364,14 @@ header button:hover { background: var(--bg); }
 .public-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
   z-index: 1000;
   animation: fadeIn 0.2s ease;
+  box-sizing: border-box;
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .public-modal-box {
@@ -383,6 +384,7 @@ header button:hover { background: var(--bg); }
   max-width: 100%;
   box-shadow: 0 20px 60px rgba(0,0,0,0.2);
   animation: slideUp 0.25s ease;
+  box-sizing: border-box;
 }
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(20px); }
@@ -421,14 +423,16 @@ header button:hover { background: var(--bg); }
 }
 .public-modal-icon svg { width: 24px; height: 24px; }
 
+/* Rasm/video: viewportga mos, buzilmasdan to'liq ko'rinadi */
 .public-modal-box.has-preview {
-  width: 95vw;
-  max-width: 1100px;
-  height: 92vh;
-  max-height: 950px;
+  width: min(96vw, 1200px);
+  height: min(94vh, 100dvh - 16px);
+  max-width: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  padding: 16px;
+  overflow: hidden;
 }
 .public-modal-box.has-preview .public-modal-close {
   background: rgba(0, 0, 0, 0.45);
@@ -439,31 +443,61 @@ header button:hover { background: var(--bg); }
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
 }
+
+#public-preview-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+}
+
 .public-preview {
   flex: 1 1 auto;
   min-height: 0;
-  margin: 0 0 14px;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
   border-radius: 12px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
 }
 .public-preview.is-image { background: #f4f4f5; }
 .public-preview.is-video { background: #000; }
+
 .public-preview img,
 .public-preview video {
   display: block;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
-  width: auto;
-  height: auto;
   object-fit: contain;
+  object-position: center;
+  border: none;
+  background: transparent;
 }
+
+/* Video native fullscreen — overflow ota-elementlar to'sib qo'ymasligi */
+.public-preview video:fullscreen,
+.public-preview video:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  background: #000;
+}
+
 .public-modal-box.has-preview h2 {
   font-size: 15px;
   margin-bottom: 4px;
   flex: 0 0 auto;
+  padding: 0 36px;
 }
 .public-modal-box.has-preview .public-meta,
 .public-modal-box.has-preview .public-expiry {
@@ -476,6 +510,24 @@ header button:hover { background: var(--bg); }
 .public-modal-box.has-preview .public-status {
   flex: 0 0 auto;
   margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .public-modal-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+  .public-modal-box.has-preview {
+    width: 100%;
+    height: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding: 12px;
+  }
+  .public-modal-box.has-preview h2 {
+    font-size: 14px;
+    padding: 0 32px;
+  }
 }
 
 .public-modal-box h2 {
@@ -589,9 +641,11 @@ header button:hover { background: var(--bg); }
   .public-modal-box h2 { padding: 0 28px; font-size: 16px; }
   .public-modal-box.has-preview {
     width: 100%;
-    height: 88vh;
-    padding: 14px;
+    height: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding: 12px;
   }
-  .public-modal-box.has-preview h2 { padding: 0 24px; }
+  .public-modal-box.has-preview h2 { padding: 0 32px; font-size: 14px; }
   .modal-box { padding: 22px 18px; }
 }
