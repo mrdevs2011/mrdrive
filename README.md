@@ -32,3 +32,10 @@ Oddiy HTML/JS/CSS drive app — Supabase auth (email/magic link) + storage + Pos
 - `SUPABASE_ANON_KEY` public bo'lishi mumkin — xavfsizlik RLS orqali ta'minlanadi
 - `service_role` key'ni HECH QACHON frontendga qo'yma
 - Har bir user faqat o'zining fayllarini ko'radi/o'chiradi (RLS policy shuni ta'minlaydi)
+
+## Schema yangilash (agar avval o'rnatgan bo'lsang)
+
+Agar public link/papka funksiyalari ishlamasa, `setup-part2.sql`ni ham
+Supabase SQL Editor'da ishga tushir — u yetishmayotgan ustunlarni
+(is_public, public_token va h.k.) xavfsiz qo'shadi. Public link funksiyasi
+hozir ishlab turgan bo'lsa, bu qadam kerak emas — ustunlar allaqachon bor.
