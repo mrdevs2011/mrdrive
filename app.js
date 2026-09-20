@@ -88,6 +88,7 @@ function showPublicDownloadModal(token) {
             <button id="public-download-btn" disabled>Yuklab olish</button>
             <button id="public-fs-btn" class="public-fs-btn" title="To'liq ekran" aria-label="To'liq ekran" style="display:none;">${ICON_FULLSCREEN}</button>
           </div>
+          <a class="public-go-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer">Go MRdrive</a>
           <p id="public-status" class="public-status"></p>
         </div>
       </div>
