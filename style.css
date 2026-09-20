@@ -360,55 +360,46 @@ header button:hover { background: var(--bg); }
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* PUBLIC MODAL */
+/* PUBLIC MODAL — to'liq ekran, alohida sahifa kabi (yopish tugmasi yo'q) */
 .public-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--surface);
   z-index: 1000;
   animation: fadeIn 0.2s ease;
   box-sizing: border-box;
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
 .public-modal-box {
   position: relative;
-  background: white;
-  border-radius: 20px;
-  padding: 36px 32px;
-  text-align: center;
-  width: 380px;
-  max-width: 100%;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-  animation: slideUp 0.25s ease;
-  box-sizing: border-box;
-}
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.public-modal-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  background: var(--surface);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s;
-  padding: 0;
+  text-align: center;
+  overflow: hidden;
+  box-sizing: border-box;
 }
-.public-modal-close:hover { background: var(--bg); color: var(--text); }
+
+.public-info {
+  width: 100%;
+  max-width: 380px;
+  padding: 24px;
+  box-sizing: border-box;
+  text-align: center;
+}
 
 .public-modal-icon {
   display: flex;
@@ -423,34 +414,25 @@ header button:hover { background: var(--bg); }
 }
 .public-modal-icon svg { width: 24px; height: 24px; }
 
-/* Rasm/video: viewportga mos, buzilmasdan to'liq ko'rinadi */
-.public-modal-box.has-preview {
-  width: min(96vw, 1200px);
-  height: min(94vh, 100dvh - 16px);
-  max-width: 100%;
-  max-height: 100%;
-  display: flex;
-  flex-direction: column;
-  padding: 16px;
-  overflow: hidden;
-}
-.public-modal-box.has-preview .public-modal-close {
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
-  z-index: 2;
-}
-.public-modal-box.has-preview .public-modal-close:hover {
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-}
-
+/* Rasm/video: butun ekranni to'ldiradi, pastda info + yuklab olish */
 #public-preview-wrap {
+  display: none;
+}
+.public-modal-box.has-preview {
+  justify-content: flex-start;
+}
+.public-modal-box.has-preview #public-preview-wrap {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
   min-height: 0;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 12px;
+}
+.public-modal-box.has-preview .public-info {
+  flex: 0 0 auto;
+  max-width: 560px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
 }
 
 .public-preview {
@@ -459,12 +441,14 @@ header button:hover { background: var(--bg); }
   min-width: 0;
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  border-radius: 0;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+  padding-top: env(safe-area-inset-top);
+  box-sizing: border-box;
 }
 .public-preview.is-image { background: #f4f4f5; }
 .public-preview.is-video { background: #000; }
@@ -493,41 +477,20 @@ header button:hover { background: var(--bg); }
   background: #000;
 }
 
+.public-modal-box.has-preview .public-modal-icon { display: none; }
 .public-modal-box.has-preview h2 {
   font-size: 15px;
   margin-bottom: 4px;
-  flex: 0 0 auto;
-  padding: 0 36px;
+  padding: 0;
 }
 .public-modal-box.has-preview .public-meta,
 .public-modal-box.has-preview .public-expiry {
   margin-bottom: 4px;
-  flex: 0 0 auto;
 }
-.public-modal-box.has-preview button:not(.public-modal-close) {
-  flex: 0 0 auto;
-}
+.public-modal-box.has-preview .public-expiry { margin-bottom: 10px; }
 .public-modal-box.has-preview .public-status {
-  flex: 0 0 auto;
   margin-top: 8px;
-}
-
-@media (max-width: 640px) {
-  .public-modal-backdrop {
-    padding: 0;
-    align-items: stretch;
-  }
-  .public-modal-box.has-preview {
-    width: 100%;
-    height: 100%;
-    max-height: 100dvh;
-    border-radius: 0;
-    padding: 12px;
-  }
-  .public-modal-box.has-preview h2 {
-    font-size: 14px;
-    padding: 0 32px;
-  }
+  min-height: 0;
 }
 
 .public-modal-box h2 {
@@ -536,11 +499,10 @@ header button:hover { background: var(--bg); }
   margin-bottom: 6px;
   word-break: break-all;
   line-height: 1.3;
-  padding: 0 30px;
 }
 .public-meta { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
 .public-expiry { font-size: 12px; color: var(--amber-text); margin-bottom: 22px; }
-.public-modal-box button:not(.public-modal-close) {
+.public-modal-box button {
   width: 100%;
   padding: 12px;
   background: #18181b;
@@ -552,7 +514,7 @@ header button:hover { background: var(--bg); }
   font-weight: 500;
   transition: opacity 0.15s;
 }
-.public-modal-box button:not(.public-modal-close):hover:not(:disabled) { opacity: 0.85; }
+.public-modal-box button:hover:not(:disabled) { opacity: 0.85; }
 .public-modal-box button:disabled { opacity: 0.4; cursor: not-allowed; }
 .public-status { margin-top: 14px; font-size: 13px; color: var(--text-muted); min-height: 16px; }
 
@@ -637,15 +599,7 @@ header button:hover { background: var(--bg); }
   .toggle-group { height: 30px; }
   .toggle-group .toggle-btn { width: 30px; height: 30px; }
   .auth-box { padding: 28px 22px; width: 100%; }
-  .public-modal-box { padding: 28px 22px; }
-  .public-modal-box h2 { padding: 0 28px; font-size: 16px; }
-  .public-modal-box.has-preview {
-    width: 100%;
-    height: 100%;
-    max-height: 100dvh;
-    border-radius: 0;
-    padding: 12px;
-  }
-  .public-modal-box.has-preview h2 { padding: 0 32px; font-size: 14px; }
+  .public-modal-box h2 { font-size: 16px; }
+  .public-modal-box.has-preview h2 { font-size: 14px; }
   .modal-box { padding: 22px 18px; }
 }

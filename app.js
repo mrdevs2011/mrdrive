@@ -18,7 +18,6 @@ const ICON_COPY = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><
 const ICON_REFRESH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 4V9H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20V15H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9C4 9 6 4 12 4C16 4 19 6 20 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 15C20 15 18 20 12 20C8 20 5 18 4 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_SEARCH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21L16.5 16.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_FOLDER = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7C3 5.89543 3.89543 5 5 5H9L11 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
-const ICON_CLOSE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 
 const BUCKET = "files";
 const TABLE = "files";
@@ -77,20 +76,22 @@ function showPublicDownloadModal(token) {
   modal.innerHTML = `
     <div class="public-modal-backdrop">
       <div class="public-modal-box" id="public-modal-box">
-        <button class="public-modal-close" onclick="closePublicModal()" title="Yopish">
-          ${ICON_CLOSE}
-        </button>
         <div id="public-preview-wrap"></div>
-        <div class="public-modal-icon" id="public-modal-icon">${ICON_DOWNLOAD}</div>
-        <h2 id="public-filename">Yuklanmoqda...</h2>
-        <p id="public-meta" class="public-meta"></p>
-        <p id="public-expiry" class="public-expiry"></p>
-        <button id="public-download-btn" disabled>Yuklab olish</button>
-        <p id="public-status" class="public-status"></p>
+        <div class="public-info">
+          <div class="public-modal-icon" id="public-modal-icon">${ICON_DOWNLOAD}</div>
+          <h2 id="public-filename">Yuklanmoqda...</h2>
+          <p id="public-meta" class="public-meta"></p>
+          <p id="public-expiry" class="public-expiry"></p>
+          <button id="public-download-btn" disabled>Yuklab olish</button>
+          <p id="public-status" class="public-status"></p>
+        </div>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
+  // Alohida sahifa kabi: orqadagi scroll bo'lmasin
+  document.documentElement.style.overflow = "hidden";
+  document.body.style.overflow = "hidden";
 
   const modalBox = document.getElementById("public-modal-box");
   const previewWrap = document.getElementById("public-preview-wrap");
@@ -184,10 +185,6 @@ function showPublicDownloadModal(token) {
         statusEl.textContent = "Yuklab olindi";
       };
     });
-}
-
-function closePublicModal() {
-  window.location.href = window.location.pathname;
 }
 
 // ==========================================
