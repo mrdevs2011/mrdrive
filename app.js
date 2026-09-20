@@ -10,6 +10,8 @@ const fileListEl = document.getElementById("file-list");
 const uploadProgressEl = document.getElementById("upload-progress");
 const bootLoader = document.getElementById("boot-loader");
 
+const ICON_FULLSCREEN = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 9V4H9M15 4H20V9M20 15V20H15M9 20H4V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_EXIT_FULLSCREEN = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 4V9H4M20 9H15V4M15 20V15H20M4 15H9V20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ICON_DOWNLOAD = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V16M12 16L7 11M12 16L17 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_DELETE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 7L7 19C7 19.5523 7.44772 20 8 20H16C16.5523 20 17 19.5523 17 19L18 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7V4C9 3.44772 9.44772 3 10 3H14C14.5523 3 15 3.44772 15 4V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_LINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -82,7 +84,10 @@ function showPublicDownloadModal(token) {
           <h2 id="public-filename">Yuklanmoqda...</h2>
           <p id="public-meta" class="public-meta"></p>
           <p id="public-expiry" class="public-expiry"></p>
-          <button id="public-download-btn" disabled>Yuklab olish</button>
+          <div class="public-actions">
+            <button id="public-download-btn" disabled>Yuklab olish</button>
+            <button id="public-fs-btn" class="public-fs-btn" title="To'liq ekran" aria-label="To'liq ekran" style="display:none;">${ICON_FULLSCREEN}</button>
+          </div>
           <p id="public-status" class="public-status"></p>
         </div>
       </div>
@@ -101,6 +106,7 @@ function showPublicDownloadModal(token) {
   const expiryEl = document.getElementById("public-expiry");
   const statusEl = document.getElementById("public-status");
   const downloadBtn = document.getElementById("public-download-btn");
+  const fsBtn = document.getElementById("public-fs-btn");
 
   sb.from(TABLE)
     .select("*")
@@ -141,6 +147,8 @@ function showPublicDownloadModal(token) {
         if (!previewUrlError && previewUrlData) {
           modalIcon.style.display = "none";
           modalBox.classList.add("has-preview");
+          fsBtn.style.display = "flex";
+          setupPublicFullscreen(fsBtn, modalBox, previewWrap);
 
           if (kind === "image") {
             previewWrap.innerHTML = `
@@ -185,6 +193,65 @@ function showPublicDownloadModal(token) {
         statusEl.textContent = "Yuklab olindi";
       };
     });
+}
+
+// Fullscreen: tugma preview USTIDA emas, pastdagi panelda turadi.
+// Desktop/Android: haqiqiy Fullscreen API. iPhone (div fullscreen yo'q): video uchun native player,
+// rasm uchun "focus mode" (matn yashirinadi, preview maksimal joy oladi).
+function setupPublicFullscreen(btn, modalBox, previewWrap) {
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+  const canReal = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+
+  const sync = () => {
+    const active = !!fsEl() || modalBox.classList.contains("focus-mode");
+    btn.innerHTML = active ? ICON_EXIT_FULLSCREEN : ICON_FULLSCREEN;
+    const label = active ? "To'liq ekrandan chiqish" : "To'liq ekran";
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+  };
+
+  document.addEventListener("fullscreenchange", sync);
+  document.addEventListener("webkitfullscreenchange", sync);
+
+  // Fullscreenda rasmni bosish ham chiqaradi
+  previewWrap.addEventListener("click", (e) => {
+    if (fsEl() && e.target.tagName === "IMG") {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    }
+  });
+
+  btn.onclick = () => {
+    const target = previewWrap.querySelector(".public-preview");
+    if (!target) return;
+
+    if (fsEl()) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      return;
+    }
+    if (modalBox.classList.contains("focus-mode")) {
+      modalBox.classList.remove("focus-mode");
+      sync();
+      return;
+    }
+
+    if (canReal && (target.requestFullscreen || target.webkitRequestFullscreen)) {
+      const req = target.requestFullscreen || target.webkitRequestFullscreen;
+      Promise.resolve(req.call(target)).catch(() => {
+        modalBox.classList.add("focus-mode");
+        sync();
+      });
+      return;
+    }
+
+    const video = target.querySelector("video");
+    if (video && video.webkitEnterFullscreen) {
+      video.webkitEnterFullscreen();
+      return;
+    }
+
+    modalBox.classList.add("focus-mode");
+    sync();
+  };
 }
 
 // ==========================================

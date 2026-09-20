@@ -493,6 +493,49 @@ header button:hover { background: var(--bg); }
   min-height: 0;
 }
 
+/* Actions qatori: Yuklab olish + Fullscreen (previewdan tashqarida) */
+.public-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.public-actions #public-download-btn { flex: 1 1 auto; min-width: 0; }
+.public-modal-box .public-fs-btn {
+  flex: 0 0 46px;
+  width: 46px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  background: #f4f4f5;
+  color: #18181b;
+  border: 1px solid var(--border);
+}
+.public-modal-box .public-fs-btn:hover:not(:disabled) { background: #e4e4e7; opacity: 1; }
+
+/* Haqiqiy fullscreen (faqat preview; tugma tashqarida qoladi) */
+.public-preview:fullscreen,
+.public-preview:-webkit-full-screen {
+  background: #000;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+}
+.public-preview:fullscreen img,
+.public-preview:-webkit-full-screen img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  cursor: zoom-out;
+}
+
+/* iPhone fallback: matnlar yashirinadi, preview maksimal joy oladi, tugma pastda qoladi */
+.public-modal-box.focus-mode h2,
+.public-modal-box.focus-mode .public-meta,
+.public-modal-box.focus-mode .public-expiry,
+.public-modal-box.focus-mode .public-status { display: none; }
+.public-modal-box.focus-mode .public-info { padding-top: 8px; }
+.public-modal-box.focus-mode .public-preview.is-image { background: #000; }
+
 .public-modal-box h2 {
   font-size: 18px;
   font-weight: 600;
