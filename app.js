@@ -435,9 +435,14 @@ window.addEventListener("paste", (e) => {
 // ==========================================
 
 async function loadFiles() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+
+  // Only MY rows. Without this filter the "anyone can read public files" policy
+  // also returns other accounts' public files, which then show up (undeletable) in this drive.
   const [filesRes, foldersRes] = await Promise.all([
-    sb.from(TABLE).select("*").order("uploaded_at", { ascending: false }),
-    sb.from(FOLDERS_TABLE).select("*").order("created_at", { ascending: true })
+    sb.from(TABLE).select("*").eq("user_id", user.id).order("uploaded_at", { ascending: false }),
+    sb.from(FOLDERS_TABLE).select("*").eq("user_id", user.id).order("created_at", { ascending: true })
   ]);
 
   if (filesRes.error) {
