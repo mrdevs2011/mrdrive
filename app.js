@@ -57,16 +57,31 @@ if (shareToken) {
   });
 }
 
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "avif"];
+const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "m4v", "ogv"];
+
+function getFileExt(filename) {
+  return (filename.split(".").pop() || "").toLowerCase();
+}
+
+function getFileKind(filename) {
+  const ext = getFileExt(filename);
+  if (IMAGE_EXTENSIONS.includes(ext)) return "image";
+  if (VIDEO_EXTENSIONS.includes(ext)) return "video";
+  return "other";
+}
+
 function showPublicDownloadModal(token) {
   const modal = document.createElement("div");
   modal.id = "public-modal";
   modal.innerHTML = `
     <div class="public-modal-backdrop">
-      <div class="public-modal-box">
+      <div class="public-modal-box" id="public-modal-box">
         <button class="public-modal-close" onclick="closePublicModal()" title="Yopish">
           ${ICON_CLOSE}
         </button>
-        <div class="public-modal-icon">${ICON_DOWNLOAD}</div>
+        <div id="public-preview-wrap"></div>
+        <div class="public-modal-icon" id="public-modal-icon">${ICON_DOWNLOAD}</div>
         <h2 id="public-filename">Yuklanmoqda...</h2>
         <p id="public-meta" class="public-meta"></p>
         <p id="public-expiry" class="public-expiry"></p>
@@ -77,6 +92,9 @@ function showPublicDownloadModal(token) {
   `;
   document.body.appendChild(modal);
 
+  const modalBox = document.getElementById("public-modal-box");
+  const previewWrap = document.getElementById("public-preview-wrap");
+  const modalIcon = document.getElementById("public-modal-icon");
   const filenameEl = document.getElementById("public-filename");
   const metaEl = document.getElementById("public-meta");
   const expiryEl = document.getElementById("public-expiry");
@@ -88,7 +106,7 @@ function showPublicDownloadModal(token) {
     .eq("public_token", token)
     .eq("is_public", true)
     .single()
-    .then(({ data, error }) => {
+    .then(async ({ data, error }) => {
       if (error || !data) {
         filenameEl.textContent = "Fayl topilmadi";
         metaEl.textContent = "Bu link o'chirilgan yoki mavjud emas.";
@@ -111,6 +129,33 @@ function showPublicDownloadModal(token) {
       }
 
       downloadBtn.disabled = false;
+
+      const kind = getFileKind(data.filename);
+
+      if (kind === "image" || kind === "video") {
+        const { data: previewUrlData, error: previewUrlError } = await sb.storage
+          .from(BUCKET)
+          .createSignedUrl(data.storage_path, 3600);
+
+        if (!previewUrlError && previewUrlData) {
+          modalIcon.style.display = "none";
+          modalBox.classList.add("has-preview");
+
+          if (kind === "image") {
+            previewWrap.innerHTML = `
+              <div class="public-preview">
+                <img src="${previewUrlData.signedUrl}" alt="${escapeHtml(data.filename)}" />
+              </div>
+            `;
+          } else {
+            previewWrap.innerHTML = `
+              <div class="public-preview">
+                <video src="${previewUrlData.signedUrl}" controls playsinline></video>
+              </div>
+            `;
+          }
+        }
+      }
 
       downloadBtn.onclick = async () => {
         statusEl.textContent = "Yuklanmoqda...";

@@ -420,6 +420,30 @@ header button:hover { background: var(--bg); }
   color: #18181b;
 }
 .public-modal-icon svg { width: 24px; height: 24px; }
+
+.public-modal-box.has-preview {
+  width: 480px;
+}
+.public-preview {
+  margin: -4px auto 18px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f4f4f5;
+  max-height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.public-preview img,
+.public-preview video {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+  background: #000;
+}
+.public-preview img { background: transparent; }
+
 .public-modal-box h2 {
   font-size: 18px;
   font-weight: 600;
