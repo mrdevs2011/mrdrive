@@ -1166,3 +1166,758 @@ function escapeHtml(str) {
 function escapeJs(str) {
   return String(str).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"');
 }
+
+// ==========================================
+// ANNOTATION VIEWER – tools, drawing, PDF/PNG
+// ==========================================
+
+const ICON_VIEW = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/></svg>`;
+
+const ANNOT_TOOLS = [
+  {
+    id: "pen",
+    tip: "Qalam – erkin chizish (1 barmoq)",
+    svg: `<svg viewBox="0 0 24 24" fill="none"><path d="M4 20L8.5 18.5L19 8C19.8284 7.17157 19.8284 5.82843 19 5C18.1716 4.17157 16.8284 4.17157 16 5L5.5 15.5L4 20Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14.5 6.5L17.5 9.5" stroke="currentColor" stroke-width="1.8"/></svg>`
+  },
+  {
+    id: "highlighter",
+    tip: "Marker – yarim shaffof belgilash",
+    svg: `<svg viewBox="0 0 24 24" fill="none"><path d="M4 20H9L19 10L14 5L4 15V20Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 5L19 10" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity="0.5"/></svg>`
+  },
+  {
+    id: "eraser",
+    tip: "O'chirgich – chiziqlarni o'chirish",
+    svg: `<svg viewBox="0 0 24 24" fill="none"><path d="M16 4L20 8L10 18H6V14L16 4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M4 20H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "rect",
+    tip: "To'rtburchak",
+    svg: `<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="12" rx="1.5" stroke="currentColor" stroke-width="1.8"/></svg>`
+  },
+  {
+    id: "circle",
+    tip: "Doira / Ellips",
+    svg: `<svg viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="12" rx="8" ry="6" stroke="currentColor" stroke-width="1.8"/></svg>`
+  },
+  {
+    id: "arrow",
+    tip: "Strelka",
+    svg: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 12H19M19 12L13 6M19 12L13 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "text",
+    tip: "Matn qo'shish",
+    svg: `<svg viewBox="0 0 24 24" fill="none"><path d="M5 6H19M12 6V19M9 19H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "pan",
+    tip: "Surish (yoki 2 barmoq)",
+    svg: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 4V20M12 4L8 8M12 4L16 8M12 20L8 16M12 20L16 16M4 12H20M4 12L8 8M4 12L8 16M20 12L16 8M20 12L16 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  }
+];
+
+const ANNOT_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#000000", "#ffffff"];
+const ANNOT_SIZES = [2, 4, 8, 14];
+
+let annotState = {
+  open: false,
+  tool: "pen",
+  color: "#ef4444",
+  size: 4,
+  file: null,
+  type: null, // "image" | "pdf" | "code"
+  history: [],
+  historyIdx: -1,
+  drawing: false,
+  lastX: 0,
+  lastY: 0,
+  startX: 0,
+  startY: 0,
+  currentStroke: null,
+  pages: [], // { canvas, ctx, imgW, imgH, pageNum? }
+  touches: new Map(),
+  isPanning: false,
+  panStart: null,
+  scale: 1,
+  scrollEl: null,
+  isFullscreen: false
+};
+
+function isViewable(filename) {
+  const lower = filename.toLowerCase();
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lower)) return "image";
+  if (/\.pdf$/i.test(lower)) return "pdf";
+  if (/\.(txt|md|json|js|ts|css|html|xml|py|java|c|cpp|h|go|rs|sh|yml|yaml|toml|ini|log|csv)$/i.test(lower)) return "code";
+  return null;
+}
+
+// Patch renderFiles to add View button
+const _origRenderFiles = renderFiles;
+renderFiles = function () {
+  _origRenderFiles();
+  // Re-render with view buttons by intercepting the HTML is hard; instead
+  // we enhance after render.
+  const cards = fileListEl.querySelectorAll(".file-card");
+  cards.forEach((card, i) => {
+    const filtered = getFilteredFiles();
+    if (!filtered[i]) return;
+    const f = filtered[i];
+    const kind = isViewable(f.filename);
+    if (!kind) return;
+    const actions = card.querySelector(".file-actions");
+    if (!actions || actions.querySelector(".view-btn")) return;
+    const btn = document.createElement("button");
+    btn.className = "view-btn";
+    btn.title = "Ochish va chizish";
+    btn.innerHTML = ICON_VIEW;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openAnnotationViewer(f, kind);
+    };
+    actions.insertBefore(btn, actions.firstChild);
+  });
+};
+
+function getFilteredFiles() {
+  let filtered = allFiles;
+  if (currentFolder !== null) filtered = filtered.filter(f => f.folder === currentFolder);
+  if (currentSearch.trim()) {
+    const q = currentSearch.toLowerCase();
+    filtered = filtered.filter(f => f.filename.toLowerCase().includes(q));
+  }
+  return filtered;
+}
+
+async function openAnnotationViewer(file, kind) {
+  const viewer = document.getElementById("annot-viewer");
+  const scroll = document.getElementById("annot-scroll");
+  const filenameEl = document.getElementById("annot-filename");
+  const toolbar = document.getElementById("annot-toolbar");
+  const statusHint = document.getElementById("annot-tool-hint");
+
+  annotState.open = true;
+  annotState.file = file;
+  annotState.type = kind;
+  annotState.history = [];
+  annotState.historyIdx = -1;
+  annotState.pages = [];
+  annotState.scale = 1;
+  annotState.tool = "pen";
+  annotState.color = "#ef4444";
+  annotState.size = 4;
+
+  filenameEl.textContent = file.filename;
+  scroll.innerHTML = "";
+  viewer.style.display = "flex";
+  viewer.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+
+  buildAnnotToolbar(toolbar);
+
+  // Loading indicator
+  const loader = document.createElement("div");
+  loader.className = "annot-loading";
+  loader.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="40" stroke-linecap="round"/></svg> Yuklanmoqda…`;
+  scroll.appendChild(loader);
+
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const { data: urlData, error } = await sb.storage
+      .from(BUCKET)
+      .createSignedUrl(file.storage_path, 3600);
+    if (error || !urlData) throw error || new Error("Could not get file URL");
+
+    if (kind === "image") {
+      await loadImageForAnnot(urlData.signedUrl, scroll, loader);
+      statusHint.textContent = "1 barmoq = chizish · 2 barmoq = surish · Pinch = zoom";
+    } else if (kind === "pdf") {
+      await loadPdfForAnnot(urlData.signedUrl, scroll, loader);
+      statusHint.textContent = "Chizmalar sahifaga yopishadi · 1 barmoq chizish · 2 barmoq surish";
+    } else if (kind === "code") {
+      await loadCodeForAnnot(urlData.signedUrl, scroll, loader, file.filename);
+      statusHint.textContent = "Dark mode kod ko'rinishi · Faqat o'qish";
+      // Hide drawing tools for code
+      toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
+    }
+  } catch (err) {
+    console.error(err);
+    loader.innerHTML = `<span style="color:#f87171">Fayl yuklanmadi</span>`;
+  }
+
+  // Wire top buttons
+  document.getElementById("annot-close").onclick = closeAnnotationViewer;
+  document.getElementById("annot-undo").onclick = () => annotUndo();
+  document.getElementById("annot-redo").onclick = () => annotRedo();
+  document.getElementById("annot-save").onclick = () => saveAnnotated();
+  document.getElementById("annot-fullscreen").onclick = toggleAnnotFullscreen;
+
+  // Keyboard
+  window.addEventListener("keydown", annotKeyHandler);
+}
+
+function closeAnnotationViewer() {
+  const viewer = document.getElementById("annot-viewer");
+  viewer.style.display = "none";
+  viewer.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+  annotState.open = false;
+  annotState.pages = [];
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  window.removeEventListener("keydown", annotKeyHandler);
+}
+
+function annotKeyHandler(e) {
+  if (!annotState.open) return;
+  if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+    e.preventDefault();
+    if (e.shiftKey) annotRedo(); else annotUndo();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+    e.preventDefault();
+    annotRedo();
+  }
+  if (e.key === "Escape") closeAnnotationViewer();
+}
+
+function buildAnnotToolbar(toolbar) {
+  toolbar.innerHTML = "";
+
+  // Tools group
+  const group = document.createElement("div");
+  group.className = "annot-tool-group draw-tools";
+  ANNOT_TOOLS.forEach(t => {
+    const btn = document.createElement("button");
+    btn.className = "annot-tool" + (t.id === annotState.tool ? " active" : "");
+    btn.dataset.tool = t.id;
+    btn.dataset.tip = t.tip;
+    btn.innerHTML = t.svg;
+    btn.onclick = () => {
+      annotState.tool = t.id;
+      toolbar.querySelectorAll(".annot-tool").forEach(b => b.classList.toggle("active", b.dataset.tool === t.id));
+      document.getElementById("annot-tool-hint").textContent = t.tip + (t.id === "pan" ? "" : " · 1 barmoq chizish · 2 barmoq surish");
+      updateCursor();
+    };
+    group.appendChild(btn);
+  });
+  toolbar.appendChild(group);
+
+  // Colors
+  const colorGroup = document.createElement("div");
+  colorGroup.className = "annot-tool-group";
+  ANNOT_COLORS.forEach(c => {
+    const sw = document.createElement("button");
+    sw.className = "annot-color-swatch" + (c === annotState.color ? " active" : "");
+    sw.style.background = c;
+    sw.title = c;
+    sw.onclick = () => {
+      annotState.color = c;
+      colorGroup.querySelectorAll(".annot-color-swatch").forEach(s => s.classList.toggle("active", s.style.background === c));
+    };
+    colorGroup.appendChild(sw);
+  });
+  toolbar.appendChild(colorGroup);
+
+  // Sizes
+  const sizeGroup = document.createElement("div");
+  sizeGroup.className = "annot-tool-group";
+  ANNOT_SIZES.forEach(s => {
+    const btn = document.createElement("button");
+    btn.className = "annot-size-btn" + (s === annotState.size ? " active" : "");
+    btn.textContent = s;
+    btn.onclick = () => {
+      annotState.size = s;
+      sizeGroup.querySelectorAll(".annot-size-btn").forEach(b => b.classList.toggle("active", +b.textContent === s));
+    };
+    sizeGroup.appendChild(btn);
+  });
+  toolbar.appendChild(sizeGroup);
+
+  // Clear
+  const clearGroup = document.createElement("div");
+  clearGroup.className = "annot-tool-group";
+  const clearBtn = document.createElement("button");
+  clearBtn.className = "annot-tool";
+  clearBtn.dataset.tip = "Barcha chizmalarni tozalash";
+  clearBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none"><path d="M4 7H20M9 7V4H15V7M10 11V17M14 11V17M6 7L7 19C7 19.5523 7.44772 20 8 20H16C16.5523 20 17 19.5523 17 19L18 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  clearBtn.onclick = () => {
+    if (confirm("Ushbu sahifadagi barcha chizmalarni o'chirishni xohlaysizmi?")) {
+      annotState.pages.forEach(p => {
+        p.ctx.clearRect(0, 0, p.canvas.width, p.canvas.height);
+      });
+      pushHistory();
+    }
+  };
+  clearGroup.appendChild(clearBtn);
+  toolbar.appendChild(clearGroup);
+
+  // Zoom controls
+  const zoomGroup = document.createElement("div");
+  zoomGroup.className = "annot-tool-group annot-zoom-group";
+  zoomGroup.innerHTML = `
+    <button class="annot-tool" id="annot-zoom-out" data-tip="Kichiklashtirish" title="Kichiklashtirish">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21L16.5 16.5M8 11H14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <span class="annot-zoom-label" id="annot-zoom-label">100%</span>
+    <button class="annot-tool" id="annot-zoom-in" data-tip="Kattalashtirish" title="Kattalashtirish">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21L16.5 16.5M11 8V14M8 11H14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <button class="annot-tool" id="annot-zoom-reset" data-tip="100% ga qaytarish" title="Reset">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 12C4 7.58172 7.58172 4 12 4C16.4183 4 20 7.58172 20 12C20 16.4183 16.4183 20 12 20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 12L7 9M4 12L7 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  `;
+  toolbar.appendChild(zoomGroup);
+
+  document.getElementById("annot-zoom-in").onclick = () => setAnnotZoom(annotState.scale * 1.25);
+  document.getElementById("annot-zoom-out").onclick = () => setAnnotZoom(annotState.scale / 1.25);
+  document.getElementById("annot-zoom-reset").onclick = () => setAnnotZoom(1);
+}
+
+function setAnnotZoom(scale) {
+  scale = Math.max(0.25, Math.min(4, Math.round(scale * 100) / 100));
+  annotState.scale = scale;
+  const label = document.getElementById("annot-zoom-label");
+  if (label) label.textContent = Math.round(scale * 100) + "%";
+  annotState.pages.forEach(p => {
+    if (!p.el) return;
+    if (!p.baseH) {
+      p.baseH = p.el.offsetHeight || p.imgH;
+    }
+    p.el.style.transform = `scale(${scale})`;
+    p.el.style.transformOrigin = "top center";
+    // Keep flow space so pages don't overlap when zoomed
+    const extra = (scale - 1) * p.baseH;
+    p.el.style.marginBottom = (extra > 0 ? extra + 16 : 16) + "px";
+  });
+}
+
+
+function updateCursor() {
+  const scroll = document.getElementById("annot-scroll");
+  if (annotState.tool === "pan") scroll.style.cursor = "grab";
+  else if (annotState.tool === "text") scroll.style.cursor = "text";
+  else scroll.style.cursor = "crosshair";
+}
+
+async function loadImageForAnnot(url, scroll, loader) {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  await new Promise((res, rej) => {
+    img.onload = res;
+    img.onerror = rej;
+    img.src = url;
+  });
+
+  const page = document.createElement("div");
+  page.className = "annot-page";
+  // Fit to viewport width roughly
+  const maxW = Math.min(img.naturalWidth, window.innerWidth - 40);
+  const scale = maxW / img.naturalWidth;
+  const w = Math.round(img.naturalWidth * scale);
+  const h = Math.round(img.naturalHeight * scale);
+  page.style.width = w + "px";
+
+  const displayImg = document.createElement("img");
+  displayImg.src = url;
+  displayImg.width = w;
+  displayImg.height = h;
+  displayImg.draggable = false;
+  page.appendChild(displayImg);
+
+  const canvas = document.createElement("canvas");
+  canvas.className = "annot-layer";
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
+  page.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d");
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  annotState.pages = [{ canvas, ctx, imgW: img.naturalWidth, imgH: img.naturalHeight, el: page }];
+
+  scroll.innerHTML = "";
+  scroll.appendChild(page);
+  attachDrawingHandlers(canvas, 0);
+  updateCursor();
+  pushHistory();
+}
+
+async function loadPdfForAnnot(url, scroll, loader) {
+  if (!window.pdfjsLib) {
+    loader.innerHTML = `<span style="color:#f87171">PDF.js failed to load</span>`;
+    return;
+  }
+  const loadingTask = pdfjsLib.getDocument(url);
+  const pdf = await loadingTask.promise;
+  const pages = [];
+  scroll.innerHTML = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvasPdf = document.createElement("canvas");
+    canvasPdf.className = "pdf-page";
+    canvasPdf.width = viewport.width;
+    canvasPdf.height = viewport.height;
+    const ctxPdf = canvasPdf.getContext("2d");
+    await page.render({ canvasContext: ctxPdf, viewport }).promise;
+
+    const wrap = document.createElement("div");
+    wrap.className = "annot-page";
+    wrap.style.width = viewport.width + "px";
+    wrap.appendChild(canvasPdf);
+
+    const annotCanvas = document.createElement("canvas");
+    annotCanvas.className = "annot-layer";
+    annotCanvas.width = viewport.width;
+    annotCanvas.height = viewport.height;
+    annotCanvas.style.width = viewport.width + "px";
+    annotCanvas.style.height = viewport.height + "px";
+    wrap.appendChild(annotCanvas);
+
+    const ctx = annotCanvas.getContext("2d");
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    pages.push({ canvas: annotCanvas, ctx, imgW: viewport.width, imgH: viewport.height, el: wrap, pageNum: i });
+    scroll.appendChild(wrap);
+    attachDrawingHandlers(annotCanvas, pages.length - 1);
+  }
+  annotState.pages = pages;
+  updateCursor();
+  pushHistory();
+}
+
+async function loadCodeForAnnot(url, scroll, loader, filename) {
+  const res = await fetch(url);
+  const text = await res.text();
+  const wrap = document.createElement("div");
+  wrap.className = "annot-code-wrap";
+  const header = document.createElement("div");
+  header.className = "code-header";
+  header.innerHTML = `<span>${escapeHtml(filename)}</span><span>Dark mode</span>`;
+  const pre = document.createElement("pre");
+  pre.textContent = text;
+  wrap.appendChild(header);
+  wrap.appendChild(pre);
+  scroll.innerHTML = "";
+  scroll.appendChild(wrap);
+}
+
+function attachDrawingHandlers(canvas, pageIdx) {
+  // Pointer events (unified mouse + touch)
+  canvas.addEventListener("pointerdown", (e) => onPointerDown(e, pageIdx));
+  canvas.addEventListener("pointermove", (e) => onPointerMove(e, pageIdx));
+  canvas.addEventListener("pointerup", (e) => onPointerUp(e, pageIdx));
+  canvas.addEventListener("pointercancel", (e) => onPointerUp(e, pageIdx));
+  canvas.addEventListener("pointerleave", (e) => {
+    if (annotState.drawing) onPointerUp(e, pageIdx);
+  });
+
+  // Prevent default touch gestures that steal the canvas
+  canvas.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1 && annotState.tool !== "pan") {
+      // allow drawing
+    } else if (e.touches.length >= 2) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+}
+
+function getPos(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+function onPointerDown(e, pageIdx) {
+  if (!annotState.open) return;
+  const canvas = annotState.pages[pageIdx].canvas;
+  canvas.setPointerCapture(e.pointerId);
+  annotState.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  // 2+ fingers → pan mode
+  if (annotState.touches.size >= 2 || annotState.tool === "pan") {
+    annotState.isPanning = true;
+    annotState.drawing = false;
+    const scroll = document.getElementById("annot-scroll");
+    annotState.panStart = {
+      scrollLeft: scroll.scrollLeft,
+      scrollTop: scroll.scrollTop,
+      x: e.clientX,
+      y: e.clientY
+    };
+    return;
+  }
+
+  if (annotState.tool === "text") {
+    const pos = getPos(e, canvas);
+    const text = prompt("Matn kiriting:");
+    if (text) {
+      const ctx = annotState.pages[pageIdx].ctx;
+      ctx.fillStyle = annotState.color;
+      ctx.font = `${Math.max(14, annotState.size * 4)}px sans-serif`;
+      ctx.fillText(text, pos.x, pos.y);
+      pushHistory();
+    }
+    return;
+  }
+
+  annotState.drawing = true;
+  const pos = getPos(e, canvas);
+  annotState.lastX = pos.x;
+  annotState.lastY = pos.y;
+  annotState.startX = pos.x;
+  annotState.startY = pos.y;
+
+  const ctx = annotState.pages[pageIdx].ctx;
+  if (annotState.tool === "pen" || annotState.tool === "highlighter") {
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  }
+}
+
+function onPointerMove(e, pageIdx) {
+  if (!annotState.open) return;
+  annotState.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (annotState.isPanning || annotState.touches.size >= 2) {
+    const scroll = document.getElementById("annot-scroll");
+    if (annotState.panStart) {
+      const dx = e.clientX - annotState.panStart.x;
+      const dy = e.clientY - annotState.panStart.y;
+      scroll.scrollLeft = annotState.panStart.scrollLeft - dx;
+      scroll.scrollTop = annotState.panStart.scrollTop - dy;
+    }
+    return;
+  }
+
+  if (!annotState.drawing) return;
+  const canvas = annotState.pages[pageIdx].canvas;
+  const ctx = annotState.pages[pageIdx].ctx;
+  const pos = getPos(e, canvas);
+
+  if (annotState.tool === "pen") {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = annotState.color;
+    ctx.lineWidth = annotState.size;
+    ctx.globalAlpha = 1;
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  } else if (annotState.tool === "highlighter") {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = annotState.color;
+    ctx.lineWidth = annotState.size * 3;
+    ctx.globalAlpha = 0.3;
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  } else if (annotState.tool === "eraser") {
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.lineWidth = annotState.size * 4;
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  } else if (["rect", "circle", "arrow"].includes(annotState.tool)) {
+    // Preview: restore last history snapshot then draw shape
+    restoreHistorySnapshot();
+    drawShapePreview(ctx, annotState.tool, annotState.startX, annotState.startY, pos.x, pos.y);
+  }
+
+  annotState.lastX = pos.x;
+  annotState.lastY = pos.y;
+}
+
+function onPointerUp(e, pageIdx) {
+  annotState.touches.delete(e.pointerId);
+  if (annotState.touches.size < 2) {
+    annotState.isPanning = false;
+    annotState.panStart = null;
+  }
+
+  if (!annotState.drawing) return;
+  annotState.drawing = false;
+
+  const ctx = annotState.pages[pageIdx].ctx;
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+
+  if (["rect", "circle", "arrow"].includes(annotState.tool)) {
+    const pos = getPos(e, annotState.pages[pageIdx].canvas);
+    restoreHistorySnapshot();
+    drawShapePreview(ctx, annotState.tool, annotState.startX, annotState.startY, pos.x, pos.y);
+  }
+
+  pushHistory();
+}
+
+function drawShapePreview(ctx, tool, x1, y1, x2, y2) {
+  ctx.strokeStyle = annotState.color;
+  ctx.lineWidth = annotState.size;
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  if (tool === "rect") {
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  } else if (tool === "circle") {
+    const rx = Math.abs(x2 - x1) / 2;
+    const ry = Math.abs(y2 - y1) / 2;
+    const cx = (x1 + x2) / 2;
+    const cy = (y1 + y2) / 2;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (tool === "arrow") {
+    const headLen = 12 + annotState.size;
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+    ctx.stroke();
+  }
+}
+
+function pushHistory() {
+  // Snapshot all pages
+  const snaps = annotState.pages.map(p => p.canvas.toDataURL("image/png"));
+  // Truncate future
+  annotState.history = annotState.history.slice(0, annotState.historyIdx + 1);
+  annotState.history.push(snaps);
+  annotState.historyIdx = annotState.history.length - 1;
+  // Limit history size
+  if (annotState.history.length > 30) {
+    annotState.history.shift();
+    annotState.historyIdx--;
+  }
+}
+
+function restoreHistorySnapshot() {
+  if (annotState.historyIdx < 0) return;
+  const snaps = annotState.history[annotState.historyIdx];
+  snaps.forEach((dataUrl, i) => {
+    if (!annotState.pages[i]) return;
+    const img = new Image();
+    img.onload = () => {
+      const p = annotState.pages[i];
+      p.ctx.clearRect(0, 0, p.canvas.width, p.canvas.height);
+      p.ctx.drawImage(img, 0, 0);
+    };
+    img.src = dataUrl;
+  });
+}
+
+function annotUndo() {
+  if (annotState.historyIdx <= 0) return;
+  annotState.historyIdx--;
+  restoreHistorySnapshot();
+}
+
+function annotRedo() {
+  if (annotState.historyIdx >= annotState.history.length - 1) return;
+  annotState.historyIdx++;
+  restoreHistorySnapshot();
+}
+
+async function saveAnnotated() {
+  if (annotState.type === "code") {
+    showToast("Kod ko'rinishi faqat o'qish uchun", "error");
+    return;
+  }
+  if (!annotState.pages.length) return;
+
+  showToast("Annotated fayl tayyorlanmoqda…");
+
+  try {
+    if (annotState.type === "image") {
+      const p = annotState.pages[0];
+      const off = document.createElement("canvas");
+      off.width = p.imgW;
+      off.height = p.imgH;
+      const octx = off.getContext("2d");
+      const imgEl = p.el.querySelector("img");
+      octx.drawImage(imgEl, 0, 0, p.imgW, p.imgH);
+      octx.drawImage(p.canvas, 0, 0);
+      off.toBlob(async (blob) => {
+        if (!blob) return;
+        const name = annotState.file.filename.replace(/(\.[^.]+)$/, "_annotated$1");
+        const file = new File([blob], name, { type: "image/png" });
+        await uploadFile(file);
+        showToast("Annotated rasm drive'ga saqlandi");
+        closeAnnotationViewer();
+      }, "image/png");
+    } else if (annotState.type === "pdf") {
+      // Full multi-page annotated PDF via pdf-lib
+      if (!window.PDFLib) {
+        showToast("PDF kutubxonasi yuklanmadi", "error");
+        return;
+      }
+      const { PDFDocument } = PDFLib;
+      const pdfDoc = await PDFDocument.create();
+
+      for (let i = 0; i < annotState.pages.length; i++) {
+        const p = annotState.pages[i];
+        // Composite PDF page + annotations
+        const off = document.createElement("canvas");
+        off.width = p.imgW;
+        off.height = p.imgH;
+        const octx = off.getContext("2d");
+        const pdfCanvas = p.el.querySelector("canvas.pdf-page");
+        octx.drawImage(pdfCanvas, 0, 0);
+        octx.drawImage(p.canvas, 0, 0);
+
+        const dataUrl = off.toDataURL("image/png");
+        const pngBytes = await fetch(dataUrl).then(r => r.arrayBuffer());
+        const pngImage = await pdfDoc.embedPng(pngBytes);
+        const page = pdfDoc.addPage([p.imgW, p.imgH]);
+        page.drawImage(pngImage, {
+          x: 0,
+          y: 0,
+          width: p.imgW,
+          height: p.imgH
+        });
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const name = annotState.file.filename.replace(/\.pdf$/i, "_annotated.pdf");
+      const file = new File([blob], name, { type: "application/pdf" });
+      await uploadFile(file);
+      showToast("Annotated PDF (barcha sahifalar) drive'ga saqlandi");
+      closeAnnotationViewer();
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Saqlash muvaffaqiyatsiz", "error");
+  }
+}
+
+function toggleAnnotFullscreen() {
+  const viewer = document.getElementById("annot-viewer");
+  if (!document.fullscreenElement) {
+    viewer.requestFullscreen().catch(() => {});
+    viewer.classList.add("is-fullscreen");
+  } else {
+    document.exitFullscreen().catch(() => {});
+    viewer.classList.remove("is-fullscreen");
+  }
+}
+
+// Re-call renderFiles after load so view buttons appear
+const _origLoadFiles = loadFiles;
+loadFiles = async function () {
+  await _origLoadFiles();
+  // force re-render with view buttons
+  renderFiles();
+};

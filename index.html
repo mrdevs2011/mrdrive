@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MRdrive</title>
 
 <!-- Inline SVG favicon (same as the splash logo) -->
@@ -82,7 +82,48 @@
     <div id="file-list" class="file-list"></div>
   </div>
 
+  <!-- ANNOTATION VIEWER -->
+  <div id="annot-viewer" class="annot-viewer" style="display:none;" aria-hidden="true">
+    <div class="annot-topbar">
+      <button class="annot-btn" id="annot-close" title="Yopish">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M6 18L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <span class="annot-filename" id="annot-filename"></span>
+      <div class="annot-top-actions">
+        <button class="annot-btn" id="annot-undo" title="Ortga (Ctrl+Z)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 14L4 9L9 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9H14C17.3137 9 20 11.6863 20 15C20 18.3137 17.3137 21 14 21H12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <button class="annot-btn" id="annot-redo" title="Oldinga (Ctrl+Y)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 14L20 9L15 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9H10C6.68629 9 4 11.6863 4 15C4 18.3137 6.68629 21 10 21H12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <button class="annot-btn" id="annot-save" title="Annotated versiyani saqlash">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M19 21H5C3.89543 21 3 20.1046 3 19V5C3 3.89543 3.89543 3 5 3H16L21 8V19C21 20.1046 20.1046 21 19 21Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M17 21V13H7V21" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7 3V8H15" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="annot-btn" id="annot-fullscreen" title="To'liq ekran">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 9V4H9M15 4H20V9M20 15V20H15M9 20H4V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="annot-toolbar" id="annot-toolbar"></div>
+
+    <div class="annot-workspace" id="annot-workspace">
+      <div class="annot-scroll" id="annot-scroll"></div>
+    </div>
+
+    <div class="annot-status" id="annot-status">
+      <span id="annot-tool-hint">1 barmoq = chizish · 2 barmoq = surish / zoom</span>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
