@@ -1418,7 +1418,7 @@ function renderFiles() {
             : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Create public link">${ICON_LINK}</button>`
           }
           <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Download">${ICON_DOWNLOAD}</button>
-          <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}')" title="Delete">${ICON_DELETE}</button>
+          <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}', event)" title="Delete">${ICON_DELETE}</button>
         </div>
       </div>
     </div>
@@ -1514,8 +1514,168 @@ async function explainDeleteFailure(id) {
   };
 }
 
-/** Telegram-style dissolve: card fades/collapses + sand-like particles. */
-function playDeleteDissolve(card) {
+/** Telegram-style dissolve: the card's real pixels (fonts, colors, icons —
+ *  exactly as rendered) break into tiny tiles that drift away and fade,
+ *  like ash. The card itself collapses out of the list shortly after. */
+const DISSOLVE_ANIM_MS   = 1300;  // total particle lifetime
+const DISSOLVE_SWEEP_MS  = 320;   // spread of the "sweep" wave from the click point
+const DISSOLVE_COLLAPSE_DELAY = 420; // when the list-row collapse kicks in (Promise resolves)
+const DISSOLVE_TILE      = 2.2;   // px per tile (css px, before dpr)
+const DISSOLVE_DRIFT_X   = 26;
+const DISSOLVE_DRIFT_Y   = -95;
+const DISSOLVE_FLOAT_UP  = -0.045;
+const DISSOLVE_NOISE_AMP = 12;
+
+let __mrdriveCssTextPromise = null;
+function getAppCssText() {
+  if (!__mrdriveCssTextPromise) {
+    __mrdriveCssTextPromise = fetch("/style.css").then(r => r.text()).catch(() => "");
+  }
+  return __mrdriveCssTextPromise;
+}
+
+function __dissolveHash(n) {
+  const s = Math.sin(n * 127.1) * 43758.5453;
+  return s - Math.floor(s);
+}
+function __dissolveNoise1D(x) {
+  const i = Math.floor(x), f = x - i;
+  const u = f * f * (3 - 2 * f);
+  return __dissolveHash(i) * (1 - u) + __dissolveHash(i + 1) * u;
+}
+
+// Snapshot the card exactly as it renders (real CSS, real fonts) via an
+// SVG foreignObject, then rasterize it to a canvas we can slice into tiles.
+async function __dissolveSnapshot(el, cssText) {
+  const rect = el.getBoundingClientRect();
+  const w = Math.ceil(rect.width);
+  const h = Math.ceil(rect.height);
+  const rootStyle = getComputedStyle(document.documentElement);
+  const varNames = ["--bg","--surface","--border","--border-strong","--text","--text-muted",
+    "--accent","--green","--green-bg","--green-text","--amber-bg","--amber-text",
+    "--red-bg","--red-text","--blue-bg","--blue-text"];
+  const varsCss = varNames.map(n => `${n}: ${rootStyle.getPropertyValue(n).trim()};`).join(" ");
+
+  const clone = el.cloneNode(true);
+  clone.classList.remove("actions-open");
+  clone.style.width = w + "px";
+
+  const markup =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+      `<foreignObject width="100%" height="100%">` +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${w}px;height:${h}px;${varsCss}">` +
+          `<style>${cssText}</style>` +
+          clone.outerHTML +
+        `</div>` +
+      `</foreignObject>` +
+    `</svg>`;
+
+  const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = url;
+  });
+
+  const dpr = window.devicePixelRatio || 1;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(w * dpr);
+  canvas.height = Math.ceil(h * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return { canvas, width: w, height: h, rect, dpr };
+}
+
+function __dissolveBuildTiles(canvas, cssWidth, cssHeight, dpr, epX, epY) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const tiles = [];
+  const maxDist = Math.hypot(cssWidth, cssHeight) || 1;
+
+  for (let y = 0; y < cssHeight; y += DISSOLVE_TILE) {
+    for (let x = 0; x < cssWidth; x += DISSOLVE_TILE) {
+      const midX = Math.min(canvas.width - 1, Math.floor((x + DISSOLVE_TILE * 0.5) * dpr));
+      const midY = Math.min(canvas.height - 1, Math.floor((y + DISSOLVE_TILE * 0.5) * dpr));
+      const a = data[(midY * canvas.width + midX) * 4 + 3];
+      if (a < 10) continue;
+
+      const distToEp = Math.hypot(x - epX, y - epY) || 0.001;
+      const seed = (x * 73856) ^ (y * 19349);
+      const rnd = (k) => __dissolveHash(seed + k);
+
+      tiles.push({
+        sx: x * dpr, sy: y * dpr,
+        sw: Math.min(DISSOLVE_TILE * dpr, canvas.width - x * dpr),
+        sh: Math.min(DISSOLVE_TILE * dpr, canvas.height - y * dpr),
+        x, y,
+        vx: (rnd(2) - 0.5) * 0.8,
+        vy: -0.3 - rnd(3) * 0.5,
+        rot: (rnd(4) - 0.5) * 1.5,
+        rotV: (rnd(5) - 0.5) * 0.2,
+        delay: (distToEp / maxDist) * DISSOLVE_SWEEP_MS + rnd(6) * 150,
+        fadeBias: 0.5 + rnd(7) * 0.5,
+        seed,
+      });
+    }
+  }
+  return tiles;
+}
+
+function __dissolvePaintLoop(overlayCtx, canvas, tiles, pad) {
+  const startT = performance.now();
+  function paint(elapsed) {
+    overlayCtx.clearRect(0, 0, overlayCtx.canvas.width, overlayCtx.canvas.height);
+    let anyAlive = false;
+    for (let i = 0; i < tiles.length; i++) {
+      const t = tiles[i];
+      const local = elapsed - t.delay;
+
+      if (local < 0) {
+        overlayCtx.globalAlpha = 1;
+        overlayCtx.drawImage(canvas, t.sx, t.sy, t.sw, t.sh, t.x + pad, t.y + pad, DISSOLVE_TILE, DISSOLVE_TILE);
+        anyAlive = true;
+        continue;
+      }
+
+      const life = local / DISSOLVE_ANIM_MS;
+      if (life >= 1) continue;
+      anyAlive = true;
+
+      const moveEase = 1 - Math.pow(1 - life, 2.2);
+      const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.5) - 0.5) * DISSOLVE_NOISE_AMP * life;
+      const px = t.x + t.vx * moveEase * DISSOLVE_DRIFT_X + nX;
+      const py = t.y + t.vy * moveEase * Math.abs(DISSOLVE_DRIFT_Y) + (DISSOLVE_FLOAT_UP * local);
+
+      const fade = Math.min(1, life * t.fadeBias);
+      const alpha = Math.max(0, 1 - Math.pow(fade, 1.4));
+      if (alpha <= 0.01) continue;
+
+      const scale = 1 - life * 0.3;
+      overlayCtx.globalAlpha = alpha;
+      overlayCtx.save();
+      overlayCtx.translate(px + pad + DISSOLVE_TILE * 0.5, py + pad + DISSOLVE_TILE * 0.5);
+      overlayCtx.rotate(t.rot + t.rotV * moveEase * 3);
+      overlayCtx.scale(scale, scale);
+      overlayCtx.drawImage(canvas, t.sx, t.sy, t.sw, t.sh, -DISSOLVE_TILE * 0.5, -DISSOLVE_TILE * 0.5, DISSOLVE_TILE, DISSOLVE_TILE);
+      overlayCtx.restore();
+    }
+    return anyAlive;
+  }
+
+  paint(0);
+  function frame(now) {
+    const alive = paint(now - startT);
+    if (alive) requestAnimationFrame(frame);
+    else overlayEl.remove();
+  }
+  const overlayEl = overlayCtx.canvas;
+  requestAnimationFrame(frame);
+}
+
+/** Telegram-style dissolve: card's exact pixels break into ash-like tiles
+ *  that drift away and fade from the click point, then the row collapses. */
+function playDeleteDissolve(card, clickX, clickY) {
   return new Promise((resolve) => {
     if (!card || !card.isConnected) {
       resolve();
@@ -1524,51 +1684,48 @@ function playDeleteDissolve(card) {
     const rect = card.getBoundingClientRect();
     card.style.height = rect.height + "px";
     card.style.boxSizing = "border-box";
-    card.classList.add("is-deleting");
 
-    const layer = document.createElement("div");
-    layer.className = "delete-particle-layer";
-    document.body.appendChild(layer);
+    getAppCssText().then((cssText) => __dissolveSnapshot(card, cssText)).then(({ canvas, width, height, rect, dpr }) => {
+      const epX = clickX !== undefined ? clickX - rect.left : width;
+      const epY = clickY !== undefined ? clickY - rect.top : 0;
+      const tiles = __dissolveBuildTiles(canvas, width, height, dpr, epX, epY);
 
-    const colors = ["#a1a1aa", "#d4d4d8", "#71717a", "#e4e4e7", "#c4c4cc"];
-    const count = 32;
-    for (let i = 0; i < count; i++) {
-      const p = document.createElement("span");
-      p.className = "delete-particle";
-      const size = 2 + Math.random() * 3.5;
-      const x = rect.left + Math.random() * rect.width;
-      const y = rect.top + Math.random() * rect.height;
-      const dx = (Math.random() - 0.5) * 140;
-      const dy = 30 + Math.random() * 110;
-      const rot = (Math.random() - 0.5) * 200;
-      p.style.width = size + "px";
-      p.style.height = size + "px";
-      p.style.left = x + "px";
-      p.style.top = y + "px";
-      p.style.background = colors[i % colors.length];
-      p.style.setProperty("--dx", dx + "px");
-      p.style.setProperty("--dy", dy + "px");
-      p.style.setProperty("--rot", rot + "deg");
-      p.style.transitionDelay = Math.random() * 60 + "ms";
-      layer.appendChild(p);
-    }
+      const pad = 60;
+      const overlay = document.createElement("canvas");
+      overlay.className = "particle-canvas";
+      overlay.width = Math.ceil((width + pad * 2) * dpr);
+      overlay.height = Math.ceil((height + pad * 2) * dpr);
+      overlay.style.width = (width + pad * 2) + "px";
+      overlay.style.height = (height + pad * 2) + "px";
+      overlay.style.left = (rect.left - pad) + "px";
+      overlay.style.top = (rect.top - pad) + "px";
+      document.body.appendChild(overlay);
 
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => layer.classList.add("play"));
+      const octx = overlay.getContext("2d");
+      octx.scale(dpr, dpr);
+      octx.imageSmoothingEnabled = false;
+
+      card.style.visibility = "hidden";
+      __dissolvePaintLoop(octx, canvas, tiles, pad);
+    }).catch(() => {
+      // Snapshot failed (e.g. cross-origin asset) — fall back to a plain collapse.
     });
 
-    setTimeout(() => {
-      layer.remove();
-      resolve();
-    }, 450);
+    // Collapse the row out of the list a beat later; this is what the
+    // returned Promise waits on so the caller can safely re-render the list.
+    card.classList.add("is-deleting");
+    setTimeout(resolve, DISSOLVE_COLLAPSE_DELAY);
   });
 }
 
-async function deleteFile(id, path) {
+async function deleteFile(id, path, evt) {
+  const clickX = evt ? evt.clientX : undefined;
+  const clickY = evt ? evt.clientY : undefined;
+
   if (!(await showConfirm("Delete this file?", "Delete"))) return;
 
   const card = fileListEl.querySelector(`.file-card[data-file-id="${id}"]`);
-  if (card) await playDeleteDissolve(card);
+  if (card) await playDeleteDissolve(card, clickX, clickY);
 
   markLocalDelete(id);
 
