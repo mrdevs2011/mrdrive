@@ -307,8 +307,9 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 }
 .selection-box {
   position: fixed;
-  border: 1px solid rgba(0, 0, 0, 0.35);
-  background: rgba(0, 0, 0, 0.1);
+  border: 1.5px solid rgba(59, 130, 246, 0.85);
+  background: rgba(59, 130, 246, 0.12);
+  border-radius: 12px;
   pointer-events: none;
   z-index: 9999;
 }
@@ -1929,11 +1930,11 @@ body.is-dragging-file .folder-tab-wrap {
 
 .selection-fab { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 2000;
   width: 58px; height: 58px; display: flex; align-items: center; justify-content: center; padding: 0;
-  color: var(--accent); background: #fff; border: 2px dashed var(--accent); cursor: pointer;
-  border-radius: 52% 48% 50% 50% / 50% 53% 47% 50%; /* hand-drawn blob */
-  box-shadow: 0 6px 18px rgba(0,0,0,.18);
+  color: var(--accent); background: #fff; border: 0; cursor: pointer;
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.12);
   animation: fab-in .18s ease-out; transition: transform .15s, background .15s; }
-.selection-fab:hover { background: #f4f4f5; transform: translateX(-50%) scale(1.06); }
+.selection-fab:hover { background: #f4f4f5; box-shadow: 0 10px 28px rgba(0,0,0,.22), 0 3px 8px rgba(0,0,0,.14); transform: translateX(-50%) scale(1.06); }
 .selection-fab:active { transform: translateX(-50%) scale(.96); }
 .selection-fab.busy { pointer-events: none; animation: fab-pulse .8s ease-in-out infinite; }
 @keyframes fab-in { from { opacity: 0; transform: translate(-50%, 14px) scale(.85); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
