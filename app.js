@@ -1333,8 +1333,16 @@ function wireFolderDropTargets(toolbar) {
 
   function onDragOver(e) {
     if (!isFileDrag(e.dataTransfer)) return;
+    const newBtn = e.target.closest(".new-folder-btn");
+    if (newBtn) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      clearDragOver();
+      newBtn.classList.add("drag-over");
+      return;
+    }
     const target = e.target.closest("[data-folder]");
-    if (!target || target.classList.contains("new-folder-btn")) return;
+    if (!target) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     clearDragOver();
@@ -1344,6 +1352,8 @@ function wireFolderDropTargets(toolbar) {
   }
 
   function onDragLeave(e) {
+    const newBtn = e.target.closest(".new-folder-btn");
+    if (newBtn && !newBtn.contains(e.relatedTarget)) newBtn.classList.remove("drag-over");
     const target = e.target.closest("[data-folder]");
     if (!target) return;
     if (target.contains(e.relatedTarget)) return;
@@ -1354,8 +1364,9 @@ function wireFolderDropTargets(toolbar) {
 
   function onDrop(e) {
     if (!isFileDrag(e.dataTransfer)) return;
-    const target = e.target.closest("[data-folder]");
-    if (!target || target.classList.contains("new-folder-btn")) return;
+    const newBtn = e.target.closest(".new-folder-btn");
+    const target = newBtn ? null : e.target.closest("[data-folder]");
+    if (!newBtn && !target) return;
     e.preventDefault();
     e.stopPropagation();
     clearDragOver();
@@ -1372,6 +1383,8 @@ function wireFolderDropTargets(toolbar) {
       if (single) fileIds = single.split(",");
     }
     if (!fileIds.length) return;
+
+    if (newBtn) { createFolder(fileIds); return; }
 
     const raw = target.getAttribute("data-folder");
     const targetFolder = raw === "" || raw == null ? null : raw;
@@ -1448,9 +1461,10 @@ window.addEventListener("popstate", (e) => {
   if (annotState.open) closeAnnotationViewer({ skipUrl: true });
 });
 
-async function createFolder() {
-  const name = await showPrompt("New folder", {
-    okLabel: "Create",
+async function createFolder(fileIds) {
+  const dropIds = Array.isArray(fileIds) ? fileIds.map(String) : null; // set when files were dropped on "+ Folder"
+  const name = await showPrompt(dropIds ? "Enter your folder name" : "New folder", {
+    okLabel: dropIds ? "Create & move" : "Create",
     placeholder: "Folder name"
   });
   if (name == null || !String(name).trim()) return;
@@ -1471,6 +1485,13 @@ async function createFolder() {
 
   if (error) {
     showAlert("Error: " + error.message);
+    return;
+  }
+
+  if (dropIds) {
+    // Files were dropped on "+ Folder": create it, put them inside, stay in the current view.
+    await moveFilesToFolder(dropIds, trimmed);
+    loadFiles();
     return;
   }
 
@@ -1598,18 +1619,31 @@ function updateSelectionBar() {
   const n = selectedFileIds.size;
   if (!n) { if (bar) bar.remove(); return; }
   if (!bar) {
-    bar = document.createElement("div");
+    bar = document.createElement("button");
     bar.id = "selection-bar";
-    bar.className = "selection-bar";
+    bar.type = "button";
+    bar.className = "selection-fab";
+    bar.setAttribute("aria-label", "Download selected");
+    bar.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0-5-5m5 5 5-5"/><path d="M5 20h14"/></svg>`;
+    bar.onclick = async () => {
+      if (bar.classList.contains("busy")) return;
+      bar.classList.add("busy");
+      try { await downloadSelectedZip(); } finally { bar.classList.remove("busy"); }
+    };
     document.body.appendChild(bar);
   }
-  const canPick = typeof window.showDirectoryPicker === "function";
-  bar.innerHTML = `
-    <span>${n} selected</span>
-    ${canPick ? `<button onclick="saveSelectedToFolder()">Save to folder…</button>` : ""}
-    <button onclick="downloadSelectedZip()">${n > 1 ? "Download ZIP" : "Download"}</button>
-    <button onclick="selectedFileIds.clear(); updateSelectionClasses();">✕</button>`;
+  bar.title = n > 1 ? `Download ${n} files as ZIP` : "Download";
 }
+
+// Clicking anywhere except a file card / the download button drops the selection
+// (and with it the button). Ctrl/Shift-clicks are left alone: they extend it.
+document.addEventListener("mousedown", (e) => {
+  if (e.button !== 0 || !selectedFileIds.size) return;
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (e.target.closest && e.target.closest(".file-card, #selection-bar")) return;
+  selectedFileIds.clear();
+  updateSelectionClasses();
+});
 
 async function fetchSelectedBlobs() {
   const files = allFiles.filter((f) => selectedFileIds.has(String(f.id)));
@@ -1718,12 +1752,23 @@ fileListEl.addEventListener("click", (e) => {
   if (!wasOpen) card.classList.add("actions-open");
 });
 
-// Rubber-band (marquee) selection: mousedown on empty space inside the file
-// list and drag to select every card the box touches.
+// Rubber-band (marquee) selection, like a desktop file manager: press on ANY
+// empty spot of the page (also below the list), drag, and every card the box
+// touches is selected. Ctrl/Shift while starting adds to the current selection.
+// The box is kept in page coordinates so it stays correct while auto-scrolling.
 let marquee = null;
-fileListEl.addEventListener("mousedown", (e) => {
+const MARQUEE_IGNORE =
+  ".file-card, button, input, textarea, select, a, label, header, #dropzone, #toolbar, .selection-bar, " +
+  ".annot-viewer, .settings-menu, [class*='modal'], [class*='backdrop'], [class*='toast']";
+
+document.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return; // left click only
-  if (e.target.closest(".file-card") || e.target.closest("button") || e.target.closest("input")) return;
+  if (marquee) return;
+  if (e.clientX >= document.documentElement.clientWidth) return; // page scrollbar
+  if (e.target.closest && e.target.closest(MARQUEE_IGNORE)) return;
+  const viewer = document.getElementById("annot-viewer");
+  if (viewer && viewer.style.display !== "none") return;
+  if (!fileListEl.children.length) return;
 
   const additive = e.shiftKey || e.ctrlKey || e.metaKey;
   const baseSelection = additive ? new Set(selectedFileIds) : new Set();
@@ -1741,17 +1786,20 @@ fileListEl.addEventListener("mousedown", (e) => {
   hint.innerHTML = `Hold <kbd>Ctrl</kbd> to add to the current selection`;
   document.body.appendChild(hint);
 
-  marquee = { startX: e.clientX, startY: e.clientY, box, hint, baseSelection, moved: false };
+  marquee = {
+    startX: e.pageX, startY: e.pageY, curX: e.clientX, curY: e.clientY,
+    box, hint, baseSelection, moved: false, raf: 0,
+  };
 });
 
-document.addEventListener("mousemove", (e) => {
+function updateMarquee() {
   if (!marquee) return;
-  marquee.moved = true;
-  marquee.hint.style.display = "block";
-  const x1 = Math.min(marquee.startX, e.clientX);
-  const y1 = Math.min(marquee.startY, e.clientY);
-  const x2 = Math.max(marquee.startX, e.clientX);
-  const y2 = Math.max(marquee.startY, e.clientY);
+  const cx = marquee.curX + window.scrollX;
+  const cy = marquee.curY + window.scrollY;
+  const x1 = Math.min(marquee.startX, cx) - window.scrollX;
+  const y1 = Math.min(marquee.startY, cy) - window.scrollY;
+  const x2 = Math.max(marquee.startX, cx) - window.scrollX;
+  const y2 = Math.max(marquee.startY, cy) - window.scrollY;
   Object.assign(marquee.box.style, {
     left: `${x1}px`, top: `${y1}px`, width: `${x2 - x1}px`, height: `${y2 - y1}px`,
   });
@@ -1759,19 +1807,52 @@ document.addEventListener("mousemove", (e) => {
   const next = new Set(marquee.baseSelection);
   fileListEl.querySelectorAll(".file-card").forEach((card) => {
     const r = card.getBoundingClientRect();
-    const intersects = r.left < x2 && r.right > x1 && r.top < y2 && r.bottom > y1;
-    if (intersects) next.add(card.dataset.fileId);
+    if (r.left < x2 && r.right > x1 && r.top < y2 && r.bottom > y1) next.add(card.dataset.fileId);
   });
-  selectedFileIds = next;
-  updateSelectionClasses();
+  const same = next.size === selectedFileIds.size && [...next].every((id) => selectedFileIds.has(id));
+  if (!same) {
+    selectedFileIds = next;
+    updateSelectionClasses();
+  }
+}
+
+// Scroll the page while the pointer is held near the top/bottom edge.
+function marqueeAutoScroll() {
+  if (!marquee) return;
+  const edge = 50;
+  let dy = 0;
+  if (marquee.curY < edge) dy = -Math.ceil((edge - marquee.curY) / 4);
+  else if (marquee.curY > window.innerHeight - edge) dy = Math.ceil((marquee.curY - (window.innerHeight - edge)) / 4);
+  if (dy) { window.scrollBy(0, dy); updateMarquee(); }
+  marquee.raf = requestAnimationFrame(marqueeAutoScroll);
+}
+
+document.addEventListener("mousemove", (e) => {
+  if (!marquee) return;
+  marquee.curX = e.clientX;
+  marquee.curY = e.clientY;
+  if (!marquee.moved) {
+    // Small dead-zone so a plain click on empty space doesn't flash a box.
+    if (Math.abs(e.pageX - marquee.startX) < 4 && Math.abs(e.pageY - marquee.startY) < 4) return;
+    marquee.moved = true;
+    marquee.hint.style.display = "block";
+    document.body.classList.add("is-marquee");
+    window.getSelection && window.getSelection().removeAllRanges();
+    marquee.raf = requestAnimationFrame(marqueeAutoScroll);
+  }
+  updateMarquee();
 });
 
-document.addEventListener("mouseup", () => {
+function endMarquee() {
   if (!marquee) return;
+  cancelAnimationFrame(marquee.raf);
   marquee.box.remove();
   marquee.hint.remove();
   marquee = null;
-});
+  document.body.classList.remove("is-marquee");
+}
+document.addEventListener("mouseup", endMarquee);
+window.addEventListener("blur", endMarquee);
 
 // Small floating file-icon used as the drag image instead of the full
 // card. When several files are dragged together, a few icons are stacked
