@@ -1411,8 +1411,61 @@ async function explainDeleteFailure(id) {
   };
 }
 
+/** Telegram-style dissolve: card fades/collapses + sand-like particles. */
+function playDeleteDissolve(card) {
+  return new Promise((resolve) => {
+    if (!card || !card.isConnected) {
+      resolve();
+      return;
+    }
+    const rect = card.getBoundingClientRect();
+    card.style.height = rect.height + "px";
+    card.style.boxSizing = "border-box";
+    card.classList.add("is-deleting");
+
+    const layer = document.createElement("div");
+    layer.className = "delete-particle-layer";
+    document.body.appendChild(layer);
+
+    const colors = ["#a1a1aa", "#d4d4d8", "#71717a", "#e4e4e7", "#c4c4cc"];
+    const count = 32;
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement("span");
+      p.className = "delete-particle";
+      const size = 2 + Math.random() * 3.5;
+      const x = rect.left + Math.random() * rect.width;
+      const y = rect.top + Math.random() * rect.height;
+      const dx = (Math.random() - 0.5) * 140;
+      const dy = 30 + Math.random() * 110;
+      const rot = (Math.random() - 0.5) * 200;
+      p.style.width = size + "px";
+      p.style.height = size + "px";
+      p.style.left = x + "px";
+      p.style.top = y + "px";
+      p.style.background = colors[i % colors.length];
+      p.style.setProperty("--dx", dx + "px");
+      p.style.setProperty("--dy", dy + "px");
+      p.style.setProperty("--rot", rot + "deg");
+      p.style.transitionDelay = Math.random() * 60 + "ms";
+      layer.appendChild(p);
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => layer.classList.add("play"));
+    });
+
+    setTimeout(() => {
+      layer.remove();
+      resolve();
+    }, 450);
+  });
+}
+
 async function deleteFile(id, path) {
   if (!(await showConfirm("Delete this file?", "Delete"))) return;
+
+  const card = fileListEl.querySelector(`.file-card[data-file-id="${id}"]`);
+  if (card) await playDeleteDissolve(card);
 
   markLocalDelete(id);
 
@@ -1422,6 +1475,7 @@ async function deleteFile(id, path) {
 
   if (error) {
     showAlert("Error: " + error.message);
+    loadFiles();
     return;
   }
   if (!deletedRows || deletedRows.length === 0) {

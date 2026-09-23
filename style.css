@@ -375,6 +375,57 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   transition: border-color 0.35s ease, background 0.35s ease, box-shadow 0.35s ease;
 }
 .file-card:hover { border-color: var(--border-strong); }
+
+/* Telegram-style delete: collapse + sand scatter */
+.file-card.is-deleting {
+  pointer-events: none;
+  overflow: hidden;
+  animation: fileCardDissolve 0.4s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+@keyframes fileCardDissolve {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+  35% {
+    opacity: 0.55;
+    filter: blur(0.4px);
+  }
+  100% {
+    opacity: 0;
+    height: 0 !important;
+    min-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    border-width: 0;
+    transform: scale(0.97);
+    filter: blur(1px);
+  }
+}
+.delete-particle-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+.delete-particle {
+  position: fixed;
+  border-radius: 1px;
+  opacity: 0.95;
+  will-change: transform, opacity;
+  transition:
+    transform 0.42s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.42s ease;
+}
+.delete-particle-layer.play .delete-particle {
+  transform: translate(var(--dx), var(--dy)) rotate(var(--rot));
+  opacity: 0;
+}
+
 /* Remote add (Claude MCP) — green highlight, fades out */
 .file-card.file-card-new {
   border-color: #86efac;
