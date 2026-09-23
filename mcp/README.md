@@ -5,90 +5,96 @@ beradi — xuddi web ilovada login qilib fayl yuklagandek, lekin Claude
 orqali "shu faylni MRdrive'ga qo'y" yoki "u faylni menga ber" deb
 so'rash orqali.
 
-**Muhim:** bu `service_role` kalit yoki Supabase dashboard'ga kirishni
-talab qilmaydi — faqat `config.js`dagi bilan bir xil ochiq `anon key` va
-sizning MRdrive ilovasidagi (web sahifada login qilgan) username/parolingiz
-ishlatiladi. Xavfsizlik xuddi web ilovadagi kabi RLS orqali ta'minlanadi:
-Claude faqat sizning o'z fayllaringizni ko'radi/o'zgartiradi.
+**Ko'p foydalanuvchili:** har bir MRdrive hisobi o'zining shaxsiy,
+doimiy MCP havolasiga ega. Bitta domen, bitta deploy:
 
-**Endi bu alohida Vercel loyiha emas** — asosiy MRdrive loyihasining bir
-qismi. Ikkalasi bitta deploy, bitta domen ostida ishlaydi:
-
-- `mcp/index.html` → holat sahifasi, `/mcp` manzilida ochiladi
-- `api/mcp.js` → haqiqiy MCP server (Claude connector shu manzilga ulanadi): `/api/mcp`
-- `api/mcp-info.js` → holat sahifasi uchun yordamchi endpoint: `/api/mcp-info`
+- `mcp/index.html` → `/mcp` sahifasi — login qilingandan keyin shaxsiy
+  MCP havolangizni ko'rsatadi
+- `api/mcp-token.js` → sessiyadan name + mcp_token ni o'qib URL qaytaradi
+- `api/mcp.js` → haqiqiy MCP server: `/api/mcp?name=...&token=...`
 
 ## Tool'lar
 
-- **push** — faylni (base64) MRdrive'ga yuklaydi (ixtiyoriy: papkaga) — web ilovada darhol ko'rinadi
-- **pull** — fayl uchun ochiq (`?share=...`) link qaytaradi (default: muddatsiz)
-- **list** — fayllar ro'yxati (papka, hajm, ochiq/yopiqligi bilan; papka bo'yicha filtrlash mumkin)
-- **delete** — faylni butunlay o'chiradi
-- **move_file** — faylni boshqa papkaga ko'chiradi / papkadan chiqaradi
-- **unpublish** — faylning ochiq linkini bekor qiladi
-- **refresh_link** — eski linkni bekor qilib, yangisini yaratadi
-- **list_folders** — barcha papkalar ro'yxati
-- **create_folder** — yangi papka yaratadi
-- **delete_folder** — papkani o'chiradi (fayllar o'chmaydi, "papkasiz"ga o'tadi)
+- **push** — faylni (base64) MRdrive'ga yuklaydi (ixtiyoriy: papkaga)
+- **pull** — fayl uchun ochiq (`?share=...`) link qaytaradi
+- **list** — fayllar ro'yxati
+- **delete** — faylni o'chiradi
+- **move_file** — faylni boshqa papkaga ko'chiradi
+- **unpublish** — ochiq linkni bekor qiladi
+- **refresh_link** — yangi link yaratadi
+- **list_folders** / **create_folder** / **delete_folder**
+
+## Shaxsiy MCP havola qanday ishlaydi
+
+### Token formulasi (server siri YO'Q)
+
+```
+uHash = sha256(username)           # 64 hex
+pHash = sha256(password)           # 64 hex
+token = sha256(uHash + pHash)[:48] # 48 hex — ikki marta hash
+```
+
+- Token **brauzerda** (Web Crypto) hisoblanadi — parol serverga yuborilmaydi.
+- Signup va login paytida `user_metadata.mcp_token` ga yoziladi.
+- URL: `/api/mcp?name=<Name>&token=<48hex>`
+- **name** — hisobni identifikatsiya qilish uchun (Claude'da 4 ta account
+  ulaganda "Muhammadrasul" vs "Kamoliddin" deb ajratasiz). Username emas.
+- **name case-sensitive:** `Muhammadrasul` ≠ `muhammadrasul`. Mos kelmasa
+  server xato qaytaradi.
+
+### Oqim
+
+1. Foydalanuvchi `/mcp` ga kiradi — avval MRdrive'ga login bo'lishi shart.
+2. Agar `mcp_token` metadata da bo'lsa — darhol URL ko'rsatiladi.
+3. Bo'lmasa (eski hisob) — username + parol so'raladi, brauzerda hash
+   qilinadi, metadata ga yoziladi, URL chiqadi.
+4. Claude shu havolaga ulanganda server:
+   - `token` bo'yicha foydalanuvchini topadi
+   - `name` ni metadata dagi name bilan **aniq** (katta/kichik harf) solishtiradi
+   - Mos kelmasa xato; mos kelsa faqat shu user_id fayllari bilan ishlaydi
+
+### Nega parol hash, UID emas?
+
+- `MCP_TOKEN_SECRET` kerak emas — oddiy foydalanuvchi ham ishlata oladi,
+  server siri sozlanishi shart emas.
+- Token faqat username+parol biladigan odamda chiqadi.
+- Ikki marta hash (48+48 → yana 48) — URL qisqa (~50 belgi token), lekin
+  oldingisidan ham xavfsizroq.
 
 ## O'rnatish
 
-### 1. Environment variables qo'shish
-
-Asosiy MRdrive loyihasining Vercel sozlamalarida (Project → Settings →
-Environment Variables) — bular allaqachon `SUPABASE_URL` va
-`SUPABASE_ANON_KEY` uchun bor bo'lishi kerak; shularga qo'shimcha
-kiritilsin:
+### 1. Environment variables
 
 | Nom | Qiymat |
 |---|---|
-| `SUPABASE_URL` | (mavjud bo'lsa, o'zgarmaydi) |
-| `SUPABASE_ANON_KEY` | (mavjud bo'lsa, o'zgarmaydi) |
-| `MRDRIVE_USERNAME` | MRdrive web ilovasida login qiladigan username |
-| `MRDRIVE_PASSWORD` | shu username uchun parol |
+| `SUPABASE_URL` | (mavjud) |
+| `SUPABASE_ANON_KEY` | (mavjud) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Dashboard → Settings → API → `service_role` |
 
-Qo'shgandan so'ng qayta deploy qiling (`npx vercel --prod`), aks holda
-yangi o'zgaruvchilar ishlamaydi.
+**`MCP_TOKEN_SECRET` endi KERAK EMAS** — o'chirib tashlashingiz mumkin.
 
-### 2. MCP URL'ni oling
+`SUPABASE_SERVICE_ROLE_KEY` nima uchun: MCP turli user nomidan ishlaydi;
+har so'rovda token+name orqali aniq `user_id` topiladi va qo'lda filtrlanadi.
 
-Deploy tugagach, brauzerda `https://<sizning-domeningiz>/mcp` sahifasini
-oching. U:
-- MCP URL'ni **avtomatik hisoblab** ko'rsatadi (`/api/mcp`) — qaysi
-  domenda turganidan qat'iy nazar (vercel.app, custom domen)
-- Environment Variables to'liq kiritilganini tekshiradi (yashil/qizil nuqta)
-- Ulangan hisob (`MRDRIVE_USERNAME`) qaysi ekanini ko'rsatadi — **parol
-  hech qachon ko'rsatilmaydi/qaytarilmaydi**
-- "Nusxalash" tugmasi bilan URL'ni bitta bosishda copy qilasiz
+### 2. MCP havolangizni oling
 
-Shu URL'ni (`https://<domen>/api/mcp`) claude.ai → Settings → Connectors
-→ "Add custom connector"ga joylashtiring.
+1. `https://<domen>/mcp` oching
+2. MRdrive'ga login qiling
+3. Havolani nusxalang (ko'z belgisi + "Nusxalash")
+4. claude.ai → Settings → Connectors → Add custom connector
 
-Domen bittaligi uchun endi hech qanday alohida deploy, subdomen yoki
-rewrite kerak emas — hammasi asosiy loyiha bilan birga deploy bo'ladi.
+### 3. Bir nechta account
 
-## Ishlatish
+Bitta Claude'ga 4 ta MRdrive ulamoqchi bo'lsangiz:
 
-Claude bilan gaplashganda:
-
-> "Shu faylni MRdrive'ga qo'y va linkini ber"
-> "MRdrive'da nima bor?"
-> "X faylni kompyuterimga tushirib beray, linkini ber"
-> "Y faylni MRdrive'dan o'chir"
-
-Kompyuterga tushirish uchun (agar `cmc`/terminal connector ham ulangan
-bo'lsa), Claude olgan linkni to'g'ridan-to'g'ri ishlatadi:
-
-```bash
-curl -o fayl.zip "<pull tool qaytargan link>"
-```
+- Har bir hisob uchun alohida `/mcp` dan havola oling
+- URL dagi `name=` qiymati hisobni ajratadi (masalan `Muhammadrasul`,
+  `Kamoliddin`) — username emas, chunki dunyoda bir xil ism ko'p bo'lishi mumkin,
+  lekin sizning name + token juftligi noyob
 
 ## Eslatma
 
-- Har bir tool chaqiruvida server sizning nomingizdan qayta login qiladi
-  (xuddi brauzerda "Login" tugmasini bosgandek) — bu bir necha yuz
-  millisekund qo'shimcha vaqt oladi, lekin xavfsizlik jihatidan eng
-  soddasi: alohida "service" hisob yoki maxfiy administrator kaliti
-  kerak emas.
-- Agar MRdrive parolingizni almashtirsangiz, shu ikkita environment
-  variable'ni ham Vercel'da yangilashni unutmang.
+- Name va token mos kelmasa (jumladan katta/kichik harf) — server xato beradi.
+- Parol o'zgarsa — qayta login qiling (yoki `/mcp` da parolni qayta kiriting);
+  yangi token chiqadi, eski havola ishlamaydi.
+- Token hech qachon ochiq matnda saqlanmaydi: faqat hash `user_metadata` da.

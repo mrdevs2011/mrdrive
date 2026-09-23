@@ -636,6 +636,23 @@ function usernameToEmail(username) {
   return username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "") + "@" + FAKE_EMAIL_DOMAIN;
 }
 
+/**
+ * MCP token: username + parol dan ikki marta SHA-256, natija 48 hex.
+ * Brauzer Web Crypto API — server (Node crypto) bilan bir xil formula.
+ *   uHash = sha256(username)
+ *   pHash = sha256(password)
+ *   token = sha256(uHash + pHash).slice(0, 48)
+ */
+async function computeMcpToken(username, password) {
+  const enc = new TextEncoder();
+  const toHex = (buf) =>
+    [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const uHash = toHex(await crypto.subtle.digest("SHA-256", enc.encode(String(username))));
+  const pHash = toHex(await crypto.subtle.digest("SHA-256", enc.encode(String(password))));
+  const combined = toHex(await crypto.subtle.digest("SHA-256", enc.encode(uHash + pHash)));
+  return combined.slice(0, 48);
+}
+
 function showSignup() {
   document.getElementById("login-form").style.display = "none";
   document.getElementById("signup-form").style.display = "block";
@@ -664,11 +681,12 @@ async function signup() {
 
   authStatus.textContent = "Signing you up...";
   const fakeEmail = usernameToEmail(username);
+  const mcp_token = await computeMcpToken(username, password);
 
   const { data, error } = await sb.auth.signUp({
     email: fakeEmail,
     password,
-    options: { data: { name, username } }
+    options: { data: { name, username, mcp_token } }
   });
 
   if (error) {
@@ -694,18 +712,66 @@ async function login() {
 
   authStatus.textContent = "Checking...";
   const fakeEmail = usernameToEmail(username);
-  const { error } = await sb.auth.signInWithPassword({ email: fakeEmail, password });
+  const { data, error } = await sb.auth.signInWithPassword({ email: fakeEmail, password });
 
   if (error) {
     authStatus.textContent = "Error: incorrect username or password.";
-  } else {
-    authStatus.textContent = "";
+    return;
   }
+
+  // Login muvaffaqiyatli — mcp_token ni yangilab qo'yamiz (eski hisoblar /
+  // parol o'zgargan holat uchun). Bu faqat metadata, parol saqlanmaydi.
+  try {
+    const mcp_token = await computeMcpToken(username, password);
+    const meta = data?.user?.user_metadata || {};
+    if (meta.mcp_token !== mcp_token) {
+      await sb.auth.updateUser({ data: { ...meta, mcp_token, username: meta.username || username } });
+    }
+  } catch (e) {
+    console.warn("mcp_token yangilanmadi:", e);
+  }
+
+  authStatus.textContent = "";
 }
 
 async function logout() {
   await sb.auth.signOut();
 }
+
+// Gear icon → sozlamalar modal (Claude ga ulang + Log out)
+(function initSettingsMenu() {
+  const gearBtn = document.getElementById("gear-btn");
+  const modal = document.getElementById("settings-modal");
+  const logoutBtn = document.getElementById("settings-logout-btn");
+  if (!gearBtn || !modal) return;
+
+  function closeSettings() {
+    modal.hidden = true;
+    gearBtn.classList.remove("open");
+  }
+  function openSettings() {
+    modal.hidden = false;
+    gearBtn.classList.add("open");
+  }
+
+  gearBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (modal.hidden) openSettings();
+    else closeSettings();
+  });
+  logoutBtn?.addEventListener("click", () => {
+    closeSettings();
+    logout();
+  });
+  document.addEventListener("click", (e) => {
+    if (!modal.hidden && !modal.contains(e.target) && !gearBtn.contains(e.target)) {
+      closeSettings();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSettings();
+  });
+})();
 
 sb.auth.onAuthStateChange((event, session) => {
   if (bootLoader.style.display !== "none") return;
@@ -1143,30 +1209,31 @@ function renderFiles() {
           <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Download">${ICON_DOWNLOAD}</button>
           <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}')" title="Delete">${ICON_DELETE}</button>
         </div>
-        <button class="more-btn" onclick="toggleFileActions(event, this)" title="Amallar">${ICON_MORE}</button>
       </div>
     </div>
   `;
   }).join("");
 }
 
-// Closes any open kebab menu when tapping/clicking anywhere else.
+// Closes any open action row when tapping/clicking anywhere else.
 document.addEventListener("click", (e) => {
-  if (e.target.closest(".more-btn")) return;
   document.querySelectorAll(".file-card.actions-open").forEach(card => {
     if (!card.contains(e.target)) card.classList.remove("actions-open");
   });
 });
 
-// Toggles the compact action row for one file card (mobile-friendly
-// alternative to hover). Closes any other open card first.
-function toggleFileActions(e, btn) {
-  e.stopPropagation();
-  const card = btn.closest(".file-card");
+// Tapping a card reveals its action row (mobile-friendly alternative to
+// hover — there's no separate "more" button to tap anymore). A tap that
+// lands on an action itself just runs that action, since the row is
+// already open by then.
+fileListEl.addEventListener("click", (e) => {
+  if (e.target.closest(".file-actions-more")) return;
+  const card = e.target.closest(".file-card");
+  if (!card) return;
   const wasOpen = card.classList.contains("actions-open");
   document.querySelectorAll(".file-card.actions-open").forEach(c => c.classList.remove("actions-open"));
   if (!wasOpen) card.classList.add("actions-open");
-}
+});
 
 async function downloadFile(id, path, filename) {
   const { data, error } = await sb.storage
@@ -1594,7 +1661,6 @@ function escapeJs(str) {
 // ==========================================
 
 const ICON_VIEW = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/></svg>`;
-const ICON_MORE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="19" r="1.8" fill="currentColor"/></svg>`;
 const ICON_PENCIL = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
 const ICON_CHECK = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12.5L10 17.5L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
@@ -1672,10 +1738,26 @@ let annotState = {
 function isViewable(filename) {
   const lower = filename.toLowerCase();
   if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lower)) return "image";
+  if (/\.(mp4|webm|mov|m4v|ogv)$/i.test(lower)) return "video";
   if (/\.pdf$/i.test(lower)) return "pdf";
   if (/\.(txt|md|json|js|ts|css|html|xml|py|java|c|cpp|h|go|rs|sh|yml|yaml|toml|ini|log|csv)$/i.test(lower)) return "code";
   return null;
 }
+
+// Extension -> highlight.js language name, for colored code/text previews.
+const CODE_LANG_MAP = {
+  js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript",
+  ts: "typescript", tsx: "typescript",
+  json: "json", html: "xml", xml: "xml", css: "css",
+  py: "python", java: "java", c: "c", h: "c", cpp: "cpp",
+  go: "go", rs: "rust", sh: "bash", yml: "yaml", yaml: "yaml",
+  toml: "ini", ini: "ini", md: "markdown", log: "plaintext",
+  csv: "plaintext", txt: "plaintext"
+};
+
+// Above this size, skip syntax coloring (plain dark text stays instant and
+// the tab never freezes on a huge log/data file).
+const CODE_HIGHLIGHT_MAX_CHARS = 400000;
 
 // Patch renderFiles to add View button
 const _origRenderFiles = renderFiles;
@@ -1742,6 +1824,12 @@ async function openAnnotationViewer(file, kind) {
   viewer.setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
 
+  // Image/video previews sit on a near-white workspace; code/text previews
+  // stay dark. Toggled via a class so CSS owns the actual colors.
+  const workspaceEl = document.getElementById("annot-workspace");
+  workspaceEl.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
+  workspaceEl.classList.add("kind-" + kind);
+
   // Start in view-only mode: hide the drawing toolbar and undo/redo/save
   // until the user explicitly taps Edit. Code files stay read-only, so the
   // Edit button itself is hidden for them.
@@ -1754,7 +1842,7 @@ async function openAnnotationViewer(file, kind) {
   editBtn.classList.remove("is-save");
   editBtn.title = "Tahrirlash";
   editBtn.innerHTML = ICON_PENCIL;
-  editBtn.style.display = kind === "code" ? "none" : "";
+  editBtn.style.display = (kind === "code" || kind === "video") ? "none" : "";
   editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
 
   buildAnnotToolbar(toolbar);
@@ -1783,6 +1871,10 @@ async function openAnnotationViewer(file, kind) {
       await loadCodeForAnnot(urlData.signedUrl, scroll, loader, file.filename);
       statusHint.textContent = "Dark mode kod ko'rinishi · Faqat o'qish";
       // Hide drawing tools for code
+      toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
+    } else if (kind === "video") {
+      await loadVideoForAnnot(urlData.signedUrl, scroll);
+      statusHint.textContent = "Video ko'rish · Faqat o'qish";
       toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
     }
   } catch (err) {
@@ -1813,12 +1905,37 @@ function enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
   editBtn.classList.add("is-save");
   editBtn.title = "Saqlash";
   editBtn.innerHTML = ICON_CHECK;
-  editBtn.onclick = () => saveAnnotated();
+  // Tapping again: if something was actually drawn, save it (same as
+  // before). If nothing was drawn yet, the tap just backs out of edit
+  // mode — the pencil deactivates instead of "saving" an untouched file.
+  editBtn.onclick = () => {
+    if (annotState.historyIdx >= 0) {
+      saveAnnotated();
+    } else {
+      exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
+    }
+  };
+  updateCursor();
+}
+
+// Reverts the Edit/Save button back to its pencil, read-only state without
+// saving or closing the viewer — used when the button is tapped a second
+// time before any drawing happened.
+function exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
+  annotState.editMode = false;
+  undoBtn.style.display = "none";
+  redoBtn.style.display = "none";
+  editBtn.classList.remove("is-save");
+  editBtn.title = "Tahrirlash";
+  editBtn.innerHTML = ICON_PENCIL;
+  editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
   updateCursor();
 }
 
 function closeAnnotationViewer() {
   const viewer = document.getElementById("annot-viewer");
+  const videoEl = viewer.querySelector("#annot-scroll video");
+  if (videoEl) { videoEl.pause(); videoEl.removeAttribute("src"); videoEl.load(); }
   viewer.style.display = "none";
   viewer.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
@@ -2052,11 +2169,28 @@ async function loadPdfForAnnot(url, scroll, loader) {
   pushHistory();
 }
 
+async function loadVideoForAnnot(url, scroll) {
+  const page = document.createElement("div");
+  page.className = "annot-page annot-page-video";
+  const video = document.createElement("video");
+  video.src = url;
+  video.controls = true;
+  video.playsInline = true;
+  video.preload = "metadata";
+  page.appendChild(video);
+  annotState.pages = [];
+  scroll.innerHTML = "";
+  scroll.appendChild(page);
+}
+
 async function loadCodeForAnnot(url, scroll, loader, filename) {
   const res = await fetch(url);
   const text = await res.text();
-  const ext = (filename.split(".").pop() || "").toUpperCase();
+  const extLower = (filename.split(".").pop() || "").toLowerCase();
+  const ext = extLower.toUpperCase();
   const lines = text.split("\n").length;
+  const tooBig = text.length > CODE_HIGHLIGHT_MAX_CHARS;
+
   const wrap = document.createElement("div");
   wrap.className = "annot-code-wrap";
   const header = document.createElement("div");
@@ -2066,14 +2200,28 @@ async function loadCodeForAnnot(url, scroll, loader, filename) {
     <span class="code-header-meta">
       <span class="code-lang-badge">${escapeHtml(ext)}</span>
       <span class="code-lines">${lines} qator</span>
+      ${tooBig ? '<span class="code-lines">rang o\'chirilgan · katta fayl</span>' : ""}
     </span>
   `;
   const pre = document.createElement("pre");
-  pre.textContent = text;
+  const codeEl = document.createElement("code");
+  const lang = CODE_LANG_MAP[extLower];
+  if (lang) codeEl.className = "language-" + lang;
+  codeEl.textContent = text;
+  pre.appendChild(codeEl);
   wrap.appendChild(header);
   wrap.appendChild(pre);
   scroll.innerHTML = "";
   scroll.appendChild(wrap);
+
+  // Paint the plain text first, then color it on the next frame — the file
+  // is readable immediately either way, and highlighting never blocks the
+  // initial render. Skipped entirely for very large files.
+  if (!tooBig && window.hljs) {
+    requestAnimationFrame(() => {
+      try { hljs.highlightElement(codeEl); } catch (e) { /* leave plain on failure */ }
+    });
+  }
 }
 
 function attachDrawingHandlers(canvas, pageIdx) {

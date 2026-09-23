@@ -94,19 +94,86 @@ header {
 }
 .brand { display: flex; align-items: center; gap: 10px; }
 header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
-header div:last-child { display: flex; align-items: center; gap: 14px; font-size: 14px; color: var(--text-muted); }
-header button {
-  padding: 8px 16px;
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.settings-wrap { position: relative; }
+.gear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: 1px solid var(--border-strong);
   background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.gear-btn:hover,
+.gear-btn.open {
+  background: var(--bg);
   color: var(--text);
+}
+.settings-modal {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  z-index: 1000;
+  animation: settingsPop 0.15s ease;
+}
+@keyframes settingsPop {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: background 0.15s;
+  text-decoration: none;
+  text-align: left;
+  transition: background 0.12s;
+  font-family: inherit;
 }
-header button:hover { background: var(--bg); }
+.settings-item:hover { background: var(--bg); }
+.settings-item svg { flex-shrink: 0; color: var(--text-muted); }
+.settings-link { color: var(--text); }
+.settings-link .claude-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.settings-logout { color: #dc2626; }
+.settings-logout:hover { background: #fef2f2; }
+.settings-logout svg { color: #dc2626; }
+.settings-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 8px;
+}
 
 /* DROPZONE */
 .dropzone {
@@ -301,12 +368,15 @@ header button:hover { background: var(--bg); }
 }
 .file-actions button:hover { background: var(--bg); color: var(--text); }
 .empty { color: var(--text-muted); text-align: center; padding: 30px; font-size: 14px; }
+.file-card { cursor: pointer; }
+.file-card .file-actions-more,
+.file-card .file-actions-more button,
+.file-card .toggle-group { cursor: default; }
 
-/* Kebab trigger — the only thing visible by default */
-.more-btn { flex-shrink: 0; }
-.file-card.actions-open .more-btn { background: var(--bg); color: var(--text); }
-
-/* Secondary actions — collapsed until hover (desktop) or tap (mobile) */
+/* Secondary actions — collapsed until hover (desktop) or tap on the card
+   (mobile). Appearing is instant; disappearing waits a beat after the
+   cursor leaves, then fades slowly, so it doesn't flicker on a passing
+   mouse and the exit itself feels smooth. */
 .file-actions-more {
   display: flex;
   align-items: center;
@@ -315,7 +385,7 @@ header button:hover { background: var(--bg); }
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
-  transition: max-width 0.22s ease, opacity 0.15s ease;
+  transition: max-width 0.4s ease 1s, opacity 0.4s ease 1s;
 }
 .file-card:hover .file-actions-more,
 .file-card:focus-within .file-actions-more,
@@ -323,7 +393,7 @@ header button:hover { background: var(--bg); }
   max-width: 280px;
   opacity: 1;
   pointer-events: auto;
-  margin-right: 4px;
+  transition: max-width 0.2s ease, opacity 0.15s ease;
 }
 
 /* TOGGLE GROUP (Copy + Refresh + Unlink) */
@@ -893,8 +963,9 @@ header button:hover { background: var(--bg); }
 /* RESPONSIVE */
 @media (max-width: 600px) {
   header { padding: 14px 20px; }
-  header div:last-child { gap: 8px; font-size: 12px; }
-  header button { padding: 6px 12px; font-size: 12px; }
+  .header-right { gap: 8px; font-size: 12px; }
+  .gear-btn { width: 32px; height: 32px; }
+  .settings-modal { min-width: 200px; }
   .dropzone { margin: 20px 20px 12px; padding: 32px 16px; }
   .toolbar { margin: 0 20px 12px; }
   #upload-progress { margin: 0 20px 10px; }
@@ -1101,6 +1172,17 @@ header button:hover { background: var(--bg); }
   overflow: hidden;
   position: relative;
   background: radial-gradient(ellipse at top, #111117 0%, #09090b 70%);
+  transition: background 0.15s ease;
+}
+/* Image/video previews: near-white workspace instead of the dark default. */
+.annot-workspace.kind-image,
+.annot-workspace.kind-video {
+  background: var(--bg);
+}
+.annot-workspace.kind-image .annot-page,
+.annot-workspace.kind-video .annot-page {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  border: 1px solid var(--border);
 }
 
 .annot-scroll {
@@ -1111,8 +1193,8 @@ header button:hover { background: var(--bg); }
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px;
-  gap: 16px;
+  padding: 10px;
+  gap: 10px;
   scrollbar-width: thin;
   scrollbar-color: #2a2f3a transparent;
 }
@@ -1154,6 +1236,12 @@ header button:hover { background: var(--bg); }
   pointer-events: none;
   user-select: none;
 }
+.annot-page-video video {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 160px);
+  pointer-events: auto;
+}
 
 /* Code / text viewer — fills the whole workspace, edge to edge */
 .annot-scroll.is-text {
@@ -1184,11 +1272,11 @@ header button:hover { background: var(--bg); }
 }
 .annot-code-wrap pre {
   margin: 0;
-  padding: 24px 28px;
+  padding: 14px 16px;
   overflow: auto;
   font-family: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 12.5px;
+  line-height: 1.55;
   letter-spacing: 0.1px;
   color: #d8dee9;
   background: #0b0e14;
@@ -1196,6 +1284,14 @@ header button:hover { background: var(--bg); }
   tab-size: 2;
   scrollbar-width: thin;
   scrollbar-color: #2a2f3a transparent;
+}
+/* highlight.js paints its own colors onto <code>; keep our dark panel as
+   the single background so it doesn't double up or clash. */
+.annot-code-wrap pre code.hljs {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  white-space: pre;
 }
 .annot-code-wrap pre::-webkit-scrollbar { width: 8px; height: 8px; }
 .annot-code-wrap pre::-webkit-scrollbar-track { background: transparent; }
@@ -1212,11 +1308,11 @@ header button:hover { background: var(--bg); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 20px;
+  gap: 10px;
+  padding: 8px 14px;
   background: rgba(255,255,255,0.02);
   border-bottom: 1px solid rgba(255,255,255,0.06);
-  font-size: 12.5px;
+  font-size: 11.5px;
   color: #8b95a7;
   flex-shrink: 0;
 }
@@ -1300,7 +1396,7 @@ header button:hover { background: var(--bg); }
   .annot-tool { width: 40px; height: 40px; }
   .annot-tool svg { width: 18px; height: 18px; }
   .annot-tool[data-tip]::after { display: none; } /* touch devices – rely on status bar */
-  .annot-scroll { padding: 10px; gap: 12px; }
+  .annot-scroll { padding: 8px; gap: 8px; }
   .annot-status { font-size: 11px; padding: 5px 8px; }
 }
 

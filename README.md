@@ -61,6 +61,11 @@ policies for the `files` table and the storage bucket (safe to run repeatedly).
 
 `mcp/` papkasida Claude (AI) bilan shu MRdrive orasida fayl almashishga
 imkon beruvchi kichik MCP server bor — u xuddi shu Supabase `files`
-bucket'ni ishlatadi, alohida hisob yoki service_role kalit kerak emas.
+bucket'ni ishlatadi.
+
+Har bir hisob: `/api/mcp?name=<Name>&token=<48hex>`
+Token = sha256(sha256(username)+sha256(password))[:48] — brauzerda
+hisoblanadi, MCP_TOKEN_SECRET kerak emas. Name case-sensitive.
+
 Batafsil: `mcp/README.md`.
 

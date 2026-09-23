@@ -7,18 +7,17 @@ import crypto from "crypto";
 // Bular MRdrive'ning o'z frontend config.js'idagi bilan bir xil, ochiq
 // (public) qiymatlar — service_role kalit emas, xavfsiz.
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-const FAKE_EMAIL_DOMAIN = "mrdrive.local";
+// Bu MCP endpoint endi bitta hisob emas, KO'P foydalanuvchi uchun ishlaydi:
+// har so'rov o'zining ?name= + ?token= qiymati orqali "kim" ekanini isbotlaydi.
+// Token = sha256(sha256(username)+sha256(password))[:48] — server siri YO'Q.
+// RLS'ni chetlab o'tuvchi service_role kalit kerak; so'rov ichida biz o'zimiz
+// har doim aniq user_id bilan filtrlaymiz.
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // MRdrive web ilovasi qaysi domenda turibdi — pull/push/refresh_link
 // qaytaradigan link shu domenga ?share=TOKEN qo'shib hosil qilinadi (xom
 // Supabase signed URL emas). Kerak bo'lsa Vercel env var orqali override qiling.
 const APP_URL = (process.env.APP_URL || "https://mrdrive.vercel.app").replace(/\/+$/, "");
-
-// MRdrive ilovasidagi (Supabase dashboard emas!) shaxsiy username/parol —
-// xuddi brauzerda login qilganingizdagi kabi.
-const MRDRIVE_USERNAME = process.env.MRDRIVE_USERNAME;
-const MRDRIVE_PASSWORD = process.env.MRDRIVE_PASSWORD;
 
 const BUCKET = "files";
 const TABLE = "files";
@@ -39,6 +38,84 @@ function isBlockedFile(filename) {
 // Web ilovadagi generateToken() bilan bir xil format (32 hex belgi).
 function generateToken() {
   return crypto.randomBytes(16).toString("hex");
+}
+
+/**
+ * ?name= + ?token= orqali foydalanuvchini topadi.
+ * - token: user_metadata.mcp_token bilan mos kelishi shart (48 hex)
+ * - name:  user_metadata.name bilan ANIQ (case-sensitive) mos kelishi shart
+ * Mos kelmasa aniq xato — Claude bir nechta account ulaganda aralashib ketmasin.
+ */
+async function resolveUserFromNameAndToken(name, token) {
+  if (!name || typeof name !== "string") {
+    throw new Error("MCP havolasida ?name= yo'q yoki bo'sh.");
+  }
+  if (!/^[0-9a-f]{48}$/i.test(token || "")) {
+    throw new Error("MCP havolasi noto'g'ri — token topilmadi yoki formati xato (48 hex belgi kerak).");
+  }
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error(
+      "SUPABASE_URL yoki SUPABASE_SERVICE_ROLE_KEY environment variable topilmadi."
+    );
+  }
+
+  const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const tokenLower = token.toLowerCase();
+  let page = 1;
+  const perPage = 200;
+  let matchedByToken = null;
+
+  // Barcha foydalanuvchilarni sahifalab qidiramiz (mcp_token unique bo'lishi kutiladi).
+  for (;;) {
+    const { data, error } = await sbAdmin.auth.admin.listUsers({ page, perPage });
+    if (error) throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
+    const users = data?.users || [];
+    if (users.length === 0) break;
+
+    for (const u of users) {
+      const meta = u.user_metadata || {};
+      const storedToken = (meta.mcp_token || "").toLowerCase();
+      if (storedToken && storedToken === tokenLower) {
+        matchedByToken = u;
+        break;
+      }
+    }
+    if (matchedByToken) break;
+    if (users.length < perPage) break;
+    page += 1;
+    if (page > 50) break; // himoya
+  }
+
+  if (!matchedByToken) {
+    throw new Error(
+      "MCP havolasi yaroqsiz — token topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling."
+    );
+  }
+
+  const storedName = matchedByToken.user_metadata?.name || "";
+  // Name case-sensitive: "Muhammadrasul" ≠ "muhammadrasul"
+  if (storedName !== name) {
+    throw new Error(
+      `Name mos kelmadi: havolada "${name}", hisobda "${storedName}". ` +
+        `Katta/kichik harflar ham bir xil bo'lishi shart. /mcp sahifasidan to'g'ri havolani oling.`
+    );
+  }
+
+  return { id: matchedByToken.id, name: storedName };
+}
+
+// So'rov qanday foydalanuvchi nomidan bajarilishini aniqlaydi.
+// name + token orqali user topiladi; RLS'ni chetlab o'tuvchi service_role
+// klient bilan ishlaymiz va HAR BIR so'rovda aniq user_id bilan filtrlaymiz.
+async function getAuthedClient(name, token) {
+  const user = await resolveUserFromNameAndToken(name, token);
+  const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  return { sb, user };
 }
 
 // Faylni (agar hali bo'lmasa) public qiladi va web ilovadagi kabi
@@ -71,39 +148,6 @@ async function getOrCreateShareUrl(sb, row, expiresInSeconds, forceNew = false) 
   return `${APP_URL}/?share=${token}`;
 }
 
-function usernameToEmail(username) {
-  return (
-    username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "") +
-    "@" +
-    FAKE_EMAIL_DOMAIN
-  );
-}
-
-// Har so'rovda MRdrive foydalanuvchisi sifatida tizimga kiradi (xuddi
-// brauzerdagi login kabi) — shu orqali Supabase RLS o'z-o'zidan ishlaydi,
-// service_role kalit shart emas.
-async function getAuthedClient() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error(
-      "SUPABASE_URL yoki SUPABASE_ANON_KEY environment variable topilmadi."
-    );
-  }
-  if (!MRDRIVE_USERNAME || !MRDRIVE_PASSWORD) {
-    throw new Error(
-      "MRDRIVE_USERNAME yoki MRDRIVE_PASSWORD environment variable topilmadi."
-    );
-  }
-
-  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data, error } = await sb.auth.signInWithPassword({
-    email: usernameToEmail(MRDRIVE_USERNAME),
-    password: MRDRIVE_PASSWORD,
-  });
-  if (error) throw new Error("MRdrive login xato: " + error.message);
-
-  return { sb, user: data.user };
-}
-
 // Fayl nomi bo'yicha eng oxirgi mos qatorni topadi (bir nechta ustunni
 // tanlab), yoki topilmasa aniq xato tashlaydi.
 async function findFileRow(sb, userId, filename, columns) {
@@ -120,8 +164,8 @@ async function findFileRow(sb, userId, filename, columns) {
   return row;
 }
 
-function buildServer() {
-  const server = new McpServer({ name: "mrdrive", version: "1.1.0" });
+function buildServer(name, token) {
+  const server = new McpServer({ name: "mrdrive", version: "1.2.0" });
 
   // ---------------------------------------------------------------
   // FAYLLAR
@@ -145,7 +189,7 @@ function buildServer() {
         );
       }
 
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
       const buffer = Buffer.from(content_base64, "base64");
       const safeName = filename.replace(/[^a-zA-Z0-9_.\-]/g, "_");
       const path = `${user.id}/${Date.now()}_${safeName}`;
@@ -194,7 +238,7 @@ function buildServer() {
         .describe("Link amal qilish muddati, soniyalarda (default: muddatsiz)"),
     },
     async ({ filename, expires_in }) => {
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
       const row = await findFileRow(sb, user.id, filename, "id, is_public, public_token, expires_at");
       const shareUrl = await getOrCreateShareUrl(sb, row, expires_in || null);
       return { content: [{ type: "text", text: shareUrl }] };
@@ -211,7 +255,7 @@ function buildServer() {
         .describe("Faqat shu papkadagi fayllarni ko'rsatish (ixtiyoriy). Bo'sh satr = papkasiz fayllar."),
     },
     async ({ folder }) => {
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
       let query = sb
         .from(TABLE)
         .select("filename, size, uploaded_at, folder, is_public, public_token, expires_at")
@@ -247,7 +291,7 @@ function buildServer() {
       filename: z.string().describe("O'chiriladigan fayl nomi"),
     },
     async ({ filename }) => {
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
       const row = await findFileRow(sb, user.id, filename, "id, storage_path");
 
       const { error: rmErr } = await sb.storage.from(BUCKET).remove([row.storage_path]);
@@ -270,7 +314,7 @@ function buildServer() {
         .describe("Maqsad papka nomi. Papkadan chiqarish uchun bo'sh satr (\"\") bering."),
     },
     async ({ filename, folder }) => {
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
       const row = await findFileRow(sb, user.id, filename, "id");
 
       if (folder) {
@@ -312,7 +356,7 @@ function buildServer() {
       filename: z.string().describe("Fayl nomi"),
     },
     async ({ filename }) => {
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
       const row = await findFileRow(sb, user.id, filename, "id");
 
       const { error } = await sb
@@ -336,7 +380,7 @@ function buildServer() {
         .describe("Yangi link amal qilish muddati, soniyalarda (default: muddatsiz)"),
     },
     async ({ filename, expires_in }) => {
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
       const row = await findFileRow(sb, user.id, filename, "id, is_public, public_token, expires_at");
       const shareUrl = await getOrCreateShareUrl(sb, row, expires_in || null, true);
       return { content: [{ type: "text", text: shareUrl }] };
@@ -352,7 +396,7 @@ function buildServer() {
     "MRdrive'dagi barcha papkalar ro'yxatini qaytaradi.",
     {},
     async () => {
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
       const { data, error } = await sb
         .from(FOLDERS_TABLE)
         .select("name, created_at")
@@ -375,7 +419,7 @@ function buildServer() {
       const trimmed = name.trim();
       if (!trimmed) throw new Error("Papka nomi bo'sh bo'lishi mumkin emas.");
 
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
 
       const { data: existing, error: exErr } = await sb
         .from(FOLDERS_TABLE)
@@ -401,7 +445,7 @@ function buildServer() {
       name: z.string().describe("O'chiriladigan papka nomi"),
     },
     async ({ name }) => {
-      const { sb, user } = await getAuthedClient();
+      const { sb, user } = await getAuthedClient(name, token);
 
       const { data: folder, error: fErr } = await sb
         .from(FOLDERS_TABLE)
@@ -430,7 +474,20 @@ export default async function handler(req, res) {
     return;
   }
 
-  const server = buildServer();
+  // Ko'p foydalanuvchi: ?name= (identifikatsiya, case-sensitive) + ?token=
+  // (username+parol dan ikki marta hash, 48 hex). Server siri yo'q.
+  const params = new URL(req.url, "http://localhost").searchParams;
+  const name = params.get("name");
+  const token = params.get("token");
+  if (!token || !name) {
+    res.status(401).json({
+      error:
+        "MCP havolasida ?name= va ?token= kerak. /mcp sahifasidan o'z shaxsiy havolangizni oling.",
+    });
+    return;
+  }
+
+  const server = buildServer(name, token);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
