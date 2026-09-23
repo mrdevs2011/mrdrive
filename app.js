@@ -1406,6 +1406,12 @@ async function moveFilesToFolder(fileIds, targetFolder) {
   const label = next ? `"${next}"` : "All";
   showToast(toMove.length === 1 ? `Moved to ${label}` : `Moved ${toMove.length} files to ${label}`);
   renderFiles();
+  // Keep the moved files highlighted for a beat so the drop feels
+  // confirmed, then fade the selection back to the default look.
+  setTimeout(() => {
+    ids.forEach((id) => selectedFileIds.delete(id));
+    updateSelectionClasses();
+  }, 1000);
   // If we're viewing a folder and the file left it, list updates above already.
 }
 
@@ -1656,12 +1662,19 @@ fileListEl.addEventListener("mousedown", (e) => {
   const box = document.createElement("div");
   box.className = "selection-box";
   document.body.appendChild(box);
-  marquee = { startX: e.clientX, startY: e.clientY, box, baseSelection, moved: false };
+
+  const hint = document.createElement("div");
+  hint.className = "marquee-hint";
+  hint.innerHTML = `Hold <kbd>Ctrl</kbd> to add to the current selection`;
+  document.body.appendChild(hint);
+
+  marquee = { startX: e.clientX, startY: e.clientY, box, hint, baseSelection, moved: false };
 });
 
 document.addEventListener("mousemove", (e) => {
   if (!marquee) return;
   marquee.moved = true;
+  marquee.hint.style.display = "block";
   const x1 = Math.min(marquee.startX, e.clientX);
   const y1 = Math.min(marquee.startY, e.clientY);
   const x2 = Math.max(marquee.startX, e.clientX);
@@ -1683,6 +1696,7 @@ document.addEventListener("mousemove", (e) => {
 document.addEventListener("mouseup", () => {
   if (!marquee) return;
   marquee.box.remove();
+  marquee.hint.remove();
   marquee = null;
 });
 
