@@ -56,7 +56,7 @@
     const authStatus = document.getElementById("auth-status");
 
     function usernameToEmail(username) {
-      return username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "") + "@" + FAKE_EMAIL_DOMAIN;
+      return "mrdrive." + username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "") + "@" + FAKE_EMAIL_DOMAIN;
     }
 
     async function computeMcpToken(username, password) {
