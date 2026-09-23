@@ -2,12 +2,18 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import crypto from "crypto";
 
 // Bular MRdrive'ning o'z frontend config.js'idagi bilan bir xil, ochiq
 // (public) qiymatlar — service_role kalit emas, xavfsiz.
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const FAKE_EMAIL_DOMAIN = "mrdrive.local";
+
+// MRdrive web ilovasi qaysi domenda turibdi — pull/push qaytaradigan
+// link shu domenga ?share=TOKEN qo'shib hosil qilinadi (xom Supabase
+// signed URL emas). Kerak bo'lsa Vercel env var orqali override qiling.
+const APP_URL = (process.env.APP_URL || "https://mrdrive.vercel.app").replace(/\/+$/, "");
 
 // MRdrive ilovasidagi (Supabase dashboard emas!) shaxsiy username/parol —
 // xuddi brauzerda login qilganingizdagi kabi.
@@ -16,6 +22,39 @@ const MRDRIVE_PASSWORD = process.env.MRDRIVE_PASSWORD;
 
 const BUCKET = "files";
 const TABLE = "files";
+
+// Web ilovadagi generateToken() bilan bir xil format (32 hex belgi).
+function generateToken() {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+// Faylni (agar hali bo'lmasa) public qiladi va web ilovadagi kabi
+// "${APP_URL}/?share=TOKEN" ko'rinishidagi doimiy link qaytaradi.
+// Fayl allaqachon ochiq va muddati o'tmagan bo'lsa, mavjud tokendan
+// foydalanadi (har safar yangi link yaratilavermaydi).
+async function getOrCreateShareUrl(sb, row, expiresInSeconds) {
+  const stillValid =
+    row.is_public &&
+    row.public_token &&
+    (!row.expires_at || new Date(row.expires_at) > new Date());
+
+  if (stillValid) {
+    return `${APP_URL}/?share=${row.public_token}`;
+  }
+
+  const token = generateToken();
+  const expiresAt = expiresInSeconds
+    ? new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+    : null;
+
+  const { error } = await sb
+    .from(TABLE)
+    .update({ is_public: true, public_token: token, expires_at: expiresAt })
+    .eq("id", row.id);
+  if (error) throw new Error(error.message);
+
+  return `${APP_URL}/?share=${token}`;
+}
 
 function usernameToEmail(username) {
   return (
@@ -71,24 +110,25 @@ function buildServer() {
       });
       if (upErr) throw new Error(upErr.message);
 
-      const { error: dbErr } = await sb.from(TABLE).insert({
-        user_id: user.id,
-        filename,
-        storage_path: path,
-        size: buffer.length,
-      });
+      const { data: inserted, error: dbErr } = await sb
+        .from(TABLE)
+        .insert({
+          user_id: user.id,
+          filename,
+          storage_path: path,
+          size: buffer.length,
+        })
+        .select("id, is_public, public_token, expires_at")
+        .single();
       if (dbErr) throw new Error(dbErr.message);
 
-      const { data: signed, error: signErr } = await sb.storage
-        .from(BUCKET)
-        .createSignedUrl(path, 3600);
-      if (signErr) throw new Error(signErr.message);
+      const shareUrl = await getOrCreateShareUrl(sb, inserted, null);
 
       return {
         content: [
           {
             type: "text",
-            text: `Yuklandi: ${filename} (${buffer.length} bayt)\nURL (1 soat amal qiladi): ${signed.signedUrl}`,
+            text: `Yuklandi: ${filename} (${buffer.length} bayt)\nLink: ${shareUrl}`,
           },
         ],
       };
@@ -97,19 +137,19 @@ function buildServer() {
 
   server.tool(
     "pull",
-    "MRdrive'dagi fayl uchun vaqtinchalik yuklab olish linkini (signed URL) qaytaradi. Nom bo'yicha eng oxirgi mos faylni topadi.",
+    "MRdrive'dagi fayl uchun ochiq (mrdrive.vercel.app/?share=...) linkini qaytaradi. Nom bo'yicha eng oxirgi mos faylni topadi.",
     {
       filename: z.string().describe("Yuklab olinadigan fayl nomi"),
       expires_in: z
         .number()
         .optional()
-        .describe("Link amal qilish muddati, soniyalarda (default: 3600)"),
+        .describe("Link amal qilish muddati, soniyalarda (default: muddatsiz)"),
     },
     async ({ filename, expires_in }) => {
       const { sb, user } = await getAuthedClient();
       const { data: row, error: qErr } = await sb
         .from(TABLE)
-        .select("storage_path")
+        .select("id, is_public, public_token, expires_at")
         .eq("user_id", user.id)
         .eq("filename", filename)
         .order("uploaded_at", { ascending: false })
@@ -118,12 +158,9 @@ function buildServer() {
       if (qErr) throw new Error(qErr.message);
       if (!row) throw new Error(`"${filename}" nomli fayl topilmadi.`);
 
-      const { data: signed, error: signErr } = await sb.storage
-        .from(BUCKET)
-        .createSignedUrl(row.storage_path, expires_in || 3600);
-      if (signErr) throw new Error(signErr.message);
+      const shareUrl = await getOrCreateShareUrl(sb, row, expires_in || null);
 
-      return { content: [{ type: "text", text: signed.signedUrl }] };
+      return { content: [{ type: "text", text: shareUrl }] };
     }
   );
 
