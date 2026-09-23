@@ -3233,7 +3233,7 @@ async function saveAnnotated() {
   }
   if (!annotState.pages.length) return;
 
-  showToast("Annotated fayl tayyorlanmoqda…");
+  // showToast("Annotated fayl tayyorlanmoqda…"); // olib tashlandi
 
   try {
     const originalName = annotState.file.filename || "annotated";
