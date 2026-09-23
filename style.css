@@ -61,7 +61,7 @@ body { background: var(--bg); color: var(--text); }
   font-size: 14px;
   background: var(--surface);
   color: var(--text);
-  transition: border-color 0.15s;
+  transition: none;
 }
 .auth-box input:focus { outline: none; border-color: var(--accent); }
 .auth-box button {
@@ -75,7 +75,7 @@ body { background: var(--bg); color: var(--text); }
   font-size: 14px;
   font-weight: 500;
   margin-top: 4px;
-  transition: opacity 0.15s;
+  transition: none;
 }
 .auth-box button:hover { opacity: 0.85; }
 #auth-status { margin-top: 14px; font-size: 13px; color: var(--text-muted); min-height: 16px; }
@@ -114,7 +114,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   color: var(--text-muted);
   border-radius: 10px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: none;
 }
 .gear-btn:hover,
 .gear-btn.open {
@@ -153,7 +153,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   cursor: pointer;
   text-decoration: none;
   text-align: left;
-  transition: background 0.12s;
+  transition: none;
   font-family: inherit;
 }
 .settings-item:hover { background: var(--bg); }
@@ -209,7 +209,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   padding: 44px 20px;
   text-align: center;
   color: var(--text-muted);
-  transition: 0.15s;
+  transition: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -246,7 +246,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   font-size: 14px;
   background: var(--surface);
   color: var(--text);
-  transition: border-color 0.15s;
+  transition: none;
 }
 #search-input:focus { outline: none; border-color: var(--accent); }
 
@@ -263,7 +263,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: none;
 }
 .folder-tab:hover { border-color: var(--border-strong); color: var(--text); }
 .folder-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
@@ -288,7 +288,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s;
+  transition: none;
   border-left: 1px solid var(--border);
 }
 .folder-del-btn:hover { background: var(--red-bg); color: var(--red-text); }
@@ -453,7 +453,7 @@ body.is-dragging-file .folder-tab-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s;
+  transition: none;
 }
 .file-actions button:hover { background: var(--bg); color: var(--text); }
 .empty { color: var(--text-muted); text-align: center; padding: 30px; font-size: 14px; }
@@ -506,7 +506,7 @@ body.is-dragging-file .folder-tab-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s;
+  transition: none;
   border-right: 1px solid var(--border);
 }
 .toggle-group .toggle-btn:last-child {
@@ -527,7 +527,7 @@ body.is-dragging-file .folder-tab-wrap {
   background: var(--green-bg);
   color: var(--green-text);
 }
-.toggle-group .toggle-btn svg { animation: annotMorphPop 0.2s ease; }
+.toggle-group .toggle-btn svg { animation: none; }
 .toggle-group .toggle-btn.refresh-btn {
   color: var(--blue-text);
 }
@@ -612,11 +612,11 @@ body.is-dragging-file .folder-tab-wrap {
   text-align: left;
   cursor: pointer;
   pointer-events: auto;
-  opacity: 0;
-  transform: translateY(14px) scale(0.98);
-  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  opacity: 1;
+  transform: none;
+  transition: none;
 }
-.toast.show { opacity: 1; transform: translateY(0) scale(1); }
+.toast.show { opacity: 1; transform: none; }
 .toast-icon {
   flex: 0 0 28px;
   width: 28px;
@@ -868,7 +868,7 @@ body.is-dragging-file .folder-tab-wrap {
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: none;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s, transform 0.15s;
+  transition: none;
 }
 .public-modal-box .public-download-btn {
   background: #18181b;
@@ -877,7 +877,6 @@ body.is-dragging-file .folder-tab-wrap {
 }
 .public-modal-box .public-download-btn:hover:not(:disabled) {
   opacity: 0.9;
-  transform: translateY(-1px);
 }
 .public-modal-box .public-download-btn:disabled {
   opacity: 0.35;
@@ -890,7 +889,7 @@ body.is-dragging-file .folder-tab-wrap {
 }
 .public-modal-box.has-preview .public-download-btn,
 .public-modal-box.has-preview .public-fs-btn,
-.public-modal-box.has-preview .public-edit-btn {
+.public-modal-box.has-preview .public-edit-btn:not(.active) {
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border);
@@ -905,14 +904,22 @@ body.is-dragging-file .folder-tab-wrap {
   background: var(--border);
   opacity: 1;
 }
-.public-modal-box.has-preview .public-fs-btn:hover:not(:disabled),
-.public-modal-box.has-preview .public-edit-btn:hover {
+.public-modal-box.has-preview .public-fs-btn:hover:not(:disabled) {
   background: var(--border);
 }
-.public-modal-box .public-edit-btn.active {
-  background: #ef4444;
-  color: #fff;
-  border-color: #ef4444;
+.public-modal-box.has-preview .public-edit-btn:hover:not(.active) {
+  background: var(--border);
+}
+.public-modal-box .public-edit-btn.active,
+.public-modal-box.has-preview .public-edit-btn.active {
+  background: #ef4444 !important;
+  color: #fff !important;
+  border-color: #ef4444 !important;
+}
+.public-modal-box .public-edit-btn.active svg,
+.public-modal-box.has-preview .public-edit-btn.active svg {
+  color: #fff !important;
+  stroke: #fff;
 }
 
 /* Pencil-drawing overlay on the public image preview. Positioned exactly
@@ -936,7 +943,7 @@ body.is-dragging-file .folder-tab-wrap {
   color: var(--text-muted);
   text-decoration: none;
   cursor: pointer;
-  transition: color 0.15s, opacity 0.25s ease, transform 0.25s ease;
+  transition: none;
 }
 .public-go-link:hover { color: var(--text); text-decoration: underline; }
 .public-modal-box.has-preview .public-go-link {
@@ -1005,7 +1012,7 @@ body.is-dragging-file .folder-tab-wrap {
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  transition: opacity 0.15s, background 0.15s, transform 0.15s;
+  transition: none;
 }
 /* Default loading card only — not icon toolbar buttons */
 .public-modal-box:not(.has-preview) .public-actions {
@@ -1068,7 +1075,7 @@ body.is-dragging-file .folder-tab-wrap {
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: none;
 }
 .duration-options button:hover {
   background: var(--accent);
@@ -1271,7 +1278,7 @@ body.is-dragging-file .folder-tab-wrap {
   background: var(--bg);
   color: var(--text);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: none;
 }
 .annot-btn:hover, .annot-btn:active {
   background: var(--border);
@@ -1297,12 +1304,13 @@ body.is-dragging-file .folder-tab-wrap {
 }
 .annot-btn.is-save { background: #18181b; color: #fff; border-color: #18181b; }
 .annot-btn.is-save:hover { opacity: 0.9; background: #18181b; color: #fff; }
-@keyframes annotMorphPop {
-  0% { transform: scale(0.6); opacity: 0.4; }
-  60% { transform: scale(1.15); }
-  100% { transform: scale(1); opacity: 1; }
+.annot-btn.is-save:disabled {
+  opacity: 0.85;
+  pointer-events: none;
+  cursor: wait;
 }
-.annot-btn svg { animation: annotMorphPop 0.2s ease; }
+.annot-btn svg { animation: none; }
+.annot-btn svg.annot-save-spin { animation: spin 0.75s linear infinite; }
 
 /* Toolbar — removed: only freehand pen draw is used (img + pdf) */
 .annot-toolbar {
@@ -1331,7 +1339,7 @@ body.is-dragging-file .folder-tab-wrap {
   background: transparent;
   color: #a1a1aa;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: none;
 }
 .annot-tool:hover, .annot-tool:active {
   background: #27272a;
@@ -1363,7 +1371,7 @@ body.is-dragging-file .folder-tab-wrap {
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: none;
   z-index: 10;
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
@@ -1841,16 +1849,27 @@ body.is-dragging-file .folder-tab-wrap {
 .public-modal-box.has-preview .public-actions { gap: 8px; }
 .public-modal-box.has-preview .public-download-btn,
 .public-modal-box.has-preview .public-fs-btn,
-.public-modal-box.has-preview .public-edit-btn {
+.public-modal-box.has-preview .public-edit-btn:not(.active) {
   flex: 0 0 40px;
   width: 40px;
   height: 40px;
   border-radius: 12px;
   background: var(--surface);
 }
+.public-modal-box.has-preview .public-edit-btn.active {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
 .public-modal-box.has-preview .public-download-btn { background: #18181b; }
-.public-modal-box.has-preview .public-fs-btn:hover:not(:disabled),
-.public-modal-box.has-preview .public-edit-btn:hover { background: var(--bg); border-color: var(--border-strong); }
+.public-modal-box.has-preview .public-fs-btn:hover:not(:disabled) { background: var(--bg); border-color: var(--border-strong); }
+.public-modal-box.has-preview .public-edit-btn:hover:not(.active) { background: var(--bg); border-color: var(--border-strong); }
+.public-modal-box.has-preview .public-edit-btn.active:hover {
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
+  color: #fff !important;
+}
 
 @media (max-width: 480px) {
   .public-modal-box.has-preview .public-topbar,

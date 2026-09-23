@@ -652,6 +652,10 @@ function setupPublicPdfEdit(editBtn, pages) {
     editing = !editing;
     editBtn.classList.toggle("active", editing);
     editBtn.title = editing ? "Chizishni tugatish" : "Tahrirlash";
+    // Keep pencil icon always visible (active = red bg + white icon)
+    if (!editBtn.querySelector("svg")) {
+      editBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+    }
     pages.forEach((p) => {
       p.drawCanvas.style.pointerEvents = editing ? "auto" : "none";
     });
@@ -766,6 +770,10 @@ function setupPublicImageEdit(editBtn, previewWrap, imgEl) {
     editing = !editing;
     editBtn.classList.toggle("active", editing);
     editBtn.title = editing ? "Chizishni tugatish" : "Tahrirlash";
+    // Keep pencil icon always visible (active = red bg + white icon)
+    if (!editBtn.querySelector("svg")) {
+      editBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+    }
     if (editing && !canvas) buildCanvas();
     if (canvas) {
       canvas.style.pointerEvents = editing ? "auto" : "none";
@@ -2338,13 +2346,12 @@ function showToast(msg, type = "success", detail = "") {
   toast.querySelector(".toast-title").textContent = msg;
   if (detail) toast.querySelector(".toast-detail").textContent = detail;
   stack.appendChild(toast);
-
-  requestAnimationFrame(() => toast.classList.add("show"));
+  // Instant show — 0ms delay
+  toast.classList.add("show");
 
   const hide = () => {
     clearTimeout(timer);
-    toast.classList.remove("show");
-    setTimeout(() => toast.remove(), 300);
+    toast.remove();
   };
   const timer = setTimeout(hide, detail || type !== "success" ? 6000 : 2500);
   toast.addEventListener("click", hide);
@@ -3233,7 +3240,18 @@ async function saveAnnotated() {
   }
   if (!annotState.pages.length) return;
 
-  // showToast("Annotated fayl tayyorlanmoqda…"); // olib tashlandi
+  const saveBtn = document.getElementById("annot-save");
+  if (saveBtn && saveBtn.disabled) return; // prevent double-tap
+
+  const ICON_SAVE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 4V16M12 16L7 11M12 16L17 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+  const ICON_SAVE_SPIN = `<svg class="annot-save-spin" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25" stroke-width="2.4"/><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+
+  // Instant visual feedback on the button — no intermediate toast
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = ICON_SAVE_SPIN;
+    saveBtn.title = "Tayyorlanmoqda…";
+  }
 
   try {
     const originalName = annotState.file.filename || "annotated";
@@ -3256,14 +3274,10 @@ async function saveAnnotated() {
         }
       });
 
-      // Keep original filename (user asked for same name); content is PNG.
       downloadFileLocally(new File([blob], originalName, { type: "image/png" }));
-      showToast("\"" + originalName + "\" yuklab olindi");
-      closeAnnotationViewer();
     } else if (annotState.type === "pdf") {
       if (!window.PDFLib) {
-        showToast("PDF kutubxonasi yuklanmadi", "error");
-        return;
+        throw new Error("PDF kutubxonasi yuklanmadi");
       }
       const { PDFDocument } = PDFLib;
       const pdfDoc = await PDFDocument.create();
@@ -3293,12 +3307,25 @@ async function saveAnnotated() {
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: "application/pdf" });
       downloadFileLocally(new File([blob], originalName, { type: "application/pdf" }));
-      showToast("\"" + originalName + "\" yuklab olindi");
-      closeAnnotationViewer();
+    } else {
+      return;
     }
+
+    // Instant close — 0ms delay
+    if (saveBtn) {
+      saveBtn.innerHTML = ICON_CHECK;
+      saveBtn.title = "Tayyor";
+    }
+    showToast('"' + originalName + '" yuklab olindi');
+    closeAnnotationViewer();
   } catch (err) {
     console.error(err);
-    showToast("Yuklab olish muvaffaqiyatsiz", "error");
+    showToast(err.message || "Yuklab olish muvaffaqiyatsiz", "error");
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = ICON_SAVE;
+      saveBtn.title = "Yuklab olish";
+    }
   }
 }
 
