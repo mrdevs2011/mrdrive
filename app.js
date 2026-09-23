@@ -312,9 +312,9 @@ function showPublicDownloadModal(token) {
             <button id="public-edit-btn" class="public-edit-btn" title="Tahrirlash" style="display:none;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             </button>
-            <button id="public-download-btn" disabled>${ICON_DOWNLOAD}<span>Download</span></button>
+            <button id="public-download-btn" class="public-download-btn" disabled title="Download" aria-label="Download">${ICON_DOWNLOAD}</button>
             <button id="public-fs-btn" class="public-fs-btn" title="Fullscreen" aria-label="Fullscreen" style="display:none;">${ICON_FULLSCREEN}</button>
-            <a class="public-go-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer">MRdrive</a>
+            <a class="public-go-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer" title="MRdrive">MRdrive</a>
           </div>
           <p id="public-status" class="public-status"></p>
         </div>
@@ -380,12 +380,17 @@ function showPublicDownloadModal(token) {
           setupPublicControlsFade(modalBox, previewWrap, kind !== "video");
 
           if (kind === "image") {
-            previewWrap.innerHTML = `
-              <div class="public-preview is-image">
-                <img src="${previewUrlData.signedUrl}" alt="${escapeHtml(data.filename)}" loading="eager" />
-              </div>
-            `;
-            const imgEl = previewWrap.querySelector("img");
+            // crossOrigin BEFORE src — otherwise canvas export (edit→download) taints
+            const wrap = document.createElement("div");
+            wrap.className = "public-preview is-image";
+            const imgEl = document.createElement("img");
+            imgEl.crossOrigin = "anonymous";
+            imgEl.alt = data.filename;
+            imgEl.loading = "eager";
+            imgEl.src = previewUrlData.signedUrl;
+            wrap.appendChild(imgEl);
+            previewWrap.innerHTML = "";
+            previewWrap.appendChild(wrap);
             editBtn.style.display = "flex";
             imgEl.addEventListener("load", () => {
               publicEdit = setupPublicImageEdit(editBtn, previewWrap, imgEl);
@@ -422,50 +427,65 @@ function showPublicDownloadModal(token) {
 
       downloadBtn.onclick = async () => {
         statusEl.textContent = "Preparing download...";
+        downloadBtn.disabled = true;
 
-        // If the person drew on the image/PDF with Edit, download the
-        // edited version locally instead of fetching the original from
-        // storage.
-        if (publicEdit && publicEdit.hasDrawing()) {
-          const blob = await publicEdit.getEditedBlob();
-          if (!blob) {
-            statusEl.textContent = "Error preparing file";
+        try {
+          // If the person drew on the image/PDF with Edit, download the
+          // edited version locally instead of fetching the original from
+          // storage.
+          if (publicEdit && publicEdit.hasDrawing()) {
+            let blob = null;
+            try {
+              blob = await publicEdit.getEditedBlob();
+            } catch (err) {
+              console.error("getEditedBlob failed:", err);
+            }
+            if (blob) {
+              const blobUrl = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = blobUrl;
+              // Prefer .png for annotated images so strokes are preserved
+              const name = data.filename || "download";
+              a.download = /\.(png|jpe?g|webp|gif)$/i.test(name)
+                ? name.replace(/\.[^.]+$/, "") + "-edited.png"
+                : name;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+              statusEl.textContent = "Downloaded";
+              return;
+            }
+            statusEl.textContent = "Chizma eksport qilinmadi — asl fayl...";
+          }
+
+          const { data: urlData, error: urlError } = await sb.storage
+            .from(BUCKET)
+            .createSignedUrl(data.storage_path, 60, {
+              download: data.filename
+            });
+
+          if (urlError) {
+            statusEl.textContent = "Error: " + urlError.message;
             return;
           }
-          const blobUrl = URL.createObjectURL(blob);
+
           const a = document.createElement("a");
-          a.href = blobUrl;
+          a.href = urlData.signedUrl;
           a.download = data.filename;
+          a.rel = "noopener";
           document.body.appendChild(a);
           a.click();
           a.remove();
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+
+          sb.rpc("increment_download_count", { file_id: data.id });
           statusEl.textContent = "Downloaded";
-          return;
+        } catch (err) {
+          console.error(err);
+          statusEl.textContent = "Error: " + (err.message || "download failed");
+        } finally {
+          downloadBtn.disabled = false;
         }
-
-        const { data: urlData, error: urlError } = await sb.storage
-          .from(BUCKET)
-          .createSignedUrl(data.storage_path, 60, {
-            download: data.filename
-          });
-
-        if (urlError) {
-          statusEl.textContent = "Error: " + urlError.message;
-          return;
-        }
-
-        const a = document.createElement("a");
-        a.href = urlData.signedUrl;
-        a.download = data.filename;
-        a.rel = "noopener";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-
-        sb.rpc("increment_download_count", { file_id: data.id });
-
-        statusEl.textContent = "Downloaded";
       };
     });
 }
@@ -697,13 +717,37 @@ function setupPublicImageEdit(editBtn, previewWrap, imgEl) {
   return {
     hasDrawing: () => hasStrokes,
     getEditedBlob: () => new Promise((resolve) => {
-      const off = document.createElement("canvas");
-      off.width = imgEl.naturalWidth;
-      off.height = imgEl.naturalHeight;
-      const octx = off.getContext("2d");
-      octx.drawImage(imgEl, 0, 0, off.width, off.height);
-      if (canvas) octx.drawImage(canvas, 0, 0);
-      off.toBlob(resolve, "image/png");
+      try {
+        const w = imgEl.naturalWidth || (canvas && canvas.width) || 0;
+        const h = imgEl.naturalHeight || (canvas && canvas.height) || 0;
+        if (!w || !h) {
+          resolve(null);
+          return;
+        }
+        const off = document.createElement("canvas");
+        off.width = w;
+        off.height = h;
+        const octx = off.getContext("2d");
+        try {
+          octx.drawImage(imgEl, 0, 0, w, h);
+        } catch (e) {
+          // CORS-tainted image — cannot export composite
+          console.error("drawImage base failed:", e);
+          resolve(null);
+          return;
+        }
+        if (canvas) {
+          try {
+            octx.drawImage(canvas, 0, 0, w, h);
+          } catch (e) {
+            console.error("drawImage strokes failed:", e);
+          }
+        }
+        off.toBlob((blob) => resolve(blob || null), "image/png");
+      } catch (e) {
+        console.error("getEditedBlob:", e);
+        resolve(null);
+      }
     })
   };
 }

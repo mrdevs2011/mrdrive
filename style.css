@@ -839,56 +839,65 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   order: 10;
 }
 
-/* Actions row */
+/* Actions row — icon-only buttons */
 .public-actions {
   display: flex;
   gap: 8px;
-  width: 100%;
+  width: auto;
   align-items: center;
+  justify-content: center;
 }
 .public-modal-box.has-preview .public-actions {
   width: auto;
   flex: 0 0 auto;
 }
-.public-actions #public-download-btn {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px 14px;
-}
-.public-modal-box.has-preview .public-actions #public-download-btn {
-  flex: 0 0 auto;
-  background: #18181b;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
+.public-modal-box .public-download-btn,
 .public-modal-box .public-fs-btn,
 .public-modal-box .public-edit-btn {
-  flex: 0 0 42px;
-  width: 42px;
-  height: 42px;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   padding: 0;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
+  box-shadow: none;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s, transform 0.15s;
 }
+.public-modal-box .public-download-btn {
+  background: #18181b;
+  color: #fff;
+  border-color: #18181b;
+}
+.public-modal-box .public-download-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.public-modal-box .public-download-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
+.public-modal-box .public-download-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.public-modal-box.has-preview .public-download-btn,
 .public-modal-box.has-preview .public-fs-btn,
 .public-modal-box.has-preview .public-edit-btn {
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+}
+.public-modal-box.has-preview .public-download-btn {
+  background: #18181b;
+  color: #fff;
+  border-color: #18181b;
 }
 .public-modal-box .public-fs-btn:hover:not(:disabled),
 .public-modal-box .public-edit-btn:hover {
@@ -992,19 +1001,31 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 .public-meta { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
 .public-expiry { font-size: 12px; color: var(--amber-text); margin-bottom: 22px; }
 .public-modal-box button {
-  width: 100%;
-  padding: 12px;
-  background: #18181b;
-  color: white;
-  border: none;
-  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, background 0.15s, transform 0.15s;
 }
-.public-modal-box button:hover:not(:disabled) { opacity: 0.85; }
-.public-modal-box button:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Default loading card only — not icon toolbar buttons */
+.public-modal-box:not(.has-preview) .public-actions {
+  margin-top: 8px;
+}
+.public-modal-box:not(.has-preview) .public-go-link {
+  margin-top: 0;
+  margin-left: 4px;
+  padding: 10px 12px;
+  font-size: 13px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+}
+.public-modal-box:not(.has-preview) .public-go-link:hover {
+  color: var(--text);
+  text-decoration: none;
+  background: var(--border);
+}
+.public-modal-box .public-status { margin-top: 12px; font-size: 13px; color: var(--text-muted); min-height: 16px; }
 .public-status { margin-top: 14px; font-size: 13px; color: var(--text-muted); min-height: 16px; }
 
 /* DURATION MODAL */
