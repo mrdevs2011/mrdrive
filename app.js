@@ -18,7 +18,23 @@ const ICON_UNLINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 const ICON_COPY = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15V5C5 4.44772 5.44772 4 6 4H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_REFRESH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 4V9H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20V15H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9C4 9 6 4 12 4C16 4 19 6 20 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 15C20 15 18 20 12 20C8 20 5 18 4 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_SEARCH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21L16.5 16.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
-const ICON_FOLDER = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7C3 5.89543 3.89543 5 5 5H9L11 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+const ICON_FOLDER = `<img class="folder-icon" src="/assets/folder-icon.png" width="16" height="16" alt="" draggable="false">`; // PNG asset, not inline SVG
+// File-type icons: separate PNG assets (not inline SVG), chosen by extension.
+// Used for the icon in every file row AND for the drag ghost. Preloaded so the
+// first drag already has them decoded (setDragImage can't wait for a fetch).
+const DRAG_ICON_URL = "/assets/file-icon.png";
+const DRAG_ICON_ZIP_URL = "/assets/zip-icon.png";
+const DRAG_ICON_VIDEO_URL = "/assets/video-icon.png";
+const DRAG_ICON_IMAGE_URL = "/assets/image-icon.png";
+[DRAG_ICON_URL, DRAG_ICON_ZIP_URL, DRAG_ICON_VIDEO_URL, DRAG_ICON_IMAGE_URL].forEach((u) => { const i = new Image(); i.src = u; });
+
+function fileIconUrlForName(name) {
+  name = name || "";
+  if (/\.zip$/i.test(name)) return DRAG_ICON_ZIP_URL;
+  if (/\.(mp4|m4v|mov|webm|mkv|avi|wmv|flv|mpe?g|3gp|ogv)$/i.test(name)) return DRAG_ICON_VIDEO_URL;
+  if (/\.(png|jpe?g|gif|webp|avif|bmp|svg|ico|heic|heif|tiff?)$/i.test(name)) return DRAG_ICON_IMAGE_URL;
+  return DRAG_ICON_URL;
+}
 
 const BUCKET = "files";
 const TABLE = "files";
@@ -1575,9 +1591,12 @@ function renderFiles() {
 
     return `
     <div class="file-card${selectedFileIds.has(String(f.id)) ? ' selected' : ''}" data-file-id="${f.id}" draggable="true" title="Drag to a folder">
-      <div class="file-info">
-        <span class="file-name">${escapeHtml(f.filename)}</span>
-        <span class="file-meta">${meta}</span>
+      <div class="file-lead">
+        <img class="file-type-icon" src="${fileIconUrlForName(f.filename)}" alt="" draggable="false">
+        <div class="file-info">
+          <span class="file-name">${escapeHtml(f.filename)}</span>
+          <span class="file-meta">${meta}</span>
+        </div>
       </div>
       <div class="file-actions">
         <div class="file-actions-more">
@@ -1879,29 +1898,37 @@ window.addEventListener("blur", endMarquee);
 // Small floating file-icon used as the drag image instead of the full
 // card. When several files are dragged together, a few icons are stacked
 // behind the front one with a count badge.
-const DRAG_ICON_SVG = `<svg width="44" height="44" viewBox="0 0 48 48" fill="none">
-  <path d="M10 4H29L38 13V44H10V4Z" fill="#eef2f8" stroke="#18181b" stroke-width="2.5" stroke-linejoin="round"/>
-  <path d="M29 4L38 13H29V4Z" fill="#3b82f6" stroke="#18181b" stroke-width="2.5" stroke-linejoin="round"/>
-  <line x1="16" y1="20" x2="32" y2="20" stroke="#18181b" stroke-width="2.5" stroke-linecap="round"/>
-  <line x1="16" y1="26" x2="32" y2="26" stroke="#18181b" stroke-width="2.5" stroke-linecap="round"/>
-  <line x1="16" y1="32" x2="32" y2="32" stroke="#18181b" stroke-width="2.5" stroke-linecap="round"/>
-  <line x1="16" y1="38" x2="25" y2="38" stroke="#18181b" stroke-width="2.5" stroke-linecap="round"/>
-</svg>`;
+function dragIconUrlFor(fileId) {
+  const f = allFiles.find((x) => String(x.id) === String(fileId));
+  return fileIconUrlForName((f && f.filename) || "");
+}
 
-function buildDragGhost(count) {
+function dragIconEl(url) {
+  const img = new Image();
+  img.src = url || DRAG_ICON_URL;
+  img.width = 44;
+  img.height = 44;
+  img.draggable = false;
+  img.style.cssText = "display:block; width:44px; height:44px;";
+  return img;
+}
+
+function buildDragGhost(ids, frontId) {
+  const count = ids.length;
   const ghost = document.createElement("div");
   ghost.style.cssText = "position:fixed; top:-1000px; left:-1000px; width:56px; height:56px; pointer-events:none;";
 
-  const stackCount = Math.min(count, 3);
-  for (let i = stackCount - 1; i >= 1; i--) {
+  // Front icon = the file you grabbed; the (up to 2) layers behind it = other dragged files.
+  const rest = ids.filter((id) => String(id) !== String(frontId)).slice(0, 2);
+  for (let i = rest.length; i >= 1; i--) {
     const layer = document.createElement("div");
     layer.style.cssText = `position:absolute; top:${i * 4}px; left:${i * 4}px; filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));`;
-    layer.innerHTML = DRAG_ICON_SVG;
+    layer.appendChild(dragIconEl(dragIconUrlFor(rest[i - 1])));
     ghost.appendChild(layer);
   }
   const front = document.createElement("div");
   front.style.cssText = "position:absolute; top:0; left:0; filter:drop-shadow(0 2px 5px rgba(0,0,0,.3));";
-  front.innerHTML = DRAG_ICON_SVG;
+  front.appendChild(dragIconEl(dragIconUrlFor(frontId)));
   ghost.appendChild(front);
 
   if (count > 1) {
@@ -1963,7 +1990,7 @@ fileListEl.addEventListener("dragstart", (e) => {
     .filter(Boolean);
   if (lines.length) e.dataTransfer.setData("DownloadURL", lines[0]);
 
-  const ghost = buildDragGhost(idsToMove.length);
+  const ghost = buildDragGhost(idsToMove, id);
   e.dataTransfer.setDragImage(ghost, -16, 6); // negative x: icon sits to the RIGHT of the cursor, not under it
   setTimeout(() => ghost.remove(), 0); // browser has already snapshotted it by now
 

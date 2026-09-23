@@ -1964,3 +1964,12 @@ body.is-dragging-file .selection-fab { animation: fab-invite 1s ease-in-out infi
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent), 0 12px 30px rgba(0,0,0,.22);
 }
 @keyframes fab-invite { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.08); } }
+
+.folder-icon { display: block; flex-shrink: 0; width: 16px; height: 16px; object-fit: contain; pointer-events: none; }
+
+/* File-type icon at the left of each row */
+.file-lead { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
+.file-type-icon { width: 34px; height: 34px; flex-shrink: 0; object-fit: contain; pointer-events: none; user-select: none;
+  transition: transform .2s ease; }
+.file-card.selected .file-type-icon { transform: scale(1.1); }
+@media (max-width: 600px) { .file-lead { gap: 10px; } .file-type-icon { width: 30px; height: 30px; } }
