@@ -1514,19 +1514,18 @@ async function explainDeleteFailure(id) {
   };
 }
 
-/** Telegram-style dissolve: the card's real pixels (fonts, colors, icons —
- *  exactly as rendered) break into tiny tiles that drift away and fade,
- *  like ash. The card itself collapses out of the list shortly after. */
-// Telegram-style message disintegration (matches demo.html timing/feel)
-const DISSOLVE_ANIM_MS   = 1800;  // total particle lifetime
-const DISSOLVE_SWEEP_MS  = 450;   // sweep wave from the click point
-const DISSOLVE_COLLAPSE_DELAY = 700; // when the list-row collapse starts
-const DISSOLVE_TILE      = 1.6;   // px per tile (css px, before dpr)
-const DISSOLVE_DRIFT_X   = 20;
-const DISSOLVE_DRIFT_Y   = -70;
-const DISSOLVE_FLOAT_UP  = -0.04;
-const DISSOLVE_NOISE_AMP = 10;
-const DISSOLVE_PAD       = 120;   // room for particles to float upward
+/* ============================================================
+   Telegram message-disintegration — 1:1 port of demo.html
+   Constants, physics, snapshot, tiles, paint loop, collapse.
+   ============================================================ */
+const ANIM_DURATION  = 1800;
+const SWEEP_DURATION = 450;
+const COLLAPSE_DELAY = 700;
+const TILE_SIZE      = 1.6;
+const DRIFT_X        = 20;
+const DRIFT_Y        = -70;
+const FLOAT_UP_FORCE = -0.04;
+const NOISE_AMP      = 10;
 
 let __mrdriveCssTextPromise = null;
 function getAppCssText() {
@@ -1546,27 +1545,45 @@ function __dissolveNoise1D(x) {
   return __dissolveHash(i) * (1 - u) + __dissolveHash(i + 1) * u;
 }
 
-// Snapshot the card exactly as it renders (real CSS, real fonts) via an
-// SVG foreignObject, then rasterize it to a canvas we can slice into tiles.
-async function __dissolveSnapshot(el, cssText) {
+/** DOM → SVG foreignObject image (demo.html domToImage, adapted for file-card). */
+async function __dissolveDomToImage(el, cssText) {
   const rect = el.getBoundingClientRect();
   const w = Math.ceil(rect.width);
   const h = Math.ceil(rect.height);
+
+  const clone = el.cloneNode(true);
+  clone.classList.remove("actions-open");
+
+  // Inline font/text styles onto every node (exact same as demo)
+  function applyExplicitStyles(src, dest) {
+    const s = window.getComputedStyle(src);
+    dest.style.fontFamily = s.fontFamily || "system-ui, -apple-system, sans-serif";
+    dest.style.fontSize = s.fontSize;
+    dest.style.fontWeight = s.fontWeight;
+    dest.style.lineHeight = s.lineHeight;
+    dest.style.letterSpacing = s.letterSpacing;
+    dest.style.color = s.color;
+    for (let i = 0; i < src.children.length; i++) {
+      if (dest.children[i]) applyExplicitStyles(src.children[i], dest.children[i]);
+    }
+  }
+  applyExplicitStyles(el, clone);
+
+  // CSS variables so the cloned card keeps theme colors inside the SVG
   const rootStyle = getComputedStyle(document.documentElement);
   const varNames = ["--bg","--surface","--border","--border-strong","--text","--text-muted",
     "--accent","--green","--green-bg","--green-text","--amber-bg","--amber-text",
     "--red-bg","--red-text","--blue-bg","--blue-text"];
-  const varsCss = varNames.map(n => `${n}: ${rootStyle.getPropertyValue(n).trim()};`).join(" ");
-
-  const clone = el.cloneNode(true);
-  clone.classList.remove("actions-open");
-  clone.style.width = w + "px";
+  const varsCss = varNames.map(n => `${n}:${rootStyle.getPropertyValue(n).trim()};`).join("");
 
   const markup =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
       `<foreignObject width="100%" height="100%">` +
-        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${w}px;height:${h}px;${varsCss}">` +
-          `<style>${cssText}</style>` +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${w}px;height:${h}px;margin:0;padding:0;box-sizing:border-box;${varsCss}">` +
+          `<style>` +
+            `* { box-sizing: border-box; } ` +
+            `${cssText}` +
+          `</style>` +
           clone.outerHTML +
         `</div>` +
       `</foreignObject>` +
@@ -1580,26 +1597,21 @@ async function __dissolveSnapshot(el, cssText) {
     image.src = url;
   });
 
-  const dpr = window.devicePixelRatio || 1;
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.ceil(w * dpr);
-  canvas.height = Math.ceil(h * dpr);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return { canvas, width: w, height: h, rect, dpr };
+  return { img, width: w, height: h, rect };
 }
 
-function __dissolveBuildTiles(canvas, cssWidth, cssHeight, dpr, epX, epY) {
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+/** Slice snapshot into tiles (demo.html buildTiles — identical physics). */
+function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY) {
+  const ctx = snapshotCanvas.getContext("2d", { willReadFrequently: true });
+  const data = ctx.getImageData(0, 0, snapshotCanvas.width, snapshotCanvas.height).data;
   const tiles = [];
   const maxDist = Math.hypot(cssWidth, cssHeight) || 1;
 
-  for (let y = 0; y < cssHeight; y += DISSOLVE_TILE) {
-    for (let x = 0; x < cssWidth; x += DISSOLVE_TILE) {
-      const midX = Math.min(canvas.width - 1, Math.floor((x + DISSOLVE_TILE * 0.5) * dpr));
-      const midY = Math.min(canvas.height - 1, Math.floor((y + DISSOLVE_TILE * 0.5) * dpr));
-      const a = data[(midY * canvas.width + midX) * 4 + 3];
+  for (let y = 0; y < cssHeight; y += TILE_SIZE) {
+    for (let x = 0; x < cssWidth; x += TILE_SIZE) {
+      const midX = Math.min(snapshotCanvas.width  - 1, Math.floor((x + TILE_SIZE * 0.5) * dpr));
+      const midY = Math.min(snapshotCanvas.height - 1, Math.floor((y + TILE_SIZE * 0.5) * dpr));
+      const a = data[(midY * snapshotCanvas.width + midX) * 4 + 3];
       if (a < 10) continue;
 
       const distToEp = Math.hypot(x - epX, y - epY) || 0.001;
@@ -1608,14 +1620,14 @@ function __dissolveBuildTiles(canvas, cssWidth, cssHeight, dpr, epX, epY) {
 
       tiles.push({
         sx: x * dpr, sy: y * dpr,
-        sw: Math.min(DISSOLVE_TILE * dpr, canvas.width - x * dpr),
-        sh: Math.min(DISSOLVE_TILE * dpr, canvas.height - y * dpr),
+        sw: Math.min(TILE_SIZE * dpr, snapshotCanvas.width  - x * dpr),
+        sh: Math.min(TILE_SIZE * dpr, snapshotCanvas.height - y * dpr),
         x, y,
         vx: (rnd(2) - 0.5) * 0.8,
         vy: -0.3 - rnd(3) * 0.5,
-        rot: (rnd(4) - 0.5) * 1.5,
+        rot:  (rnd(4) - 0.5) * 1.5,
         rotV: (rnd(5) - 0.5) * 0.2,
-        delay: (distToEp / maxDist) * DISSOLVE_SWEEP_MS + rnd(6) * 150,
+        delay: (distToEp / maxDist) * SWEEP_DURATION + rnd(6) * 150,
         fadeBias: 0.5 + rnd(7) * 0.5,
         seed,
       });
@@ -1624,117 +1636,140 @@ function __dissolveBuildTiles(canvas, cssWidth, cssHeight, dpr, epX, epY) {
   return tiles;
 }
 
-function __dissolvePaintLoop(overlayCtx, canvas, tiles, pad, cssW, cssH) {
-  const startT = performance.now();
-  const clearW = cssW + pad * 2;
-  const clearH = cssH + pad * 2;
+/**
+ * Full disintegrate flow — same structure as demo.html disintegrate():
+ * snapshot → tiles → overlay canvas → hide original → paint particles →
+ * after COLLAPSE_DELAY add .is-deleting (max-height collapse).
+ */
+async function playDeleteDissolve(card, clickX, clickY) {
+  if (!card || !card.isConnected) return;
 
-  function paint(elapsed) {
-    // clear in current (scaled) user space
-    overlayCtx.clearRect(0, 0, clearW, clearH);
-    let anyAlive = false;
-    for (let i = 0; i < tiles.length; i++) {
-      const t = tiles[i];
-      const local = elapsed - t.delay;
+  // Lock height so collapse transition has a from-value (like demo max-height:200px)
+  const startRect = card.getBoundingClientRect();
+  card.style.maxHeight = startRect.height + "px";
+  card.style.boxSizing = "border-box";
 
-      if (local < 0) {
-        overlayCtx.globalAlpha = 1;
-        overlayCtx.drawImage(canvas, t.sx, t.sy, t.sw, t.sh, t.x + pad, t.y + pad, DISSOLVE_TILE, DISSOLVE_TILE);
+  let cssText = "";
+  try {
+    cssText = await getAppCssText();
+  } catch (_) {}
+
+  let snapshotResult = null;
+  try {
+    snapshotResult = await __dissolveDomToImage(card, cssText);
+  } catch (err) {
+    // Snapshot failed — fall through to plain collapse
+  }
+
+  if (snapshotResult) {
+    const { img, width, height, rect } = snapshotResult;
+    const dpr = window.devicePixelRatio || 1;
+
+    const snapshotCanvas = document.createElement("canvas");
+    snapshotCanvas.width  = Math.ceil(width  * dpr);
+    snapshotCanvas.height = Math.ceil(height * dpr);
+    const sctx = snapshotCanvas.getContext("2d");
+    sctx.drawImage(img, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+
+    const epX = clickX !== undefined ? clickX - rect.left : width;
+    const epY = clickY !== undefined ? clickY - rect.top  : 0;
+    const tiles = __dissolveBuildTiles(snapshotCanvas, width, height, dpr, epX, epY);
+
+    const pad = 120;
+    const overlay = document.createElement("canvas");
+    overlay.className = "particle-canvas";
+    overlay.width  = Math.ceil((width  + pad * 2) * dpr);
+    overlay.height = Math.ceil((height + pad * 2) * dpr);
+    overlay.style.width  = (width  + pad * 2) + "px";
+    overlay.style.height = (height + pad * 2) + "px";
+    overlay.style.left = (rect.left - pad) + "px";
+    overlay.style.top  = (rect.top  - pad) + "px";
+    document.body.appendChild(overlay);
+
+    const octx = overlay.getContext("2d");
+    octx.scale(dpr, dpr);
+    octx.imageSmoothingEnabled = false;
+
+    const startT = performance.now();
+
+    function paint(elapsed) {
+      // clear in device-pixel space of the canvas element (demo does this)
+      octx.save();
+      octx.setTransform(1, 0, 0, 1, 0, 0);
+      octx.clearRect(0, 0, overlay.width, overlay.height);
+      octx.restore();
+
+      let anyAlive = false;
+
+      for (let i = 0; i < tiles.length; i++) {
+        const t = tiles[i];
+        const local = elapsed - t.delay;
+
+        if (local < 0) {
+          octx.globalAlpha = 1;
+          octx.drawImage(
+            snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
+            t.x + pad, t.y + pad, TILE_SIZE, TILE_SIZE
+          );
+          anyAlive = true;
+          continue;
+        }
+
+        const life = local / ANIM_DURATION;
+        if (life >= 1) continue;
         anyAlive = true;
-        continue;
+
+        const moveEase = 1 - Math.pow(1 - life, 2.2);
+        const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.5) - 0.5) * NOISE_AMP * life;
+
+        const px = t.x + t.vx * moveEase * DRIFT_X + nX;
+        const py = t.y + t.vy * moveEase * Math.abs(DRIFT_Y) + (FLOAT_UP_FORCE * local);
+
+        const fade = Math.min(1, life * t.fadeBias);
+        const alpha = Math.max(0, 1 - Math.pow(fade, 1.4));
+        if (alpha <= 0.01) continue;
+
+        const scale = 1 - life * 0.3;
+
+        octx.globalAlpha = alpha;
+        octx.save();
+        octx.translate(px + pad + TILE_SIZE * 0.5, py + pad + TILE_SIZE * 0.5);
+        octx.rotate(t.rot + t.rotV * moveEase * 3);
+        octx.scale(scale, scale);
+        octx.drawImage(
+          snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
+          -TILE_SIZE * 0.5, -TILE_SIZE * 0.5, TILE_SIZE, TILE_SIZE
+        );
+        octx.restore();
       }
 
-      const life = local / DISSOLVE_ANIM_MS;
-      if (life >= 1) continue;
-      anyAlive = true;
-
-      const moveEase = 1 - Math.pow(1 - life, 2.2);
-      const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.5) - 0.5) * DISSOLVE_NOISE_AMP * life;
-      const px = t.x + t.vx * moveEase * DISSOLVE_DRIFT_X + nX;
-      const py = t.y + t.vy * moveEase * Math.abs(DISSOLVE_DRIFT_Y) + (DISSOLVE_FLOAT_UP * local);
-
-      const fade = Math.min(1, life * t.fadeBias);
-      const alpha = Math.max(0, 1 - Math.pow(fade, 1.4));
-      if (alpha <= 0.01) continue;
-
-      const scale = 1 - life * 0.3;
-      overlayCtx.globalAlpha = alpha;
-      overlayCtx.save();
-      overlayCtx.translate(px + pad + DISSOLVE_TILE * 0.5, py + pad + DISSOLVE_TILE * 0.5);
-      overlayCtx.rotate(t.rot + t.rotV * moveEase * 3);
-      overlayCtx.scale(scale, scale);
-      overlayCtx.drawImage(canvas, t.sx, t.sy, t.sw, t.sh, -DISSOLVE_TILE * 0.5, -DISSOLVE_TILE * 0.5, DISSOLVE_TILE, DISSOLVE_TILE);
-      overlayCtx.restore();
+      return anyAlive;
     }
-    return anyAlive;
+
+    paint(0);
+    card.style.visibility = "hidden";
+
+    function frame(now) {
+      const alive = paint(now - startT);
+      if (alive) {
+        requestAnimationFrame(frame);
+      } else {
+        overlay.remove();
+      }
+    }
+    requestAnimationFrame(frame);
+  } else {
+    card.style.visibility = "hidden";
   }
 
-  paint(0);
-  const overlayEl = overlayCtx.canvas;
-  function frame(now) {
-    const alive = paint(now - startT);
-    if (alive) requestAnimationFrame(frame);
-    else overlayEl.remove();
-  }
-  requestAnimationFrame(frame);
-}
-
-/** Telegram-style dissolve: card's exact pixels break into ash-like tiles
- *  that drift upward and fade from the click point, then the row collapses. */
-function playDeleteDissolve(card, clickX, clickY) {
+  // Collapse row after COLLAPSE_DELAY (demo: class "collapsing")
   return new Promise((resolve) => {
-    if (!card || !card.isConnected) {
-      resolve();
-      return;
-    }
-    const startRect = card.getBoundingClientRect();
-    card.style.height = startRect.height + "px";
-    card.style.maxHeight = startRect.height + "px";
-    card.style.boxSizing = "border-box";
-    card.style.overflow = "hidden";
-    card.style.transition = "max-height .5s cubic-bezier(.22,.61,.36,1), margin .5s cubic-bezier(.22,.61,.36,1), opacity .5s ease, padding .5s ease, border-width .5s ease";
-
-    getAppCssText().then((cssText) => __dissolveSnapshot(card, cssText)).then(({ canvas, width, height, rect, dpr }) => {
-      const epX = clickX !== undefined ? clickX - rect.left : width;
-      const epY = clickY !== undefined ? clickY - rect.top : 0;
-      const tiles = __dissolveBuildTiles(canvas, width, height, dpr, epX, epY);
-
-      const pad = DISSOLVE_PAD;
-      const overlay = document.createElement("canvas");
-      overlay.className = "particle-canvas";
-      overlay.width = Math.ceil((width + pad * 2) * dpr);
-      overlay.height = Math.ceil((height + pad * 2) * dpr);
-      overlay.style.width = (width + pad * 2) + "px";
-      overlay.style.height = (height + pad * 2) + "px";
-      overlay.style.left = (rect.left - pad) + "px";
-      overlay.style.top = (rect.top - pad) + "px";
-      document.body.appendChild(overlay);
-
-      const octx = overlay.getContext("2d");
-      octx.scale(dpr, dpr);
-      octx.imageSmoothingEnabled = false;
-
-      // Hide the real card; particles take over visually
-      card.style.visibility = "hidden";
-      __dissolvePaintLoop(octx, canvas, tiles, pad, width, height);
-    }).catch(() => {
-      // Snapshot failed — still collapse the row
-    });
-
-    // Collapse the row a beat later (same timing as Telegram demo)
     setTimeout(() => {
       if (!card.isConnected) {
         resolve();
         return;
       }
       card.classList.add("is-deleting");
-      card.style.maxHeight = "0";
-      card.style.marginTop = "0";
-      card.style.marginBottom = "0";
-      card.style.paddingTop = "0";
-      card.style.paddingBottom = "0";
-      card.style.opacity = "0";
-      card.style.borderWidth = "0";
       let settled = false;
       const done = () => {
         if (settled) return;
@@ -1742,9 +1777,8 @@ function playDeleteDissolve(card, clickX, clickY) {
         resolve();
       };
       card.addEventListener("transitionend", done, { once: true });
-      // Safety: resolve even if transitionend never fires
       setTimeout(done, 600);
-    }, DISSOLVE_COLLAPSE_DELAY);
+    }, COLLAPSE_DELAY);
   });
 }
 
