@@ -5,6 +5,6 @@
     }
   },
   "rewrites": [
-    { "source": "/f/:folder*", "destination": "/index.html" }
+    { "source": "/f/(.*)", "destination": "/index.html" }
   ]
 }

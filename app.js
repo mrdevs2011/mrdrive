@@ -29,6 +29,40 @@ let allFolders = [];
 let currentSearch = "";
 let currentFolder = null;
 
+// Claude / remote activity: don't toast our own uploads/deletes as "Claude"
+const localUploadKeys = new Set(); // "filename:::size"
+const localDeleteIds = new Set();
+const highlightFileIds = new Set(); // ids to flash green after render
+let filesListReady = false;
+
+function markLocalUpload(filename, size) {
+  const key = `${filename}:::${size}`;
+  localUploadKeys.add(key);
+  setTimeout(() => localUploadKeys.delete(key), 20000);
+}
+function markLocalDelete(id) {
+  localDeleteIds.add(String(id));
+  setTimeout(() => localDeleteIds.delete(String(id)), 20000);
+}
+function notifyRemoteFileChanges(prevFiles, nextFiles) {
+  if (!filesListReady) return;
+  const prevById = new Map((prevFiles || []).map((f) => [f.id, f]));
+  const nextById = new Map((nextFiles || []).map((f) => [f.id, f]));
+
+  for (const f of nextFiles || []) {
+    if (prevById.has(f.id)) continue;
+    const key = `${f.filename}:::${f.size}`;
+    if (localUploadKeys.has(key)) continue;
+    highlightFileIds.add(String(f.id));
+    showToast(`Claude ${f.filename} qo'shdi`);
+  }
+  for (const f of prevFiles || []) {
+    if (nextById.has(f.id)) continue;
+    if (localDeleteIds.has(String(f.id))) continue;
+    showToast(`Claude ${f.filename} o'chirdi`, "warning");
+  }
+}
+
 // URL routing (SPA):
 //   /                              → all files
 //   /f/folder/                     → folder
@@ -266,21 +300,25 @@ function showPublicDownloadModal(token) {
   modal.innerHTML = `
     <div class="public-modal-backdrop">
       <div class="public-modal-box" id="public-modal-box">
-        <div id="public-preview-wrap"></div>
-        <a class="public-go-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer">MRdrive</a>
-        <div class="public-info" id="public-info">
-          <div class="public-modal-icon" id="public-modal-icon">${ICON_DOWNLOAD}</div>
-          <h2 id="public-filename">Loading...</h2>
-          <p id="public-meta" class="public-meta"></p>
+        <div class="public-topbar" id="public-info">
+          <div class="public-topbar-main">
+            <div class="public-modal-icon" id="public-modal-icon">${ICON_DOWNLOAD}</div>
+            <div class="public-topbar-text">
+              <h2 id="public-filename">Loading...</h2>
+              <p id="public-meta" class="public-meta"></p>
+            </div>
+          </div>
           <div class="public-actions">
             <button id="public-edit-btn" class="public-edit-btn" title="Tahrirlash" style="display:none;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             </button>
             <button id="public-download-btn" disabled>${ICON_DOWNLOAD}<span>Download</span></button>
             <button id="public-fs-btn" class="public-fs-btn" title="Fullscreen" aria-label="Fullscreen" style="display:none;">${ICON_FULLSCREEN}</button>
+            <a class="public-go-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer">MRdrive</a>
           </div>
           <p id="public-status" class="public-status"></p>
         </div>
+        <div id="public-preview-wrap"></div>
       </div>
     </div>
   `;
@@ -839,15 +877,7 @@ sb.auth.onAuthStateChange((event, session) => {
 // UPLOAD  (dedup + real progress bar)
 // ==========================================
 
-const BLOCKED_EXTENSIONS = [
-  "exe", "bat", "cmd", "sh", "msi", "com", "scr",
-  "vbs", "js", "jar", "ps1", "app", "dmg", "apk"
-];
-
-function isBlockedFile(filename) {
-  const ext = filename.split(".").pop().toLowerCase();
-  return BLOCKED_EXTENSIONS.includes(ext);
-}
+// No blocked extensions — any file type can be uploaded.
 
 // --- Deduplication -------------------------------------------------------
 // A file is "the same" if name + size match. lastModified is deliberately NOT
@@ -968,11 +998,6 @@ function uploadToStorage(path, file, accessToken, onProgress) {
 }
 
 async function uploadFile(file) {
-  if (isBlockedFile(file.name)) {
-    showAlert(`Blocked: ${file.name} — this file type isn't allowed for security reasons.`);
-    return;
-  }
-
   const fileId = getFileUniqueId(file);
   if (uploadingFileIds.has(fileId)) {
     notifyDuplicate(file);
@@ -1013,6 +1038,7 @@ async function uploadFile(file) {
       throw new Error(`DB error: ${dbError.message}`);
     }
 
+    markLocalUpload(file.name, file.size);
     ui.setDone();
     keepBlocked = true;
     loadFiles();
@@ -1086,8 +1112,12 @@ async function loadFiles(silent) {
     if (same) return;
   }
 
+  // Remote (Claude MCP / other session) add/remove → toast + green flash
+  notifyRemoteFileChanges(allFiles, newFiles);
+
   allFiles = newFiles;
   allFolders = newFolders;
+  filesListReady = true;
   renderToolbar();
   renderFiles();
 }
@@ -1165,9 +1195,9 @@ window.addEventListener("popstate", (e) => {
 });
 
 async function createFolder() {
-  const name = await showPrompt("Folder name", {
+  const name = await showPrompt("New folder", {
     okLabel: "Create",
-    placeholder: "e.g. Claude, Work, Photos"
+    placeholder: "Folder name"
   });
   if (name == null || !String(name).trim()) return;
   const trimmed = String(name).trim();
@@ -1383,6 +1413,8 @@ async function explainDeleteFailure(id) {
 
 async function deleteFile(id, path) {
   if (!(await showConfirm("Delete this file?", "Delete"))) return;
+
+  markLocalDelete(id);
 
   // 1) Database row first. .select() returns the rows that were actually deleted,
   //    so a silent RLS block (0 rows, no error) can be detected instead of ignored.
@@ -1629,22 +1661,22 @@ function showPrompt(message, opts = {}) {
     modal.id = "prompt-modal";
     modal.innerHTML = `
       <div class="modal-backdrop">
-        <div class="modal-box">
-          <p class="confirm-msg"></p>
+        <div class="modal-box prompt-box">
+          <h3 class="prompt-title"></h3>
           <input type="text" class="prompt-input" autocomplete="off" spellcheck="false" />
-          <div class="confirm-actions">
-            <button type="button" class="confirm-cancel"></button>
-            <button type="button" class="confirm-ok"></button>
+          <div class="prompt-actions">
+            <button type="button" class="prompt-btn prompt-btn-cancel"></button>
+            <button type="button" class="prompt-btn prompt-btn-ok"></button>
           </div>
         </div>
       </div>
     `;
-    modal.querySelector(".confirm-msg").textContent = message;
+    modal.querySelector(".prompt-title").textContent = message;
     const input = modal.querySelector(".prompt-input");
     input.placeholder = placeholder;
     input.value = defaultValue;
-    modal.querySelector(".confirm-cancel").textContent = cancelLabel;
-    modal.querySelector(".confirm-ok").textContent = okLabel;
+    modal.querySelector(".prompt-btn-cancel").textContent = cancelLabel;
+    modal.querySelector(".prompt-btn-ok").textContent = okLabel;
     document.body.appendChild(modal);
 
     const onKey = (e) => {
@@ -1661,14 +1693,14 @@ function showPrompt(message, opts = {}) {
     };
     document.addEventListener("keydown", onKey);
 
-    modal.querySelector(".confirm-cancel").onclick = () => done(null);
-    modal.querySelector(".confirm-ok").onclick = () => done(input.value);
+    modal.querySelector(".prompt-btn-cancel").onclick = () => done(null);
+    modal.querySelector(".prompt-btn-ok").onclick = () => done(input.value);
     modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
       if (e.target.classList.contains("modal-backdrop")) done(null);
     });
     requestAnimationFrame(() => {
       input.focus();
-      input.select();
+      if (defaultValue) input.select();
     });
   });
 }
@@ -1925,6 +1957,16 @@ renderFiles = function () {
     if (!f) return;
     card.dataset.fileId = String(f.id);
     if (openIds.has(String(f.id))) card.classList.add("actions-open");
+    // Green flash for files just added remotely (e.g. Claude MCP)
+    if (highlightFileIds.has(String(f.id))) {
+      card.classList.add("file-card-new");
+      const id = String(f.id);
+      setTimeout(() => {
+        highlightFileIds.delete(id);
+        const el = fileListEl.querySelector(`.file-card[data-file-id="${id}"]`);
+        if (el) el.classList.remove("file-card-new");
+      }, 2800);
+    }
   });
 };
 
