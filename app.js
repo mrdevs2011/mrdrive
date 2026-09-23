@@ -1167,11 +1167,14 @@ fileInput.addEventListener("change", (e) => {
 });
 
 dropzone.addEventListener("dragover", (e) => {
+  // Ignore internal file-card drags (moving between folders)
+  if (e.dataTransfer.types.includes("application/x-mrdrive-file")) return;
   e.preventDefault();
   dropzone.classList.add("dragover");
 });
 dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
 dropzone.addEventListener("drop", (e) => {
+  if (e.dataTransfer.types.includes("application/x-mrdrive-file")) return;
   e.preventDefault();
   dropzone.classList.remove("dragover");
   handleFiles(e.dataTransfer.files);
@@ -1240,12 +1243,12 @@ function renderToolbar() {
       <input type="text" id="search-input" placeholder="Search files..." value="${escapeHtml(currentSearch)}" />
     </div>
     <div class="folder-tabs">
-      <button class="folder-tab ${currentFolder === null ? 'active' : ''}" onclick="setFolder(null)">
+      <button class="folder-tab ${currentFolder === null ? 'active' : ''}" data-folder="" onclick="setFolder(null)" title="Drop files here to remove from folder">
         ${ICON_FOLDER} All
       </button>
       ${allFolders.map(f => `
-        <div class="folder-tab-wrap">
-          <button class="folder-tab ${currentFolder === f.name ? 'active' : ''}" onclick="setFolder('${escapeJs(f.name)}')">
+        <div class="folder-tab-wrap" data-folder="${escapeHtml(f.name)}">
+          <button class="folder-tab ${currentFolder === f.name ? 'active' : ''}" data-folder="${escapeHtml(f.name)}" onclick="setFolder('${escapeJs(f.name)}')" title="Drop files here">
             ${ICON_FOLDER} ${escapeHtml(f.name)}
           </button>
           <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}')" title="Delete folder">
@@ -1262,6 +1265,88 @@ function renderToolbar() {
     currentSearch = e.target.value;
     renderFiles();
   });
+
+  wireFolderDropTargets(toolbar);
+}
+
+/** Folder tabs as drop targets for dragging files between folders. */
+function wireFolderDropTargets(toolbar) {
+  if (!toolbar) return;
+
+  function clearDragOver() {
+    toolbar.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+  }
+
+  function isFileDrag(dt) {
+    const types = Array.from(dt.types || []);
+    return types.includes("application/x-mrdrive-file") || types.includes("text/plain");
+  }
+
+  function onDragOver(e) {
+    if (!isFileDrag(e.dataTransfer)) return;
+    const target = e.target.closest("[data-folder]");
+    if (!target || target.classList.contains("new-folder-btn")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    clearDragOver();
+    target.classList.add("drag-over");
+    const wrap = target.closest(".folder-tab-wrap");
+    if (wrap) wrap.classList.add("drag-over");
+  }
+
+  function onDragLeave(e) {
+    const target = e.target.closest("[data-folder]");
+    if (!target) return;
+    if (target.contains(e.relatedTarget)) return;
+    target.classList.remove("drag-over");
+    const wrap = target.closest(".folder-tab-wrap");
+    if (wrap && !wrap.contains(e.relatedTarget)) wrap.classList.remove("drag-over");
+  }
+
+  function onDrop(e) {
+    if (!isFileDrag(e.dataTransfer)) return;
+    const target = e.target.closest("[data-folder]");
+    if (!target || target.classList.contains("new-folder-btn")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    clearDragOver();
+    const fileId =
+      e.dataTransfer.getData("application/x-mrdrive-file") ||
+      e.dataTransfer.getData("text/plain");
+    if (!fileId) return;
+    const raw = target.getAttribute("data-folder");
+    const targetFolder = raw === "" || raw == null ? null : raw;
+    moveFileToFolder(fileId, targetFolder);
+  }
+
+  // Bind once on the toolbar (re-created each render, so always fresh)
+  toolbar.addEventListener("dragover", onDragOver);
+  toolbar.addEventListener("dragleave", onDragLeave);
+  toolbar.addEventListener("drop", onDrop);
+}
+
+async function moveFileToFolder(fileId, targetFolder) {
+  const file = allFiles.find((f) => String(f.id) === String(fileId));
+  if (!file) return;
+
+  const current = file.folder || null;
+  const next = targetFolder || null;
+  if (current === next) {
+    showToast(next ? `Already in "${next}"` : "Already in All", "warning");
+    return;
+  }
+
+  const { error } = await sb.from(TABLE).update({ folder: next }).eq("id", fileId);
+  if (error) {
+    showAlert("Error: " + error.message);
+    return;
+  }
+
+  file.folder = next;
+  const label = next ? `"${next}"` : "All";
+  showToast(`Moved to ${label}`);
+  renderFiles();
+  // If we're viewing a folder and the file left it, list updates above already.
 }
 
 function setFolder(folder, opts) {
@@ -1402,7 +1487,7 @@ function renderFiles() {
     }
 
     return `
-    <div class="file-card" data-file-id="${f.id}">
+    <div class="file-card" data-file-id="${f.id}" draggable="true" title="Drag to a folder">
       <div class="file-info">
         <span class="file-name">${escapeHtml(f.filename)}</span>
         <span class="file-meta">${meta}</span>
@@ -1455,6 +1540,31 @@ fileListEl.addEventListener("click", (e) => {
   const wasOpen = card.classList.contains("actions-open");
   document.querySelectorAll(".file-card.actions-open").forEach(c => c.classList.remove("actions-open"));
   if (!wasOpen) card.classList.add("actions-open");
+});
+
+// Drag file cards onto folder tabs to move them
+fileListEl.addEventListener("dragstart", (e) => {
+  // Don't start drag from action buttons
+  if (e.target.closest(".file-actions") || e.target.closest("button")) {
+    e.preventDefault();
+    return;
+  }
+  const card = e.target.closest(".file-card");
+  if (!card || !card.dataset.fileId) {
+    e.preventDefault();
+    return;
+  }
+  e.dataTransfer.setData("application/x-mrdrive-file", card.dataset.fileId);
+  e.dataTransfer.setData("text/plain", card.dataset.fileId); // fallback
+  e.dataTransfer.effectAllowed = "move";
+  card.classList.add("is-dragging");
+  document.body.classList.add("is-dragging-file");
+});
+fileListEl.addEventListener("dragend", (e) => {
+  const card = e.target.closest(".file-card");
+  if (card) card.classList.remove("is-dragging");
+  document.body.classList.remove("is-dragging-file");
+  document.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
 });
 
 async function downloadFile(id, path, filename) {
@@ -1515,8 +1625,9 @@ async function explainDeleteFailure(id) {
 }
 
 /* ============================================================
-   Telegram message-disintegration — 1:1 port of demo.html
-   Constants, physics, snapshot, tiles, paint loop, collapse.
+   Telegram message-disintegration — robust 1:1 of demo.html
+   - Fully inlined computed styles (no fetch dependency)
+   - Guaranteed visual effect (never snaps away)
    ============================================================ */
 const ANIM_DURATION  = 1800;
 const SWEEP_DURATION = 450;
@@ -1526,14 +1637,6 @@ const DRIFT_X        = 20;
 const DRIFT_Y        = -70;
 const FLOAT_UP_FORCE = -0.04;
 const NOISE_AMP      = 10;
-
-let __mrdriveCssTextPromise = null;
-function getAppCssText() {
-  if (!__mrdriveCssTextPromise) {
-    __mrdriveCssTextPromise = fetch("/style.css").then(r => r.text()).catch(() => "");
-  }
-  return __mrdriveCssTextPromise;
-}
 
 function __dissolveHash(n) {
   const s = Math.sin(n * 127.1) * 43758.5453;
@@ -1545,72 +1648,113 @@ function __dissolveNoise1D(x) {
   return __dissolveHash(i) * (1 - u) + __dissolveHash(i + 1) * u;
 }
 
-/** DOM → SVG foreignObject image (demo.html domToImage, adapted for file-card). */
-async function __dissolveDomToImage(el, cssText) {
-  const rect = el.getBoundingClientRect();
-  const w = Math.ceil(rect.width);
-  const h = Math.ceil(rect.height);
-
-  const clone = el.cloneNode(true);
-  clone.classList.remove("actions-open");
-
-  // Inline font/text styles onto every node (exact same as demo)
-  function applyExplicitStyles(src, dest) {
-    const s = window.getComputedStyle(src);
-    dest.style.fontFamily = s.fontFamily || "system-ui, -apple-system, sans-serif";
-    dest.style.fontSize = s.fontSize;
-    dest.style.fontWeight = s.fontWeight;
-    dest.style.lineHeight = s.lineHeight;
-    dest.style.letterSpacing = s.letterSpacing;
-    dest.style.color = s.color;
-    for (let i = 0; i < src.children.length; i++) {
-      if (dest.children[i]) applyExplicitStyles(src.children[i], dest.children[i]);
-    }
+/** Inline every visual computed style so SVG foreignObject needs no external CSS. */
+function __dissolveInlineAllStyles(src, dest) {
+  const s = window.getComputedStyle(src);
+  // Copy the important visual props (full cssText of computed is not assignable)
+  const props = [
+    "box-sizing","display","position","width","height","min-width","min-height","max-width","max-height",
+    "margin","margin-top","margin-right","margin-bottom","margin-left",
+    "padding","padding-top","padding-right","padding-bottom","padding-left",
+    "border","border-radius","border-top","border-right","border-bottom","border-left",
+    "border-width","border-style","border-color",
+    "background","background-color","background-image","box-shadow",
+    "color","font-family","font-size","font-weight","font-style","line-height","letter-spacing",
+    "text-align","text-decoration","text-overflow","white-space","word-break","overflow","overflow-x","overflow-y",
+    "opacity","visibility","flex","flex-direction","flex-wrap","align-items","justify-content","align-self","gap",
+    "grid-template-columns","grid-template-rows","object-fit","vertical-align","cursor"
+  ];
+  for (const p of props) {
+    try {
+      const v = s.getPropertyValue(p);
+      if (v) dest.style.setProperty(p, v);
+    } catch (_) {}
   }
-  applyExplicitStyles(el, clone);
-
-  // CSS variables so the cloned card keeps theme colors inside the SVG
-  const rootStyle = getComputedStyle(document.documentElement);
-  const varNames = ["--bg","--surface","--border","--border-strong","--text","--text-muted",
-    "--accent","--green","--green-bg","--green-text","--amber-bg","--amber-text",
-    "--red-bg","--red-text","--blue-bg","--blue-text"];
-  const varsCss = varNames.map(n => `${n}:${rootStyle.getPropertyValue(n).trim()};`).join("");
-
-  const markup =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
-      `<foreignObject width="100%" height="100%">` +
-        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${w}px;height:${h}px;margin:0;padding:0;box-sizing:border-box;${varsCss}">` +
-          `<style>` +
-            `* { box-sizing: border-box; } ` +
-            `${cssText}` +
-          `</style>` +
-          clone.outerHTML +
-        `</div>` +
-      `</foreignObject>` +
-    `</svg>`;
-
-  const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
-  const img = await new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = reject;
-    image.src = url;
-  });
-
-  return { img, width: w, height: h, rect };
+  // Kill interactive chrome in the snapshot
+  if (dest.classList && (dest.classList.contains("file-actions") || dest.classList.contains("file-actions-more"))) {
+    dest.style.display = "none";
+  }
+  const srcChildren = src.children;
+  const destChildren = dest.children;
+  for (let i = 0; i < srcChildren.length; i++) {
+    if (destChildren[i]) __dissolveInlineAllStyles(srcChildren[i], destChildren[i]);
+  }
 }
 
-/** Slice snapshot into tiles (demo.html buildTiles — identical physics). */
+/** DOM → canvas via SVG foreignObject (demo.html approach, self-contained styles). */
+function __dissolveDomToCanvas(el) {
+  return new Promise((resolve, reject) => {
+    const rect = el.getBoundingClientRect();
+    const w = Math.ceil(rect.width);
+    const h = Math.ceil(rect.height);
+    if (w < 2 || h < 2) {
+      reject(new Error("card too small"));
+      return;
+    }
+
+    const clone = el.cloneNode(true);
+    clone.classList.remove("actions-open");
+    clone.style.margin = "0";
+    clone.style.transform = "none";
+    clone.style.width = w + "px";
+    clone.style.height = h + "px";
+    __dissolveInlineAllStyles(el, clone);
+
+    // Hide action buttons in snapshot (cleaner, like a message bubble)
+    clone.querySelectorAll(".file-actions, .file-actions-more, button").forEach((b) => {
+      b.style.display = "none";
+    });
+
+    const markup =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+        `<foreignObject width="100%" height="100%" x="0" y="0">` +
+          `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${w}px;height:${h}px;margin:0;padding:0;box-sizing:border-box;">` +
+            clone.outerHTML +
+          `</div>` +
+        `</foreignObject>` +
+      `</svg>`;
+
+    const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(markup);
+    const img = new Image();
+    img.onload = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(w * dpr);
+      canvas.height = Math.ceil(h * dpr);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // Sanity: if almost fully transparent, treat as failure
+      try {
+        const sample = ctx.getImageData(0, 0, Math.min(8, canvas.width), Math.min(8, canvas.height)).data;
+        let opaque = 0;
+        for (let i = 3; i < sample.length; i += 4) if (sample[i] > 10) opaque++;
+        if (opaque < 2) {
+          reject(new Error("blank snapshot"));
+          return;
+        }
+      } catch (_) {}
+      resolve({ canvas, width: w, height: h, rect, dpr });
+    };
+    img.onerror = () => reject(new Error("svg image load failed"));
+    img.src = url;
+  });
+}
+
 function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY) {
   const ctx = snapshotCanvas.getContext("2d", { willReadFrequently: true });
   const data = ctx.getImageData(0, 0, snapshotCanvas.width, snapshotCanvas.height).data;
   const tiles = [];
   const maxDist = Math.hypot(cssWidth, cssHeight) || 1;
+  // Keep particle count reasonable on wide cards (still looks dense)
+  let tile = TILE_SIZE;
+  const est = (cssWidth / tile) * (cssHeight / tile);
+  if (est > 12000) tile = 2.2;
+  if (est > 20000) tile = 2.8;
 
-  for (let y = 0; y < cssHeight; y += TILE_SIZE) {
-    for (let x = 0; x < cssWidth; x += TILE_SIZE) {
-      const midX = Math.min(snapshotCanvas.width  - 1, Math.floor((x + TILE_SIZE * 0.5) * dpr));
-      const midY = Math.min(snapshotCanvas.height - 1, Math.floor((y + TILE_SIZE * 0.5) * dpr));
+  for (let y = 0; y < cssHeight; y += tile) {
+    for (let x = 0; x < cssWidth; x += tile) {
+      const midX = Math.min(snapshotCanvas.width  - 1, Math.floor((x + tile * 0.5) * dpr));
+      const midY = Math.min(snapshotCanvas.height - 1, Math.floor((y + tile * 0.5) * dpr));
       const a = data[(midY * snapshotCanvas.width + midX) * 4 + 3];
       if (a < 10) continue;
 
@@ -1620,9 +1764,9 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
 
       tiles.push({
         sx: x * dpr, sy: y * dpr,
-        sw: Math.min(TILE_SIZE * dpr, snapshotCanvas.width  - x * dpr),
-        sh: Math.min(TILE_SIZE * dpr, snapshotCanvas.height - y * dpr),
-        x, y,
+        sw: Math.min(tile * dpr, snapshotCanvas.width  - x * dpr),
+        sh: Math.min(tile * dpr, snapshotCanvas.height - y * dpr),
+        x, y, tile,
         vx: (rnd(2) - 0.5) * 0.8,
         vy: -0.3 - rnd(3) * 0.5,
         rot:  (rnd(4) - 0.5) * 1.5,
@@ -1636,146 +1780,166 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
   return tiles;
 }
 
+/** Fallback when pixel snapshot fails: whole card floats up & fades (still not a snap). */
+function __dissolveFloatFallback(card) {
+  return new Promise((resolve) => {
+    const rect = card.getBoundingClientRect();
+    const ghost = card.cloneNode(true);
+    ghost.classList.remove("actions-open");
+    ghost.style.cssText = [
+      "position:fixed",
+      `left:${rect.left}px`,
+      `top:${rect.top}px`,
+      `width:${rect.width}px`,
+      `height:${rect.height}px`,
+      "margin:0",
+      "z-index:9998",
+      "pointer-events:none",
+      "box-sizing:border-box",
+      "transition:transform 1.1s cubic-bezier(.22,.61,.36,1), opacity 1.1s ease",
+      "transform:translateY(0) scale(1)",
+      "opacity:1"
+    ].join(";");
+    document.body.appendChild(ghost);
+    card.style.visibility = "hidden";
+    requestAnimationFrame(() => {
+      ghost.style.transform = "translateY(-90px) scale(0.96)";
+      ghost.style.opacity = "0";
+    });
+    setTimeout(() => {
+      ghost.remove();
+      resolve();
+    }, 1200);
+  });
+}
+
 /**
- * Full disintegrate flow — same structure as demo.html disintegrate():
- * snapshot → tiles → overlay canvas → hide original → paint particles →
- * after COLLAPSE_DELAY add .is-deleting (max-height collapse).
+ * Full disintegrate — demo.html physics.
+ * Always produces a visible effect; never snaps the card away.
  */
 async function playDeleteDissolve(card, clickX, clickY) {
   if (!card || !card.isConnected) return;
 
-  // Lock height so collapse transition has a from-value (like demo max-height:200px)
   const startRect = card.getBoundingClientRect();
   card.style.maxHeight = startRect.height + "px";
   card.style.boxSizing = "border-box";
+  card.style.overflow = "hidden";
 
-  let cssText = "";
+  let snap = null;
   try {
-    cssText = await getAppCssText();
-  } catch (_) {}
-
-  let snapshotResult = null;
-  try {
-    snapshotResult = await __dissolveDomToImage(card, cssText);
+    snap = await __dissolveDomToCanvas(card);
   } catch (err) {
-    // Snapshot failed — fall through to plain collapse
+    console.warn("[dissolve] snapshot failed, using float fallback:", err);
   }
 
-  if (snapshotResult) {
-    const { img, width, height, rect } = snapshotResult;
-    const dpr = window.devicePixelRatio || 1;
-
-    const snapshotCanvas = document.createElement("canvas");
-    snapshotCanvas.width  = Math.ceil(width  * dpr);
-    snapshotCanvas.height = Math.ceil(height * dpr);
-    const sctx = snapshotCanvas.getContext("2d");
-    sctx.drawImage(img, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
-
-    const epX = clickX !== undefined ? clickX - rect.left : width;
-    const epY = clickY !== undefined ? clickY - rect.top  : 0;
+  if (snap && snap.canvas) {
+    const { canvas: snapshotCanvas, width, height, rect, dpr } = snap;
+    const epX = clickX !== undefined ? clickX - rect.left : width * 0.85;
+    const epY = clickY !== undefined ? clickY - rect.top  : height * 0.5;
     const tiles = __dissolveBuildTiles(snapshotCanvas, width, height, dpr, epX, epY);
 
-    const pad = 120;
-    const overlay = document.createElement("canvas");
-    overlay.className = "particle-canvas";
-    overlay.width  = Math.ceil((width  + pad * 2) * dpr);
-    overlay.height = Math.ceil((height + pad * 2) * dpr);
-    overlay.style.width  = (width  + pad * 2) + "px";
-    overlay.style.height = (height + pad * 2) + "px";
-    overlay.style.left = (rect.left - pad) + "px";
-    overlay.style.top  = (rect.top  - pad) + "px";
-    document.body.appendChild(overlay);
+    if (!tiles.length) {
+      await __dissolveFloatFallback(card);
+    } else {
+      const pad = 120;
+      const overlay = document.createElement("canvas");
+      overlay.className = "particle-canvas";
+      overlay.width  = Math.ceil((width  + pad * 2) * dpr);
+      overlay.height = Math.ceil((height + pad * 2) * dpr);
+      overlay.style.width  = (width  + pad * 2) + "px";
+      overlay.style.height = (height + pad * 2) + "px";
+      overlay.style.left = (rect.left - pad) + "px";
+      overlay.style.top  = (rect.top  - pad) + "px";
+      document.body.appendChild(overlay);
 
-    const octx = overlay.getContext("2d");
-    octx.scale(dpr, dpr);
-    octx.imageSmoothingEnabled = false;
+      const octx = overlay.getContext("2d");
+      octx.scale(dpr, dpr);
+      octx.imageSmoothingEnabled = false;
 
-    const startT = performance.now();
+      const startT = performance.now();
 
-    function paint(elapsed) {
-      // Same clear as demo.html (after scale(dpr), device-pixel extents)
-      octx.clearRect(0, 0, overlay.width, overlay.height);
+      function paint(elapsed) {
+        octx.clearRect(0, 0, overlay.width, overlay.height);
+        let anyAlive = false;
 
-      let anyAlive = false;
+        for (let i = 0; i < tiles.length; i++) {
+          const t = tiles[i];
+          const ts = t.tile || TILE_SIZE;
+          const local = elapsed - t.delay;
 
-      for (let i = 0; i < tiles.length; i++) {
-        const t = tiles[i];
-        const local = elapsed - t.delay;
+          if (local < 0) {
+            octx.globalAlpha = 1;
+            octx.drawImage(
+              snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
+              t.x + pad, t.y + pad, ts, ts
+            );
+            anyAlive = true;
+            continue;
+          }
 
-        if (local < 0) {
-          octx.globalAlpha = 1;
+          const life = local / ANIM_DURATION;
+          if (life >= 1) continue;
+          anyAlive = true;
+
+          const moveEase = 1 - Math.pow(1 - life, 2.2);
+          const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.5) - 0.5) * NOISE_AMP * life;
+          const px = t.x + t.vx * moveEase * DRIFT_X + nX;
+          const py = t.y + t.vy * moveEase * Math.abs(DRIFT_Y) + (FLOAT_UP_FORCE * local);
+
+          const fade = Math.min(1, life * t.fadeBias);
+          const alpha = Math.max(0, 1 - Math.pow(fade, 1.4));
+          if (alpha <= 0.01) continue;
+
+          const scale = 1 - life * 0.3;
+          octx.globalAlpha = alpha;
+          octx.save();
+          octx.translate(px + pad + ts * 0.5, py + pad + ts * 0.5);
+          octx.rotate(t.rot + t.rotV * moveEase * 3);
+          octx.scale(scale, scale);
           octx.drawImage(
             snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
-            t.x + pad, t.y + pad, TILE_SIZE, TILE_SIZE
+            -ts * 0.5, -ts * 0.5, ts, ts
           );
-          anyAlive = true;
-          continue;
+          octx.restore();
         }
-
-        const life = local / ANIM_DURATION;
-        if (life >= 1) continue;
-        anyAlive = true;
-
-        const moveEase = 1 - Math.pow(1 - life, 2.2);
-        const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.5) - 0.5) * NOISE_AMP * life;
-
-        const px = t.x + t.vx * moveEase * DRIFT_X + nX;
-        const py = t.y + t.vy * moveEase * Math.abs(DRIFT_Y) + (FLOAT_UP_FORCE * local);
-
-        const fade = Math.min(1, life * t.fadeBias);
-        const alpha = Math.max(0, 1 - Math.pow(fade, 1.4));
-        if (alpha <= 0.01) continue;
-
-        const scale = 1 - life * 0.3;
-
-        octx.globalAlpha = alpha;
-        octx.save();
-        octx.translate(px + pad + TILE_SIZE * 0.5, py + pad + TILE_SIZE * 0.5);
-        octx.rotate(t.rot + t.rotV * moveEase * 3);
-        octx.scale(scale, scale);
-        octx.drawImage(
-          snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
-          -TILE_SIZE * 0.5, -TILE_SIZE * 0.5, TILE_SIZE, TILE_SIZE
-        );
-        octx.restore();
+        return anyAlive;
       }
 
-      return anyAlive;
-    }
+      // First frame drawn BEFORE hiding the real card (no flash)
+      paint(0);
+      card.style.visibility = "hidden";
 
-    paint(0);
-    card.style.visibility = "hidden";
-
-    function frame(now) {
-      const alive = paint(now - startT);
-      if (alive) {
-        requestAnimationFrame(frame);
-      } else {
-        overlay.remove();
+      // Particles run independently (do not block delete/API)
+      function frame(now) {
+        const alive = paint(now - startT);
+        if (alive) requestAnimationFrame(frame);
+        else overlay.remove();
       }
+      requestAnimationFrame(frame);
+
+      // Demo timing: collapse list row after COLLAPSE_DELAY while particles still fly
+      await new Promise((r) => setTimeout(r, COLLAPSE_DELAY));
     }
-    requestAnimationFrame(frame);
   } else {
-    card.style.visibility = "hidden";
+    await __dissolveFloatFallback(card);
   }
 
-  // Collapse row after COLLAPSE_DELAY (demo: class "collapsing")
+  // Collapse the list row (demo .collapsing)
   return new Promise((resolve) => {
-    setTimeout(() => {
-      if (!card.isConnected) {
-        resolve();
-        return;
-      }
-      card.classList.add("is-deleting");
-      let settled = false;
-      const done = () => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-      card.addEventListener("transitionend", done, { once: true });
-      setTimeout(done, 600);
-    }, COLLAPSE_DELAY);
+    if (!card.isConnected) {
+      resolve();
+      return;
+    }
+    card.style.visibility = "hidden";
+    card.classList.add("is-deleting");
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    card.addEventListener("transitionend", done, { once: true });
+    setTimeout(done, 600);
   });
 }
 

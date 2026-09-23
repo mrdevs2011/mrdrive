@@ -293,6 +293,27 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 }
 .folder-del-btn:hover { background: var(--red-bg); color: var(--red-text); }
 
+/* Drag file → folder tab */
+.file-card.is-dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+.folder-tab.drag-over,
+.folder-tab-wrap.drag-over {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+  background: #eff6ff;
+}
+.folder-tab.drag-over.active,
+.folder-tab-wrap.drag-over .folder-tab.active {
+  background: #2563eb !important;
+  color: #fff !important;
+}
+body.is-dragging-file .folder-tab:not(.new-folder-btn),
+body.is-dragging-file .folder-tab-wrap {
+  cursor: copy;
+}
+
 /* UPLOAD PROGRESS */
 #upload-progress {
   margin: 0 40px 10px;
@@ -1584,9 +1605,32 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   display: none !important;
 }
 
-/* One header style for every file kind — same as the public share preview.
-   .annot-topbar / .annot-btn already use the shared theme variables above,
-   so image, video, pdf and code previews all render identically. */
+/* Text/code previews: header always dark (matches dark code workspace) */
+.annot-viewer.kind-code .annot-topbar {
+  background: #18181b;
+  border-bottom-color: #27272a;
+  color: #e4e4e7;
+}
+.annot-viewer.kind-code .annot-filename {
+  color: #e4e4e7;
+}
+.annot-viewer.kind-code .annot-btn {
+  background: #27272a;
+  border-color: #3f3f46;
+  color: #e4e4e7;
+}
+.annot-viewer.kind-code .annot-btn:hover,
+.annot-viewer.kind-code .annot-btn:active {
+  background: #3f3f46;
+  color: #fff;
+}
+.annot-viewer.kind-code .annot-btn.is-save {
+  background: #3f3f46;
+  border-color: #52525b;
+  color: #fff;
+}
+
+/* Image/video toolbar inherits light theme variables */
 .annot-viewer.kind-image .annot-toolbar,
 .annot-viewer.kind-video .annot-toolbar {
   background: var(--surface);
