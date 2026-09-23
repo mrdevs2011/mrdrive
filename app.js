@@ -1402,7 +1402,7 @@ function renderFiles() {
     }
 
     return `
-    <div class="file-card">
+    <div class="file-card" data-file-id="${f.id}">
       <div class="file-info">
         <span class="file-name">${escapeHtml(f.filename)}</span>
         <span class="file-meta">${meta}</span>
@@ -1693,11 +1693,8 @@ async function playDeleteDissolve(card, clickX, clickY) {
     const startT = performance.now();
 
     function paint(elapsed) {
-      // clear in device-pixel space of the canvas element (demo does this)
-      octx.save();
-      octx.setTransform(1, 0, 0, 1, 0, 0);
+      // Same clear as demo.html (after scale(dpr), device-pixel extents)
       octx.clearRect(0, 0, overlay.width, overlay.height);
-      octx.restore();
 
       let anyAlive = false;
 
@@ -1788,7 +1785,11 @@ async function deleteFile(id, path, evt) {
 
   if (!(await showConfirm("Delete this file?", "Delete"))) return;
 
-  const card = fileListEl.querySelector(`.file-card[data-file-id="${id}"]`);
+  // Prefer data-file-id; fall back to the button's parent card (event target)
+  let card = fileListEl.querySelector(`.file-card[data-file-id="${id}"]`);
+  if (!card && evt && evt.target) {
+    card = evt.target.closest(".file-card");
+  }
   if (card) await playDeleteDissolve(card, clickX, clickY);
 
   markLocalDelete(id);
