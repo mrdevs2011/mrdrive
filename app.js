@@ -300,7 +300,7 @@ function showPublicDownloadModal(token) {
   modal.id = "public-modal";
   modal.innerHTML = `
     <div class="public-modal-backdrop">
-      <div class="public-modal-box" id="public-modal-box">
+      <div class="public-modal-box is-boot" id="public-modal-box">
         <div class="public-topbar" id="public-info">
           <div class="public-topbar-main">
             <div class="public-modal-icon is-loading" id="public-modal-icon">${ICON_SPINNER}</div>
@@ -345,9 +345,12 @@ function showPublicDownloadModal(token) {
     .eq("is_public", true)
     .single()
     .then(async ({ data, error }) => {
+      // Data arrived: leave the spinner-only boot state
+      modalBox.classList.remove("is-boot");
       if (error || !data) {
         modalIcon.classList.remove("is-loading");
         modalIcon.innerHTML = ICON_DOWNLOAD;
+        modalBox.classList.add("is-error");
         filenameEl.textContent = "File not found";
         metaEl.textContent = "This link was removed or doesn't exist.";
         return;
@@ -356,6 +359,7 @@ function showPublicDownloadModal(token) {
       if (data.expires_at && new Date(data.expires_at) < new Date()) {
         modalIcon.classList.remove("is-loading");
         modalIcon.innerHTML = ICON_DOWNLOAD;
+        modalBox.classList.add("is-error");
         filenameEl.textContent = "Expired";
         metaEl.textContent = "This link has expired.";
         return;
@@ -2181,21 +2185,17 @@ async function openAnnotationViewer(file, kind, opts) {
   viewer.classList.remove(...kindClasses);
   viewer.classList.add("kind-" + kind);
 
-  // Start in view-only mode: hide the drawing toolbar and undo/redo/save
+  // Start in view-only mode: hide the drawing toolbar and save button
   // until the user explicitly taps Edit. Code/video stay read-only.
   const editBtn = document.getElementById("annot-edit");
   const saveBtn = document.getElementById("annot-save");
-  const undoBtn = document.getElementById("annot-undo");
-  const redoBtn = document.getElementById("annot-redo");
   toolbar.style.display = "none";
   if (saveBtn) saveBtn.style.display = "none";
-  undoBtn.style.display = "none";
-  redoBtn.style.display = "none";
   editBtn.classList.remove("is-edit", "is-save", "active");
   editBtn.title = "Tahrirlash";
   editBtn.innerHTML = ICON_PENCIL;
   editBtn.style.display = (kind === "code" || kind === "video") ? "none" : "";
-  editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
+  editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn);
   if (saveBtn) saveBtn.onclick = () => saveAnnotated();
   // Drawing tools bar removed — only freehand pen when edit mode is on
   if (toolbar) {
@@ -2240,8 +2240,6 @@ async function openAnnotationViewer(file, kind, opts) {
 
   // Wire top buttons
   document.getElementById("annot-close").onclick = closeAnnotationViewer;
-  document.getElementById("annot-undo").onclick = () => annotUndo();
-  document.getElementById("annot-redo").onclick = () => annotRedo();
   document.getElementById("annot-fullscreen").onclick = toggleAnnotFullscreen;
 
   // Keyboard
@@ -2250,7 +2248,7 @@ async function openAnnotationViewer(file, kind, opts) {
 
 // Enter drawing mode: pencil gray (active). Only freehand pen — no tools bar.
 // Save is a separate ✓ button. Tapping pencil again exits edit mode.
-function enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
+function enterAnnotEditMode(toolbar, editBtn) {
   if (annotState.editMode) return;
   annotState.editMode = true;
   annotState.tool = "pen";
@@ -2260,28 +2258,24 @@ function enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
   // Tools bar removed entirely — only draw (pen) is enough
   if (toolbar) toolbar.style.display = "none";
   if (saveBtn) saveBtn.style.display = "";
-  undoBtn.style.display = "";
-  redoBtn.style.display = "";
   editBtn.classList.add("is-edit", "active");
   editBtn.classList.remove("is-save");
   editBtn.title = "Chizish rejimi (yana bosing — yopish)";
   editBtn.innerHTML = ICON_PENCIL;
-  editBtn.onclick = () => exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
+  editBtn.onclick = () => exitAnnotEditMode(toolbar, editBtn);
   updateCursor();
 }
 
-// Exit drawing mode: hide save / undo / redo; pencil back to normal.
-function exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
+// Exit drawing mode: hide save button; pencil back to normal.
+function exitAnnotEditMode(toolbar, editBtn) {
   annotState.editMode = false;
   const saveBtn = document.getElementById("annot-save");
   if (toolbar) toolbar.style.display = "none";
   if (saveBtn) saveBtn.style.display = "none";
-  undoBtn.style.display = "none";
-  redoBtn.style.display = "none";
   editBtn.classList.remove("is-edit", "active", "is-save");
   editBtn.title = "Tahrirlash";
   editBtn.innerHTML = ICON_PENCIL;
-  editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
+  editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn);
   updateCursor();
 }
 
@@ -2311,14 +2305,6 @@ function closeAnnotationViewer(opts) {
 
 function annotKeyHandler(e) {
   if (!annotState.open) return;
-  if ((e.ctrlKey || e.metaKey) && e.key === "z") {
-    e.preventDefault();
-    if (e.shiftKey) annotRedo(); else annotUndo();
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key === "y") {
-    e.preventDefault();
-    annotRedo();
-  }
   if (e.key === "Escape") closeAnnotationViewer();
 }
 

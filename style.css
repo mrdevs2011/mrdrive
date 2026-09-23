@@ -1236,9 +1236,9 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  background: #18181b;
-  border-bottom: 1px solid #27272a;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   min-height: 48px;
 }
@@ -1250,51 +1250,52 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #e4e4e7;
+  color: var(--text);
 }
 
 .annot-top-actions {
   display: flex;
-  gap: 4px;
+  gap: 8px;
 }
 
+/* Same look as the public share preview's action buttons */
 .annot-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: #a1a1aa;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .annot-btn:hover, .annot-btn:active {
-  background: #27272a;
-  color: #fafafa;
+  background: var(--border);
 }
 .annot-btn.active {
-  background: #3f3f46;
-  color: #fafafa;
+  background: var(--border);
 }
-/* Pencil in edit mode — stays pencil, gray active chip */
+/* Pencil in edit mode — same red-active chip as the public edit button */
 .annot-btn.is-edit,
 .annot-btn.is-edit.active {
-  background: #3f3f46;
-  color: #e4e4e7;
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
 }
 .annot-btn.is-edit:hover {
-  background: #52525b;
-  color: #fafafa;
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
 }
 .annot-btn:disabled {
   opacity: 0.35;
   pointer-events: none;
 }
-.annot-btn.is-save { color: #22c55e; }
-.annot-btn.is-save:hover { background: rgba(34,197,94,0.16); color: #22c55e; }
+.annot-btn.is-save { background: #18181b; color: #fff; border-color: #18181b; }
+.annot-btn.is-save:hover { opacity: 0.9; background: #18181b; color: #fff; }
 @keyframes annotMorphPop {
   0% { transform: scale(0.6); opacity: 0.4; }
   60% { transform: scale(1.15); }
@@ -1603,55 +1604,13 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   display: none !important;
 }
 
-/* Image / video: light header, toolbar & status (only code stays dark) */
-.annot-viewer.kind-image .annot-topbar,
-.annot-viewer.kind-video .annot-topbar,
+/* One header style for every file kind — same as the public share preview.
+   .annot-topbar / .annot-btn already use the shared theme variables above,
+   so image, video, pdf and code previews all render identically. */
 .annot-viewer.kind-image .annot-toolbar,
 .annot-viewer.kind-video .annot-toolbar {
   background: var(--surface);
   border-bottom-color: var(--border);
-}
-.annot-viewer.kind-image .annot-status,
-.annot-viewer.kind-video .annot-status {
-  background: var(--surface);
-  border-top-color: var(--border);
-  color: var(--text-muted);
-}
-.annot-viewer.kind-image .annot-filename,
-.annot-viewer.kind-video .annot-filename {
-  color: var(--text);
-}
-.annot-viewer.kind-image .annot-btn,
-.annot-viewer.kind-video .annot-btn {
-  color: var(--text-muted);
-}
-.annot-viewer.kind-image .annot-btn:hover,
-.annot-viewer.kind-image .annot-btn:active,
-.annot-viewer.kind-video .annot-btn:hover,
-.annot-viewer.kind-video .annot-btn:active {
-  background: var(--border);
-  color: var(--text);
-}
-.annot-viewer.kind-image .annot-btn.active,
-.annot-viewer.kind-video .annot-btn.active {
-  background: var(--border-strong);
-  color: var(--text);
-}
-.annot-viewer.kind-image .annot-btn.is-edit,
-.annot-viewer.kind-image .annot-btn.is-edit.active,
-.annot-viewer.kind-video .annot-btn.is-edit,
-.annot-viewer.kind-video .annot-btn.is-edit.active {
-  background: var(--border-strong);
-  color: var(--text);
-}
-.annot-viewer.kind-image .annot-btn.is-save,
-.annot-viewer.kind-video .annot-btn.is-save {
-  color: #16a34a;
-}
-.annot-viewer.kind-image .annot-btn.is-save:hover,
-.annot-viewer.kind-video .annot-btn.is-save:hover {
-  background: rgba(22, 163, 74, 0.12);
-  color: #16a34a;
 }
 .annot-viewer.kind-image .annot-tool-group,
 .annot-viewer.kind-video .annot-tool-group {
@@ -1736,8 +1695,6 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 @media (max-width: 480px) {
   .annot-tool { width: 38px; height: 38px; }
   .annot-tool-group { padding: 0 2px; }
-  .annot-top-actions .annot-btn:nth-child(1),
-  .annot-top-actions .annot-btn:nth-child(2) { display: none; } /* hide undo/redo labels on very small, keep icons via JS if needed */
 }
 
 /* View button in file list */
@@ -1797,10 +1754,91 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   font-size: inherit;
   font-weight: inherit;
   color: var(--text-muted);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
   cursor: pointer;
 }
-.public-brand-link:hover { color: var(--text); }
+.public-brand-link:hover { color: var(--text); text-decoration: none; }
 .public-topbar-text .public-brand-link { display: block; width: fit-content; margin-top: 2px; font-size: 12px; }
 .public-modal-box:not(.has-preview) .public-topbar-text .public-brand-link { margin: 8px auto 0; font-size: 13px; }
+
+/* Not found / expired: no download button, only the MRdrive link */
+.public-modal-box.is-error .public-actions { display: none; }
+
+/* ===== Public preview header polish ===== */
+.public-modal-box.has-preview .public-topbar,
+.public-modal-box.has-preview #public-info {
+  padding: 12px 20px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+  gap: 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 12px rgba(0, 0, 0, 0.04);
+}
+.public-modal-box.has-preview .public-topbar-main {
+  gap: 14px;
+}
+/* File tile in front of the name */
+.public-modal-box.has-preview .public-topbar-main::before {
+  content: "";
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background-color: var(--bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  border: 1px solid var(--border);
+}
+.public-modal-box.has-preview .public-topbar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.public-modal-box.has-preview h2 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+.public-modal-box.has-preview .public-meta {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.public-modal-box.has-preview .public-topbar-text .public-brand-link {
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+.public-modal-box.has-preview .public-topbar-text .public-brand-link:hover { opacity: 1; }
+.public-modal-box.has-preview .public-actions { gap: 8px; }
+.public-modal-box.has-preview .public-download-btn,
+.public-modal-box.has-preview .public-fs-btn,
+.public-modal-box.has-preview .public-edit-btn {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.public-modal-box.has-preview .public-download-btn { background: #18181b; }
+.public-modal-box.has-preview .public-fs-btn:hover:not(:disabled),
+.public-modal-box.has-preview .public-edit-btn:hover { background: var(--bg); border-color: var(--border-strong); }
+
+@media (max-width: 480px) {
+  .public-modal-box.has-preview .public-topbar,
+  .public-modal-box.has-preview #public-info { padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top)); gap: 10px; }
+  .public-modal-box.has-preview .public-topbar-main::before { display: none; }
+  .public-modal-box.has-preview .public-download-btn,
+  .public-modal-box.has-preview .public-fs-btn,
+  .public-modal-box.has-preview .public-edit-btn { flex-basis: 38px; width: 38px; height: 38px; min-width: 38px; }
+}
+
+/* Boot state (before the file record loads): spinner only, no text/buttons */
+.public-modal-box.is-boot .public-topbar-text,
+.public-modal-box.is-boot .public-actions,
+.public-modal-box.is-boot .public-status { display: none; }
+.public-modal-box.is-boot .public-modal-icon { margin-bottom: 0; }
