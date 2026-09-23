@@ -141,19 +141,18 @@ function showPublicDownloadModal(token) {
     <div class="public-modal-backdrop">
       <div class="public-modal-box" id="public-modal-box">
         <div id="public-preview-wrap"></div>
-        <div class="public-info">
+        <a class="public-go-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer">MRdrive</a>
+        <div class="public-info" id="public-info">
           <div class="public-modal-icon" id="public-modal-icon">${ICON_DOWNLOAD}</div>
           <h2 id="public-filename">Loading...</h2>
           <p id="public-meta" class="public-meta"></p>
-          <p id="public-expiry" class="public-expiry"></p>
           <div class="public-actions">
             <button id="public-edit-btn" class="public-edit-btn" title="Tahrirlash" style="display:none;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             </button>
-            <button id="public-download-btn" disabled>Download</button>
+            <button id="public-download-btn" disabled>${ICON_DOWNLOAD}<span>Download</span></button>
             <button id="public-fs-btn" class="public-fs-btn" title="Fullscreen" aria-label="Fullscreen" style="display:none;">${ICON_FULLSCREEN}</button>
           </div>
-          <a class="public-go-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer">Go MRdrive</a>
           <p id="public-status" class="public-status"></p>
         </div>
       </div>
@@ -169,7 +168,6 @@ function showPublicDownloadModal(token) {
   const modalIcon = document.getElementById("public-modal-icon");
   const filenameEl = document.getElementById("public-filename");
   const metaEl = document.getElementById("public-meta");
-  const expiryEl = document.getElementById("public-expiry");
   const statusEl = document.getElementById("public-status");
   const downloadBtn = document.getElementById("public-download-btn");
   const fsBtn = document.getElementById("public-fs-btn");
@@ -195,13 +193,11 @@ function showPublicDownloadModal(token) {
       }
 
       filenameEl.textContent = data.filename;
-      metaEl.textContent = `${formatSize(data.size)} · ${formatDate(data.uploaded_at)}`;
-
+      let meta = `${formatSize(data.size)} · ${formatDate(data.uploaded_at)}`;
       if (data.expires_at) {
-        expiryEl.textContent = `Valid until: ${formatDate(data.expires_at)}`;
-      } else {
-        expiryEl.textContent = "No expiry";
+        meta += ` · <span class="public-expiry-inline">amal qilish: ${formatDate(data.expires_at)}</span>`;
       }
+      metaEl.innerHTML = meta;
 
       downloadBtn.disabled = false;
 
@@ -217,6 +213,7 @@ function showPublicDownloadModal(token) {
           modalBox.classList.add("has-preview");
           fsBtn.style.display = "flex";
           setupPublicFullscreen(fsBtn, modalBox, previewWrap);
+          setupPublicControlsFade(modalBox, previewWrap, kind !== "video");
 
           if (kind === "image") {
             previewWrap.innerHTML = `
@@ -251,6 +248,7 @@ function showPublicDownloadModal(token) {
             statusEl.textContent = "";
             editBtn.style.display = "flex";
             publicEdit = setupPublicPdfEdit(editBtn, pages);
+            setupPublicControlsFade(modalBox, previewWrap, true);
           } catch (err) {
             console.error(err);
             statusEl.textContent = "Could not preview this PDF";
@@ -603,6 +601,31 @@ function setupPublicFullscreen(btn, modalBox, previewWrap) {
     modalBox.classList.add("focus-mode");
     sync();
   };
+}
+
+// Keeps the content in the spotlight: the filename/download bar fades out
+// after a moment of inactivity so the preview gets the full screen, and
+// reappears on any tap/move/scroll. Images and PDFs (no built-in controls
+// of their own) auto-hide; video keeps the bar up since native controls
+// already need room and the person is actively scrubbing.
+function setupPublicControlsFade(modalBox, previewWrap, autoHide) {
+  if (!autoHide) return;
+  let hideTimer = null;
+  const HIDE_DELAY = 2600;
+
+  const show = () => {
+    modalBox.classList.remove("controls-hidden");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      modalBox.classList.add("controls-hidden");
+    }, HIDE_DELAY);
+  };
+
+  ["pointerdown", "pointermove", "wheel", "touchstart"].forEach((evt) => {
+    modalBox.addEventListener(evt, show, { passive: true });
+  });
+
+  show();
 }
 
 // ==========================================
@@ -1108,20 +1131,41 @@ function renderFiles() {
         <span class="file-meta">${meta}</span>
       </div>
       <div class="file-actions">
-        ${isPublic
-          ? `<div class="toggle-group">
-               <button class="toggle-btn copy-btn" onclick="copyPublicLink(${f.id})" title="Copy link">${ICON_COPY}</button>
-               <button class="toggle-btn refresh-btn" onclick="refreshPublicLink(${f.id})" title="Create a new link (the old one stops working)">${ICON_REFRESH}</button>
-               <button class="toggle-btn unlink-btn" onclick="unpublishFile(${f.id})" title="Remove from public">${ICON_UNLINK}</button>
-             </div>`
-          : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Create public link">${ICON_LINK}</button>`
-        }
-        <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Download">${ICON_DOWNLOAD}</button>
-        <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}')" title="Delete">${ICON_DELETE}</button>
+        <div class="file-actions-more">
+          ${isPublic
+            ? `<div class="toggle-group">
+                 <button class="toggle-btn copy-btn" onclick="copyPublicLink(${f.id}, this)" title="Copy link">${ICON_COPY}</button>
+                 <button class="toggle-btn refresh-btn" onclick="refreshPublicLink(${f.id})" title="Create a new link (the old one stops working)">${ICON_REFRESH}</button>
+                 <button class="toggle-btn unlink-btn" onclick="unpublishFile(${f.id})" title="Remove from public">${ICON_UNLINK}</button>
+               </div>`
+            : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Create public link">${ICON_LINK}</button>`
+          }
+          <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Download">${ICON_DOWNLOAD}</button>
+          <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}')" title="Delete">${ICON_DELETE}</button>
+        </div>
+        <button class="more-btn" onclick="toggleFileActions(event, this)" title="Amallar">${ICON_MORE}</button>
       </div>
     </div>
   `;
   }).join("");
+}
+
+// Closes any open kebab menu when tapping/clicking anywhere else.
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".more-btn")) return;
+  document.querySelectorAll(".file-card.actions-open").forEach(card => {
+    if (!card.contains(e.target)) card.classList.remove("actions-open");
+  });
+});
+
+// Toggles the compact action row for one file card (mobile-friendly
+// alternative to hover). Closes any other open card first.
+function toggleFileActions(e, btn) {
+  e.stopPropagation();
+  const card = btn.closest(".file-card");
+  const wasOpen = card.classList.contains("actions-open");
+  document.querySelectorAll(".file-card.actions-open").forEach(c => c.classList.remove("actions-open"));
+  if (!wasOpen) card.classList.add("actions-open");
 }
 
 async function downloadFile(id, path, filename) {
@@ -1254,7 +1298,7 @@ async function createPublicLink(fileId) {
   });
 }
 
-async function copyPublicLink(fileId) {
+async function copyPublicLink(fileId, btn) {
   const { data: file, error } = await sb
     .from(TABLE)
     .select("public_token")
@@ -1269,6 +1313,18 @@ async function copyPublicLink(fileId) {
   const url = `${window.location.origin}${window.location.pathname}?share=${file.public_token}`;
   await copyToClipboard(url);
   showToast("Link copied");
+
+  // Morph the button itself into a checkmark for a moment instead of
+  // just relying on the toast — same button, brief state change.
+  if (btn && !btn.classList.contains("is-copied")) {
+    const original = btn.innerHTML;
+    btn.classList.add("is-copied");
+    btn.innerHTML = ICON_CHECK;
+    setTimeout(() => {
+      btn.classList.remove("is-copied");
+      btn.innerHTML = original;
+    }, 1200);
+  }
 }
 
 async function refreshPublicLink(fileId) {
@@ -1538,6 +1594,9 @@ function escapeJs(str) {
 // ==========================================
 
 const ICON_VIEW = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/></svg>`;
+const ICON_MORE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="19" r="1.8" fill="currentColor"/></svg>`;
+const ICON_PENCIL = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+const ICON_CHECK = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12.5L10 17.5L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 const ANNOT_TOOLS = [
   {
@@ -1632,7 +1691,9 @@ renderFiles = function () {
     const kind = isViewable(f.filename);
     if (!kind) return;
     const actions = card.querySelector(".file-actions");
-    if (!actions || actions.querySelector(".view-btn")) return;
+    if (!actions) return;
+    const moreGroup = actions.querySelector(".file-actions-more");
+    if (!moreGroup || moreGroup.querySelector(".view-btn")) return;
     const btn = document.createElement("button");
     btn.className = "view-btn";
     btn.title = "Ochish va chizish";
@@ -1641,7 +1702,7 @@ renderFiles = function () {
       e.stopPropagation();
       openAnnotationViewer(f, kind);
     };
-    actions.insertBefore(btn, actions.firstChild);
+    moreGroup.insertBefore(btn, moreGroup.firstChild);
   });
 };
 
@@ -1676,6 +1737,7 @@ async function openAnnotationViewer(file, kind) {
 
   filenameEl.textContent = file.filename;
   scroll.innerHTML = "";
+  scroll.className = "annot-scroll";
   viewer.style.display = "flex";
   viewer.setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
@@ -1686,13 +1748,14 @@ async function openAnnotationViewer(file, kind) {
   const editBtn = document.getElementById("annot-edit");
   const undoBtn = document.getElementById("annot-undo");
   const redoBtn = document.getElementById("annot-redo");
-  const saveBtn = document.getElementById("annot-save");
   toolbar.style.display = "none";
   undoBtn.style.display = "none";
   redoBtn.style.display = "none";
-  saveBtn.style.display = "none";
+  editBtn.classList.remove("is-save");
+  editBtn.title = "Tahrirlash";
+  editBtn.innerHTML = ICON_PENCIL;
   editBtn.style.display = kind === "code" ? "none" : "";
-  editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn, saveBtn);
+  editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
 
   buildAnnotToolbar(toolbar);
 
@@ -1716,6 +1779,7 @@ async function openAnnotationViewer(file, kind) {
       await loadPdfForAnnot(urlData.signedUrl, scroll, loader);
       statusHint.textContent = "Chizmalar sahifaga yopishadi · 1 barmoq chizish · 2 barmoq surish";
     } else if (kind === "code") {
+      scroll.classList.add("is-text");
       await loadCodeForAnnot(urlData.signedUrl, scroll, loader, file.filename);
       statusHint.textContent = "Dark mode kod ko'rinishi · Faqat o'qish";
       // Hide drawing tools for code
@@ -1730,24 +1794,26 @@ async function openAnnotationViewer(file, kind) {
   document.getElementById("annot-close").onclick = closeAnnotationViewer;
   document.getElementById("annot-undo").onclick = () => annotUndo();
   document.getElementById("annot-redo").onclick = () => annotRedo();
-  document.getElementById("annot-save").onclick = () => saveAnnotated();
   document.getElementById("annot-fullscreen").onclick = toggleAnnotFullscreen;
 
   // Keyboard
   window.addEventListener("keydown", annotKeyHandler);
 }
 
-// Switches the viewer from read-only preview into drawing mode. Only
-// freehand pencil drawing is available here (no highlighter/text/pan/color
-// picker/size/clear/zoom) — just the pen, plus undo/redo/save in the topbar.
-function enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn, saveBtn) {
+// Switches the viewer from read-only preview into drawing mode. The Edit
+// button itself morphs into the Save button (same slot, pencil → check),
+// instead of a separate button appearing elsewhere — one control, two
+// states, like a record/send button that swaps on tap.
+function enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
   if (annotState.editMode) return;
   annotState.editMode = true;
   annotState.tool = "pen";
   undoBtn.style.display = "";
   redoBtn.style.display = "";
-  saveBtn.style.display = "";
-  editBtn.style.display = "none";
+  editBtn.classList.add("is-save");
+  editBtn.title = "Saqlash";
+  editBtn.innerHTML = ICON_CHECK;
+  editBtn.onclick = () => saveAnnotated();
   updateCursor();
 }
 
@@ -1989,11 +2055,19 @@ async function loadPdfForAnnot(url, scroll, loader) {
 async function loadCodeForAnnot(url, scroll, loader, filename) {
   const res = await fetch(url);
   const text = await res.text();
+  const ext = (filename.split(".").pop() || "").toUpperCase();
+  const lines = text.split("\n").length;
   const wrap = document.createElement("div");
   wrap.className = "annot-code-wrap";
   const header = document.createElement("div");
   header.className = "code-header";
-  header.innerHTML = `<span>${escapeHtml(filename)}</span><span>Dark mode</span>`;
+  header.innerHTML = `
+    <span class="code-header-name">${escapeHtml(filename)}</span>
+    <span class="code-header-meta">
+      <span class="code-lang-badge">${escapeHtml(ext)}</span>
+      <span class="code-lines">${lines} qator</span>
+    </span>
+  `;
   const pre = document.createElement("pre");
   pre.textContent = text;
   wrap.appendChild(header);

@@ -285,7 +285,7 @@ header button:hover { background: var(--bg); }
 .file-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .file-name { font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-meta { font-size: 12px; color: var(--text-muted); }
-.file-actions { display: flex; gap: 4px; flex-shrink: 0; margin-left: 12px; align-items: center; }
+.file-actions { display: flex; gap: 4px; flex-shrink: 0; margin-left: 12px; align-items: center; position: relative; }
 .file-actions button {
   border: none;
   background: transparent;
@@ -301,6 +301,30 @@ header button:hover { background: var(--bg); }
 }
 .file-actions button:hover { background: var(--bg); color: var(--text); }
 .empty { color: var(--text-muted); text-align: center; padding: 30px; font-size: 14px; }
+
+/* Kebab trigger — the only thing visible by default */
+.more-btn { flex-shrink: 0; }
+.file-card.actions-open .more-btn { background: var(--bg); color: var(--text); }
+
+/* Secondary actions — collapsed until hover (desktop) or tap (mobile) */
+.file-actions-more {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: max-width 0.22s ease, opacity 0.15s ease;
+}
+.file-card:hover .file-actions-more,
+.file-card:focus-within .file-actions-more,
+.file-card.actions-open .file-actions-more {
+  max-width: 280px;
+  opacity: 1;
+  pointer-events: auto;
+  margin-right: 4px;
+}
 
 /* TOGGLE GROUP (Copy + Refresh + Unlink) */
 .toggle-group {
@@ -340,6 +364,11 @@ header button:hover { background: var(--bg); }
   background: var(--green-bg);
   color: var(--green-text);
 }
+.toggle-group .toggle-btn.copy-btn.is-copied {
+  background: var(--green-bg);
+  color: var(--green-text);
+}
+.toggle-group .toggle-btn svg { animation: annotMorphPop 0.2s ease; }
 .toggle-group .toggle-btn.refresh-btn {
   color: var(--blue-text);
 }
@@ -485,6 +514,7 @@ header button:hover { background: var(--bg); }
   padding: 24px;
   box-sizing: border-box;
   text-align: center;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .public-modal-icon {
@@ -500,7 +530,9 @@ header button:hover { background: var(--bg); }
 }
 .public-modal-icon svg { width: 24px; height: 24px; }
 
-/* Image/video: fills the whole screen, info + download at the bottom */
+/* Image/video/PDF: the preview owns the whole screen. The info bar floats
+   on top of it as a slim, translucent overlay instead of pushing it up —
+   the content stays the focus, the chrome is just a hint on top of it. */
 #public-preview-wrap {
   display: none;
 }
@@ -512,13 +544,27 @@ header button:hover { background: var(--bg); }
   flex: 1 1 auto;
   flex-direction: column;
   width: 100%;
+  height: 100%;
   min-height: 0;
   min-width: 0;
 }
 .public-modal-box.has-preview .public-info {
-  flex: 0 0 auto;
-  max-width: 560px;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  max-width: none;
+  width: 100%;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.38) 55%, transparent 100%);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.public-modal-box.controls-hidden .public-info {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
 }
 
 .public-preview {
@@ -586,18 +632,23 @@ header button:hover { background: var(--bg); }
 
 .public-modal-box.has-preview .public-modal-icon { display: none; }
 .public-modal-box.has-preview h2 {
-  font-size: 15px;
-  margin-bottom: 4px;
+  font-size: 13.5px;
+  font-weight: 500;
+  margin-bottom: 2px;
   padding: 0;
+  color: #fff;
+  word-break: break-all;
 }
-.public-modal-box.has-preview .public-meta,
-.public-modal-box.has-preview .public-expiry {
-  margin-bottom: 4px;
+.public-modal-box.has-preview .public-meta {
+  margin-bottom: 8px;
+  color: rgba(255,255,255,0.72);
+  font-size: 11.5px;
 }
-.public-modal-box.has-preview .public-expiry { margin-bottom: 10px; }
+.public-expiry-inline { color: #fbbf24; }
 .public-modal-box.has-preview .public-status {
-  margin-top: 8px;
+  margin-top: 6px;
   min-height: 0;
+  color: rgba(255,255,255,0.72);
 }
 
 /* Actions row: Download + Fullscreen (outside the preview) */
@@ -606,11 +657,24 @@ header button:hover { background: var(--bg); }
   gap: 8px;
   width: 100%;
 }
-.public-actions #public-download-btn { flex: 1 1 auto; min-width: 0; }
+.public-actions #public-download-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+}
+.public-modal-box.has-preview .public-actions #public-download-btn {
+  background: rgba(255,255,255,0.16);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
 .public-modal-box .public-fs-btn,
 .public-modal-box .public-edit-btn {
-  flex: 0 0 46px;
-  width: 46px;
+  flex: 0 0 42px;
+  width: 42px;
   padding: 0;
   align-items: center;
   justify-content: center;
@@ -618,8 +682,18 @@ header button:hover { background: var(--bg); }
   color: #18181b;
   border: 1px solid var(--border);
 }
+.public-modal-box.has-preview .public-fs-btn,
+.public-modal-box.has-preview .public-edit-btn {
+  background: rgba(255,255,255,0.16);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
 .public-modal-box .public-fs-btn:hover:not(:disabled) { background: #e4e4e7; opacity: 1; }
 .public-modal-box .public-edit-btn:hover { background: #e4e4e7; opacity: 1; }
+.public-modal-box.has-preview .public-fs-btn:hover:not(:disabled),
+.public-modal-box.has-preview .public-edit-btn:hover { background: rgba(255,255,255,0.28); }
 .public-modal-box .public-edit-btn.active {
   background: #ef4444;
   color: #fff;
@@ -635,7 +709,10 @@ header button:hover { background: var(--bg); }
   cursor: crosshair;
 }
 
-/* Small "No thanks"-style link */
+/* Small brand link. In the plain (no-preview) layout it sits inline under
+   the button like before. Once there's a preview, it becomes a tiny chip
+   pinned to the top corner, out of the way of the content, and fades with
+   the rest of the chrome. */
 .public-go-link {
   display: inline-block;
   margin-top: 12px;
@@ -644,10 +721,29 @@ header button:hover { background: var(--bg); }
   color: var(--text-muted);
   text-decoration: none;
   cursor: pointer;
-  transition: color 0.15s;
+  transition: color 0.15s, opacity 0.25s ease, transform 0.25s ease;
 }
 .public-go-link:hover { color: var(--text); text-decoration: underline; }
-.public-modal-box.has-preview .public-go-link { margin-top: 6px; }
+.public-modal-box.has-preview .public-go-link {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top));
+  right: 12px;
+  z-index: 5;
+  margin-top: 0;
+  padding: 5px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+  color: rgba(255,255,255,0.85);
+  background: rgba(0,0,0,0.4);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.public-modal-box.has-preview .public-go-link:hover { color: #fff; text-decoration: none; }
+.public-modal-box.controls-hidden .public-go-link {
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+}
 .public-modal-box .public-status { margin-top: 6px; }
 
 /* Real fullscreen (preview only; the button stays outside) */
@@ -669,9 +765,8 @@ header button:hover { background: var(--bg); }
 /* iPhone fallback: text hidden, preview gets max space, button stays at the bottom */
 .public-modal-box.focus-mode h2,
 .public-modal-box.focus-mode .public-meta,
-.public-modal-box.focus-mode .public-expiry,
 .public-modal-box.focus-mode .public-status { display: none; }
-.public-modal-box.focus-mode .public-info { padding-top: 8px; }
+.public-modal-box.focus-mode .public-info { padding-top: 8px; background: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .public-modal-box.focus-mode .public-preview.is-image { background: #000; }
 
 .public-modal-box h2 {
@@ -831,6 +926,7 @@ header button:hover { background: var(--bg); }
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
+  animation: fadeIn 0.18s ease;
 }
 
 .annot-topbar {
@@ -884,6 +980,14 @@ header button:hover { background: var(--bg); }
   opacity: 0.35;
   pointer-events: none;
 }
+.annot-btn.is-save { color: #22c55e; }
+.annot-btn.is-save:hover { background: rgba(34,197,94,0.16); color: #22c55e; }
+@keyframes annotMorphPop {
+  0% { transform: scale(0.6); opacity: 0.4; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.annot-btn svg { animation: annotMorphPop 0.2s ease; }
 
 /* Toolbar */
 .annot-toolbar {
@@ -996,7 +1100,7 @@ header button:hover { background: var(--bg); }
   flex: 1;
   overflow: hidden;
   position: relative;
-  background: #09090b;
+  background: radial-gradient(ellipse at top, #111117 0%, #09090b 70%);
 }
 
 .annot-scroll {
@@ -1009,16 +1113,26 @@ header button:hover { background: var(--bg); }
   align-items: center;
   padding: 16px;
   gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2f3a transparent;
 }
+.annot-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.annot-scroll::-webkit-scrollbar-track { background: transparent; }
+.annot-scroll::-webkit-scrollbar-thumb { background: #2a2f3a; border-radius: 8px; }
+.annot-scroll::-webkit-scrollbar-thumb:hover { background: #3a4152; }
 
 /* Page / image container – annotations stick to content */
 .annot-page {
   position: relative;
   background: #fff;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
   flex-shrink: 0;
   /* Important: transform origin for zoom */
   transform-origin: top center;
+  animation: codeFadeIn 0.25s ease;
 }
 
 .annot-page canvas.annot-layer {
@@ -1041,35 +1155,96 @@ header button:hover { background: var(--bg); }
   user-select: none;
 }
 
-/* Code viewer */
+/* Code / text viewer — fills the whole workspace, edge to edge */
+.annot-scroll.is-text {
+  padding: 0;
+  gap: 0;
+  align-items: stretch;
+}
 .annot-code-wrap {
   width: 100%;
   max-width: 900px;
-  background: #0d1117;
-  border-radius: 12px;
+  background: #0b0e14;
+  border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  animation: codeFadeIn 0.25s ease;
+}
+@keyframes codeFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.annot-scroll.is-text .annot-code-wrap {
+  max-width: none;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
 }
 .annot-code-wrap pre {
   margin: 0;
-  padding: 20px;
+  padding: 24px 28px;
   overflow: auto;
-  font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
+  font-family: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
   font-size: 13px;
-  line-height: 1.55;
-  color: #e6edf3;
-  background: #0d1117;
+  line-height: 1.7;
+  letter-spacing: 0.1px;
+  color: #d8dee9;
+  background: #0b0e14;
   max-height: calc(100vh - 160px);
+  tab-size: 2;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2f3a transparent;
+}
+.annot-code-wrap pre::-webkit-scrollbar { width: 8px; height: 8px; }
+.annot-code-wrap pre::-webkit-scrollbar-track { background: transparent; }
+.annot-code-wrap pre::-webkit-scrollbar-thumb {
+  background: #2a2f3a;
+  border-radius: 8px;
+}
+.annot-code-wrap pre::-webkit-scrollbar-thumb:hover { background: #3a4152; }
+.annot-scroll.is-text .annot-code-wrap pre {
+  flex: 1;
+  max-height: none;
 }
 .annot-code-wrap .code-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
-  font-size: 12px;
-  color: #8b949e;
+  gap: 12px;
+  padding: 12px 20px;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 12.5px;
+  color: #8b95a7;
+  flex-shrink: 0;
+}
+.code-header-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #cbd3e0;
+  font-weight: 500;
+}
+.code-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.code-lang-badge {
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  color: #a9b2c3;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.code-lines {
+  font-size: 11.5px;
+  color: #6b7383;
 }
 
 /* Status bar */
@@ -1093,11 +1268,14 @@ header button:hover { background: var(--bg); }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(9,9,11,0.85);
+  background: rgba(9,9,11,0.7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 5;
   color: #a1a1aa;
   font-size: 14px;
   gap: 10px;
+  animation: fadeIn 0.15s ease;
 }
 .annot-loading svg {
   animation: spin 1s linear infinite;
