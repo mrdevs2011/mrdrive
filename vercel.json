@@ -3,5 +3,8 @@
     "api/mcp.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/f/:folder*", "destination": "/index.html" }
+  ]
 }

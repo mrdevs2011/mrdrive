@@ -13,38 +13,6 @@
 </head>
 <body>
 
-  <!-- AUTH SCREEN -->
-  <div id="auth-screen" class="screen" style="display:none;">
-    <div class="auth-box">
-      <div class="logo">
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <rect width="40" height="40" rx="10" fill="#18181b"/>
-          <path d="M10 26V14L20 22L30 14V26" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        </svg>
-      </div>
-      <h1>MRdrive</h1>
-
-      <div id="login-form">
-        <p class="form-title">Log in</p>
-        <input type="text" id="login-username" placeholder="Username" />
-        <input type="password" id="login-password" placeholder="Password" />
-        <button onclick="login()">Log in</button>
-        <p class="switch-link">Don't have an account? <a onclick="showSignup()">Sign up</a></p>
-      </div>
-
-      <div id="signup-form" style="display:none;">
-        <p class="form-title">Sign up</p>
-        <input type="text" id="signup-name" placeholder="Your name" />
-        <input type="text" id="signup-username" placeholder="Username" />
-        <input type="password" id="signup-password" placeholder="Password (min 6 characters)" />
-        <button onclick="signup()">Sign up</button>
-        <p class="switch-link">Already have an account? <a onclick="showLogin()">Log in</a></p>
-      </div>
-
-      <p id="auth-status"></p>
-    </div>
-  </div>
-
   <!-- INITIAL LOADER -->
   <div id="boot-loader">
     <svg width="32" height="32" viewBox="0 0 40 40" fill="none">

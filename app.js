@@ -1,8 +1,6 @@
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const authScreen = document.getElementById("auth-screen");
 const appScreen = document.getElementById("app");
-const authStatus = document.getElementById("auth-status");
 const userEmailEl = document.getElementById("user-email"); // optional, header da ism ko'rsatilmaydi
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("file-input");
@@ -30,6 +28,39 @@ let allFiles = [];
 let allFolders = [];
 let currentSearch = "";
 let currentFolder = null;
+
+// URL: / → barcha fayllar; /f/claude/ → "claude" papkasi
+function parseFolderFromPath(pathname) {
+  const m = (pathname || "").match(/^\/f\/([^/]+)\/?$/);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
+}
+function folderToPath(folder) {
+  if (folder == null || folder === "") return "/";
+  return "/f/" + encodeURIComponent(folder) + "/";
+}
+function syncFolderUrl(folder, replace) {
+  const path = folderToPath(folder);
+  const qs = window.location.search || "";
+  const hash = window.location.hash || "";
+  const url = path + qs + hash;
+  if (replace) {
+    history.replaceState({ folder: folder }, "", url);
+  } else {
+    const cur = window.location.pathname.replace(/\/?$/, "") || "/";
+    const next = path.replace(/\/?$/, "") || "/";
+    if (cur === next) {
+      history.replaceState({ folder: folder }, "", url);
+    } else {
+      history.pushState({ folder: folder }, "", url);
+    }
+  }
+}
+
 let realtimeChannel = null;
 let realtimeDebounce = null;
 let pollTimer = null;
@@ -98,22 +129,22 @@ const shareToken = urlParams.get("share");
 
 if (shareToken) {
   bootLoader.style.display = "none";
-  authScreen.style.display = "none";
-  appScreen.style.display = "none";
+  if (appScreen) appScreen.style.display = "none";
   showPublicDownloadModal(shareToken);
 } else {
   sb.auth.getSession().then(({ data: { session } }) => {
-    bootLoader.style.display = "none";
     if (session) {
-      authScreen.style.display = "none";
-      appScreen.style.display = "block";
-      const name = session.user.user_metadata?.name || session.user.user_metadata?.username || "";
-      if (userEmailEl) userEmailEl.textContent = name;
+      bootLoader.style.display = "none";
+      if (appScreen) appScreen.style.display = "block";
+      currentFolder = parseFolderFromPath(window.location.pathname);
+      // URL ni toza holatga keltirish (trailing slash va h.k.)
+      syncFolderUrl(currentFolder, true);
       loadFiles();
       setupRealtime(session.user.id);
       startPolling(session.user.id);
     } else {
-      authScreen.style.display = "flex";
+      // Ro'yxatdan o'tmagan / login qilmagan — login sahifasiga
+      location.replace("/login/");
     }
   });
 }
@@ -632,110 +663,9 @@ function setupPublicControlsFade(modalBox, previewWrap, autoHide) {
 // AUTH
 // ==========================================
 
-function usernameToEmail(username) {
-  return username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "") + "@" + FAKE_EMAIL_DOMAIN;
-}
-
-/**
- * MCP token: username + parol dan ikki marta SHA-256, natija 48 hex.
- * Brauzer Web Crypto API — server (Node crypto) bilan bir xil formula.
- *   uHash = sha256(username)
- *   pHash = sha256(password)
- *   token = sha256(uHash + pHash).slice(0, 48)
- */
-async function computeMcpToken(username, password) {
-  const enc = new TextEncoder();
-  const toHex = (buf) =>
-    [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  const uHash = toHex(await crypto.subtle.digest("SHA-256", enc.encode(String(username))));
-  const pHash = toHex(await crypto.subtle.digest("SHA-256", enc.encode(String(password))));
-  const combined = toHex(await crypto.subtle.digest("SHA-256", enc.encode(uHash + pHash)));
-  return combined.slice(0, 48);
-}
-
-function showSignup() {
-  document.getElementById("login-form").style.display = "none";
-  document.getElementById("signup-form").style.display = "block";
-  authStatus.textContent = "";
-}
-
-function showLogin() {
-  document.getElementById("signup-form").style.display = "none";
-  document.getElementById("login-form").style.display = "block";
-  authStatus.textContent = "";
-}
-
-async function signup() {
-  const name = document.getElementById("signup-name").value.trim();
-  const username = document.getElementById("signup-username").value.trim();
-  const password = document.getElementById("signup-password").value;
-
-  if (!name || !username || !password) {
-    authStatus.textContent = "Please fill in all fields.";
-    return;
-  }
-  if (password.length < 6) {
-    authStatus.textContent = "Password must be at least 6 characters.";
-    return;
-  }
-
-  authStatus.textContent = "Signing you up...";
-  const fakeEmail = usernameToEmail(username);
-  const mcp_token = await computeMcpToken(username, password);
-
-  const { data, error } = await sb.auth.signUp({
-    email: fakeEmail,
-    password,
-    options: { data: { name, username, mcp_token } }
-  });
-
-  if (error) {
-    if (error.message.includes("already registered")) {
-      authStatus.textContent = "This username is taken. Pick another one.";
-    } else {
-      authStatus.textContent = "Error: " + error.message;
-    }
-    return;
-  }
-
-  authStatus.textContent = data.session ? "" : "Signed up. Go to the login page.";
-}
-
-async function login() {
-  const username = document.getElementById("login-username").value.trim();
-  const password = document.getElementById("login-password").value;
-
-  if (!username || !password) {
-    authStatus.textContent = "Enter your username and password.";
-    return;
-  }
-
-  authStatus.textContent = "Checking...";
-  const fakeEmail = usernameToEmail(username);
-  const { data, error } = await sb.auth.signInWithPassword({ email: fakeEmail, password });
-
-  if (error) {
-    authStatus.textContent = "Error: incorrect username or password.";
-    return;
-  }
-
-  // Login muvaffaqiyatli — mcp_token ni yangilab qo'yamiz (eski hisoblar /
-  // parol o'zgargan holat uchun). Bu faqat metadata, parol saqlanmaydi.
-  try {
-    const mcp_token = await computeMcpToken(username, password);
-    const meta = data?.user?.user_metadata || {};
-    if (meta.mcp_token !== mcp_token) {
-      await sb.auth.updateUser({ data: { ...meta, mcp_token, username: meta.username || username } });
-    }
-  } catch (e) {
-    console.warn("mcp_token yangilanmadi:", e);
-  }
-
-  authStatus.textContent = "";
-}
-
 async function logout() {
   await sb.auth.signOut();
+  location.replace("/login/");
 }
 
 // Gear icon → sozlamalar modal (Claude ga ulang + Account + Log out)
@@ -796,19 +726,17 @@ async function logout() {
 
 sb.auth.onAuthStateChange((event, session) => {
   if (bootLoader.style.display !== "none") return;
+  // Public share link — login majburiy emas
+  if (shareToken) return;
   if (session) {
-    authScreen.style.display = "none";
-    appScreen.style.display = "block";
-    const name = session.user.user_metadata?.name || session.user.user_metadata?.username || "";
-    if (userEmailEl) userEmailEl.textContent = name;
+    if (appScreen) appScreen.style.display = "block";
     loadFiles();
     setupRealtime(session.user.id);
     startPolling(session.user.id);
   } else {
-    authScreen.style.display = "flex";
-    appScreen.style.display = "none";
     setupRealtime(null);
     stopPolling();
+    location.replace("/login/");
   }
 });
 
@@ -1108,11 +1036,23 @@ function renderToolbar() {
   });
 }
 
-function setFolder(folder) {
+function setFolder(folder, opts) {
   currentFolder = folder;
+  if (!opts || opts.updateUrl !== false) {
+    syncFolderUrl(folder, !!(opts && opts.replace));
+  }
   renderToolbar();
   renderFiles();
 }
+
+window.addEventListener("popstate", (e) => {
+  const folder = (e.state && "folder" in e.state)
+    ? e.state.folder
+    : parseFolderFromPath(window.location.pathname);
+  currentFolder = folder;
+  renderToolbar();
+  renderFiles();
+});
 
 async function createFolder() {
   const name = prompt("Folder name:");
@@ -1138,6 +1078,7 @@ async function createFolder() {
   }
 
   currentFolder = trimmed;
+  syncFolderUrl(trimmed);
   showToast(`Folder created: ${trimmed}`);
   loadFiles();
 }
@@ -1162,7 +1103,10 @@ async function deleteFolder(id, name) {
     return;
   }
 
-  if (currentFolder === name) currentFolder = null;
+  if (currentFolder === name) {
+    currentFolder = null;
+    syncFolderUrl(null);
+  }
   showToast("Folder deleted");
   loadFiles();
 }

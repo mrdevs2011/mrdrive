@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MRdrive — Login</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%2318181b'/%3E%3Cpath d='M10 26V14L20 22L30 14V26' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="boot-loader">
+    <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+      <rect width="40" height="40" rx="10" fill="#18181b"/>
+      <path d="M10 26V14L20 22L30 14V26" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+  </div>
+
+  <div id="auth-screen" class="screen" style="display:none;">
+    <div class="auth-box">
+      <div class="logo">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="10" fill="#18181b"/>
+          <path d="M10 26V14L20 22L30 14V26" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
+      <h1>MRdrive</h1>
+
+      <div id="login-form">
+        <p class="form-title">Log in</p>
+        <input type="text" id="login-username" placeholder="Username" autocomplete="username" />
+        <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
+        <button type="button" id="login-btn">Log in</button>
+        <p class="switch-link">Don't have an account? <a href="#" id="to-signup">Sign up</a></p>
+      </div>
+
+      <div id="signup-form" style="display:none;">
+        <p class="form-title">Sign up</p>
+        <input type="text" id="signup-name" placeholder="Your name" autocomplete="name" />
+        <input type="text" id="signup-username" placeholder="Username" autocomplete="username" />
+        <input type="password" id="signup-password" placeholder="Password (min 6 characters)" autocomplete="new-password" />
+        <button type="button" id="signup-btn">Sign up</button>
+        <p class="switch-link">Already have an account? <a href="#" id="to-login">Log in</a></p>
+      </div>
+
+      <p id="auth-status"></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/api/config.js"></script>
+  <script>
+    const FAKE_EMAIL_DOMAIN = "mrdrive.local";
+    let sb;
+    const bootLoader = document.getElementById("boot-loader");
+    const authScreen = document.getElementById("auth-screen");
+    const authStatus = document.getElementById("auth-status");
+
+    function usernameToEmail(username) {
+      return username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "") + "@" + FAKE_EMAIL_DOMAIN;
+    }
+
+    async function computeMcpToken(username, password) {
+      const enc = new TextEncoder();
+      const toHex = (buf) =>
+        [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+      const uHash = toHex(await crypto.subtle.digest("SHA-256", enc.encode(String(username))));
+      const pHash = toHex(await crypto.subtle.digest("SHA-256", enc.encode(String(password))));
+      const combined = toHex(await crypto.subtle.digest("SHA-256", enc.encode(uHash + pHash)));
+      return combined.slice(0, 48);
+    }
+
+    function showSignup(e) {
+      if (e) e.preventDefault();
+      document.getElementById("login-form").style.display = "none";
+      document.getElementById("signup-form").style.display = "block";
+      authStatus.textContent = "";
+    }
+    function showLogin(e) {
+      if (e) e.preventDefault();
+      document.getElementById("signup-form").style.display = "none";
+      document.getElementById("login-form").style.display = "block";
+      authStatus.textContent = "";
+    }
+
+    async function doSignup() {
+      const name = document.getElementById("signup-name").value.trim();
+      const username = document.getElementById("signup-username").value.trim();
+      const password = document.getElementById("signup-password").value;
+      if (!name || !username || !password) {
+        authStatus.textContent = "Please fill in all fields.";
+        return;
+      }
+      if (password.length < 6) {
+        authStatus.textContent = "Password must be at least 6 characters.";
+        return;
+      }
+      authStatus.textContent = "Signing you up...";
+      const mcp_token = await computeMcpToken(username, password);
+      const { data, error } = await sb.auth.signUp({
+        email: usernameToEmail(username),
+        password,
+        options: { data: { name, username, mcp_token } },
+      });
+      if (error) {
+        if (error.message.includes("already registered")) {
+          authStatus.textContent = "This username is taken. Pick another one.";
+        } else {
+          authStatus.textContent = "Error: " + error.message;
+        }
+        return;
+      }
+      if (data.session) {
+        location.replace("/");
+      } else {
+        authStatus.textContent = "Signed up. Please log in.";
+        showLogin();
+      }
+    }
+
+    async function doLogin() {
+      const username = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+      if (!username || !password) {
+        authStatus.textContent = "Enter your username and password.";
+        return;
+      }
+      authStatus.textContent = "Checking...";
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: usernameToEmail(username),
+        password,
+      });
+      if (error) {
+        authStatus.textContent = "Error: incorrect username or password.";
+        return;
+      }
+      try {
+        const mcp_token = await computeMcpToken(username, password);
+        const meta = data?.user?.user_metadata || {};
+        if (meta.mcp_token !== mcp_token) {
+          await sb.auth.updateUser({
+            data: { ...meta, mcp_token, username: meta.username || username },
+          });
+        }
+      } catch (e) {
+        console.warn("mcp_token yangilanmadi:", e);
+      }
+      location.replace("/");
+    }
+
+    (async function init() {
+      if (typeof SUPABASE_URL === "undefined" || !SUPABASE_URL || !window.supabase) {
+        bootLoader.style.display = "none";
+        authScreen.style.display = "flex";
+        authStatus.textContent = "Server sozlamalari yuklanmadi.";
+        return;
+      }
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      const { data: { session } } = await sb.auth.getSession();
+      // Ro'yxatdan o'tgan / login qilgan user login sahifasiga kira olmaydi
+      if (session) {
+        location.replace("/");
+        return;
+      }
+
+      bootLoader.style.display = "none";
+      authScreen.style.display = "flex";
+
+      document.getElementById("to-signup").addEventListener("click", showSignup);
+      document.getElementById("to-login").addEventListener("click", showLogin);
+      document.getElementById("login-btn").addEventListener("click", doLogin);
+      document.getElementById("signup-btn").addEventListener("click", doSignup);
+      document.getElementById("login-password").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") doLogin();
+      });
+      document.getElementById("signup-password").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") doSignup();
+      });
+    })();
+  </script>
+</body>
+</html>
