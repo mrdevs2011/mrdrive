@@ -1,9 +1,9 @@
--- Run this once in the Supabase SQL editor to turn on Realtime for MRdrive.
--- Without this, app.js's postgres_changes subscription will connect but
--- never actually receive any change events.
+-- OPTIONAL. app.js now polls every 2s on its own, so the app works live
+-- without this. Run this ONLY if you do have Supabase dashboard/SQL access
+-- and want true push-based updates (sub-second instead of up to ~2s):
 
 alter publication supabase_realtime add table public.files;
 alter publication supabase_realtime add table public.folders;
 
--- Make sure Row Level Security still restricts each user to their own rows
--- (realtime respects RLS policies, so this doesn't leak other users' files).
+-- Realtime still respects your existing Row Level Security policies, so
+-- this doesn't leak other users' files.

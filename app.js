@@ -32,15 +32,35 @@ let currentSearch = "";
 let currentFolder = null;
 let realtimeChannel = null;
 let realtimeDebounce = null;
+let pollTimer = null;
+const POLL_MS = 2000; // fallback refresh interval, no Supabase config needed
 
 // ==========================================
-// REALTIME (instant updates without manual refresh)
+// LIVE UPDATES (no Supabase dashboard access needed)
 // ==========================================
-// Subscribes to Postgres changes on the files/folders tables so that any
-// insert/update/delete (from this tab, another tab, or the MCP tools)
-// reflects here immediately, without waiting for a manual reload.
-// NOTE: requires the tables to be added to Supabase's realtime publication
-// -- see enable-realtime.sql.
+// Two mechanisms, both purely client-side:
+//   1) A lightweight poll every POLL_MS that silently re-fetches the file
+//      list. This alone guarantees changes show up within ~2s, with zero
+//      Supabase configuration required.
+//   2) A best-effort Realtime subscription (postgres_changes). This only
+//      fires if the project's "files"/"folders" tables happen to already be
+//      in the realtime publication; if not, it silently does nothing and
+//      polling still covers you. Safe to leave in either way.
+function startPolling(userId) {
+  stopPolling();
+  if (!userId) return;
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === "visible") loadFiles(true);
+  }, POLL_MS);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
 function setupRealtime(userId) {
   if (realtimeChannel) {
     sb.removeChannel(realtimeChannel);
@@ -91,6 +111,7 @@ if (shareToken) {
       userEmailEl.textContent = name;
       loadFiles();
       setupRealtime(session.user.id);
+      startPolling(session.user.id);
     } else {
       authScreen.style.display = "flex";
     }
@@ -99,6 +120,7 @@ if (shareToken) {
 
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "avif"];
 const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "m4v", "ogv"];
+const PDF_EXTENSIONS = ["pdf"];
 
 function getFileExt(filename) {
   return (filename.split(".").pop() || "").toLowerCase();
@@ -108,6 +130,7 @@ function getFileKind(filename) {
   const ext = getFileExt(filename);
   if (IMAGE_EXTENSIONS.includes(ext)) return "image";
   if (VIDEO_EXTENSIONS.includes(ext)) return "video";
+  if (PDF_EXTENSIONS.includes(ext)) return "pdf";
   return "other";
 }
 
@@ -124,6 +147,9 @@ function showPublicDownloadModal(token) {
           <p id="public-meta" class="public-meta"></p>
           <p id="public-expiry" class="public-expiry"></p>
           <div class="public-actions">
+            <button id="public-edit-btn" class="public-edit-btn" title="Tahrirlash" style="display:none;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            </button>
             <button id="public-download-btn" disabled>Download</button>
             <button id="public-fs-btn" class="public-fs-btn" title="Fullscreen" aria-label="Fullscreen" style="display:none;">${ICON_FULLSCREEN}</button>
           </div>
@@ -147,6 +173,8 @@ function showPublicDownloadModal(token) {
   const statusEl = document.getElementById("public-status");
   const downloadBtn = document.getElementById("public-download-btn");
   const fsBtn = document.getElementById("public-fs-btn");
+  const editBtn = document.getElementById("public-edit-btn");
+  let publicEdit = null; // set once an image preview loads; see setupPublicImageEdit
 
   sb.from(TABLE)
     .select("*")
@@ -196,6 +224,11 @@ function showPublicDownloadModal(token) {
                 <img src="${previewUrlData.signedUrl}" alt="${escapeHtml(data.filename)}" loading="eager" />
               </div>
             `;
+            const imgEl = previewWrap.querySelector("img");
+            editBtn.style.display = "flex";
+            imgEl.addEventListener("load", () => {
+              publicEdit = setupPublicImageEdit(editBtn, previewWrap, imgEl);
+            }, { once: true });
           } else {
             previewWrap.innerHTML = `
               <div class="public-preview is-video">
@@ -204,10 +237,50 @@ function showPublicDownloadModal(token) {
             `;
           }
         }
+      } else if (kind === "pdf") {
+        const { data: previewUrlData, error: previewUrlError } = await sb.storage
+          .from(BUCKET)
+          .createSignedUrl(data.storage_path, 3600);
+
+        if (!previewUrlError && previewUrlData && window.pdfjsLib) {
+          modalIcon.style.display = "none";
+          modalBox.classList.add("has-preview");
+          statusEl.textContent = "Loading PDF…";
+          try {
+            const pages = await renderPublicPdf(previewUrlData.signedUrl, previewWrap);
+            statusEl.textContent = "";
+            editBtn.style.display = "flex";
+            publicEdit = setupPublicPdfEdit(editBtn, pages);
+          } catch (err) {
+            console.error(err);
+            statusEl.textContent = "Could not preview this PDF";
+          }
+        }
       }
 
       downloadBtn.onclick = async () => {
         statusEl.textContent = "Preparing download...";
+
+        // If the person drew on the image/PDF with Edit, download the
+        // edited version locally instead of fetching the original from
+        // storage.
+        if (publicEdit && publicEdit.hasDrawing()) {
+          const blob = await publicEdit.getEditedBlob();
+          if (!blob) {
+            statusEl.textContent = "Error preparing file";
+            return;
+          }
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = blobUrl;
+          a.download = data.filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+          statusEl.textContent = "Downloaded";
+          return;
+        }
 
         const { data: urlData, error: urlError } = await sb.storage
           .from(BUCKET)
@@ -233,6 +306,244 @@ function showPublicDownloadModal(token) {
         statusEl.textContent = "Downloaded";
       };
     });
+}
+
+// Lightweight, standalone pencil-only drawing overlay for the public share
+// preview (no toolbar — Edit just toggles freehand drawing on/off).
+// Renders every page of a public PDF into the preview area using pdf.js,
+// stacking a same-size transparent drawing canvas on top of each page's
+// raster canvas. Returns the list of {renderCanvas, drawCanvas, width,
+// height} pairs so setupPublicPdfEdit can wire pencil drawing on them and
+// the download handler can flatten them back into a PDF.
+async function renderPublicPdf(url, previewWrap) {
+  const wrap = document.createElement("div");
+  wrap.className = "public-preview is-pdf";
+  previewWrap.innerHTML = "";
+  previewWrap.appendChild(wrap);
+
+  const pdf = await pdfjsLib.getDocument(url).promise;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssWidth = Math.min(900, wrap.clientWidth || window.innerWidth || 800);
+  const pages = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const unscaled = page.getViewport({ scale: 1 });
+    const scale = (cssWidth / unscaled.width) * dpr;
+    const viewport = page.getViewport({ scale });
+
+    const pageWrap = document.createElement("div");
+    pageWrap.className = "public-pdf-page";
+    pageWrap.style.width = (viewport.width / dpr) + "px";
+    pageWrap.style.height = (viewport.height / dpr) + "px";
+
+    const renderCanvas = document.createElement("canvas");
+    renderCanvas.className = "public-pdf-render-canvas";
+    renderCanvas.width = viewport.width;
+    renderCanvas.height = viewport.height;
+    await page.render({ canvasContext: renderCanvas.getContext("2d"), viewport }).promise;
+
+    const drawCanvas = document.createElement("canvas");
+    drawCanvas.className = "public-edit-canvas";
+    drawCanvas.width = viewport.width;
+    drawCanvas.height = viewport.height;
+    drawCanvas.style.left = "0";
+    drawCanvas.style.top = "0";
+    drawCanvas.style.width = "100%";
+    drawCanvas.style.height = "100%";
+
+    pageWrap.appendChild(renderCanvas);
+    pageWrap.appendChild(drawCanvas);
+    wrap.appendChild(pageWrap);
+
+    pages.push({ renderCanvas, drawCanvas, width: viewport.width, height: viewport.height });
+  }
+
+  return pages;
+}
+
+// Pencil-only drawing across every page of a rendered PDF. Same on/off
+// toggle behavior as setupPublicImageEdit, and the same
+// hasDrawing()/getEditedBlob() interface, so the download handler doesn't
+// need to know whether it's dealing with an image or a PDF.
+function setupPublicPdfEdit(editBtn, pages) {
+  let editing = false;
+  let drawing = false;
+  let hasStrokes = false;
+
+  pages.forEach((p) => {
+    const ctx = p.drawCanvas.getContext("2d");
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = Math.max(3, p.width / 250);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const getPos = (e) => {
+      const rect = p.drawCanvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * (p.drawCanvas.width / rect.width),
+        y: (e.clientY - rect.top) * (p.drawCanvas.height / rect.height)
+      };
+    };
+
+    p.drawCanvas.addEventListener("pointerdown", (e) => {
+      if (!editing) return;
+      drawing = true;
+      p.drawCanvas.setPointerCapture(e.pointerId);
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+    });
+    p.drawCanvas.addEventListener("pointermove", (e) => {
+      if (!editing || !drawing) return;
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      hasStrokes = true;
+    });
+    const stop = () => { drawing = false; };
+    p.drawCanvas.addEventListener("pointerup", stop);
+    p.drawCanvas.addEventListener("pointercancel", stop);
+    p.drawCanvas.addEventListener("pointerleave", stop);
+  });
+
+  editBtn.onclick = () => {
+    editing = !editing;
+    editBtn.classList.toggle("active", editing);
+    editBtn.title = editing ? "Chizishni tugatish" : "Tahrirlash";
+    pages.forEach((p) => {
+      p.drawCanvas.style.pointerEvents = editing ? "auto" : "none";
+    });
+  };
+
+  return {
+    hasDrawing: () => hasStrokes,
+    getEditedBlob: async () => {
+      if (!window.PDFLib) return null;
+      const { PDFDocument } = PDFLib;
+      const pdfDoc = await PDFDocument.create();
+      for (const p of pages) {
+        const off = document.createElement("canvas");
+        off.width = p.width;
+        off.height = p.height;
+        const octx = off.getContext("2d");
+        octx.drawImage(p.renderCanvas, 0, 0);
+        octx.drawImage(p.drawCanvas, 0, 0);
+        const pngBytes = await fetch(off.toDataURL("image/png")).then(r => r.arrayBuffer());
+        const pngImage = await pdfDoc.embedPng(pngBytes);
+        const pdfPage = pdfDoc.addPage([p.width, p.height]);
+        pdfPage.drawImage(pngImage, { x: 0, y: 0, width: p.width, height: p.height });
+      }
+      const bytes = await pdfDoc.save();
+      return new Blob([bytes], { type: "application/pdf" });
+    }
+  };
+}
+
+function setupPublicImageEdit(editBtn, previewWrap, imgEl) {
+  let editing = false;
+  let canvas = null;
+  let ctx = null;
+  let drawing = false;
+  let hasStrokes = false;
+
+  // The <img> uses object-fit: contain, so its rendered pixels usually don't
+  // fill the whole wrap (letterboxing). Compute that inner content rect so
+  // the drawing canvas lines up with what the user actually sees.
+  function syncCanvasRect() {
+    const wrap = previewWrap.querySelector(".public-preview.is-image");
+    if (!wrap || !canvas) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    const naturalW = imgEl.naturalWidth || 1;
+    const naturalH = imgEl.naturalHeight || 1;
+    const containerRatio = wrapRect.width / wrapRect.height;
+    const imageRatio = naturalW / naturalH;
+
+    let width, height;
+    if (imageRatio > containerRatio) {
+      width = wrapRect.width;
+      height = width / imageRatio;
+    } else {
+      height = wrapRect.height;
+      width = height * imageRatio;
+    }
+    canvas.style.left = (wrapRect.width - width) / 2 + "px";
+    canvas.style.top = (wrapRect.height - height) / 2 + "px";
+    canvas.style.width = width + "px";
+    canvas.style.height = height + "px";
+  }
+
+  function buildCanvas() {
+    canvas = document.createElement("canvas");
+    canvas.className = "public-edit-canvas";
+    canvas.width = imgEl.naturalWidth;
+    canvas.height = imgEl.naturalHeight;
+
+    ctx = canvas.getContext("2d");
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = Math.max(3, imgEl.naturalWidth / 250);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const getPos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * (canvas.width / rect.width),
+        y: (e.clientY - rect.top) * (canvas.height / rect.height)
+      };
+    };
+
+    canvas.addEventListener("pointerdown", (e) => {
+      if (!editing) return;
+      drawing = true;
+      canvas.setPointerCapture(e.pointerId);
+      const p = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!editing || !drawing) return;
+      const p = getPos(e);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      hasStrokes = true;
+    });
+    const stop = () => { drawing = false; };
+    canvas.addEventListener("pointerup", stop);
+    canvas.addEventListener("pointercancel", stop);
+    canvas.addEventListener("pointerleave", stop);
+
+    const wrap = previewWrap.querySelector(".public-preview.is-image");
+    wrap.style.position = "relative";
+    wrap.appendChild(canvas);
+    syncCanvasRect();
+    window.addEventListener("resize", syncCanvasRect);
+    document.addEventListener("fullscreenchange", syncCanvasRect);
+  }
+
+  editBtn.onclick = () => {
+    editing = !editing;
+    editBtn.classList.toggle("active", editing);
+    editBtn.title = editing ? "Chizishni tugatish" : "Tahrirlash";
+    if (editing && !canvas) buildCanvas();
+    if (canvas) {
+      canvas.style.pointerEvents = editing ? "auto" : "none";
+      syncCanvasRect();
+    }
+  };
+
+  return {
+    hasDrawing: () => hasStrokes,
+    getEditedBlob: () => new Promise((resolve) => {
+      const off = document.createElement("canvas");
+      off.width = imgEl.naturalWidth;
+      off.height = imgEl.naturalHeight;
+      const octx = off.getContext("2d");
+      octx.drawImage(imgEl, 0, 0, off.width, off.height);
+      if (canvas) octx.drawImage(canvas, 0, 0);
+      off.toBlob(resolve, "image/png");
+    })
+  };
 }
 
 // Fullscreen: the button sits in the bottom panel, never on top of the preview.
@@ -382,10 +693,12 @@ sb.auth.onAuthStateChange((event, session) => {
     userEmailEl.textContent = name;
     loadFiles();
     setupRealtime(session.user.id);
+    startPolling(session.user.id);
   } else {
     authScreen.style.display = "flex";
     appScreen.style.display = "none";
     setupRealtime(null);
+    stopPolling();
   }
 });
 
@@ -612,7 +925,7 @@ window.addEventListener("paste", (e) => {
 // LIST + TOOLBAR + FOLDERS
 // ==========================================
 
-async function loadFiles() {
+async function loadFiles(silent) {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return;
 
@@ -624,12 +937,24 @@ async function loadFiles() {
   ]);
 
   if (filesRes.error) {
-    fileListEl.innerHTML = `<p>Error: ${filesRes.error.message}</p>`;
+    if (!silent) fileListEl.innerHTML = `<p>Error: ${filesRes.error.message}</p>`;
     return;
   }
 
-  allFiles = filesRes.data;
-  allFolders = foldersRes.data || [];
+  const newFiles = filesRes.data;
+  const newFolders = foldersRes.data || [];
+
+  if (silent) {
+    // Polling call: skip the re-render entirely if nothing actually changed,
+    // so the list doesn't flicker or lose scroll position every 2s.
+    const same =
+      JSON.stringify(newFiles) === JSON.stringify(allFiles) &&
+      JSON.stringify(newFolders) === JSON.stringify(allFolders);
+    if (same) return;
+  }
+
+  allFiles = newFiles;
+  allFolders = newFolders;
   renderToolbar();
   renderFiles();
 }
@@ -1281,7 +1606,8 @@ let annotState = {
   panStart: null,
   scale: 1,
   scrollEl: null,
-  isFullscreen: false
+  isFullscreen: false,
+  editMode: false
 };
 
 function isViewable(filename) {
@@ -1346,12 +1672,27 @@ async function openAnnotationViewer(file, kind) {
   annotState.tool = "pen";
   annotState.color = "#ef4444";
   annotState.size = 4;
+  annotState.editMode = false;
 
   filenameEl.textContent = file.filename;
   scroll.innerHTML = "";
   viewer.style.display = "flex";
   viewer.setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
+
+  // Start in view-only mode: hide the drawing toolbar and undo/redo/save
+  // until the user explicitly taps Edit. Code files stay read-only, so the
+  // Edit button itself is hidden for them.
+  const editBtn = document.getElementById("annot-edit");
+  const undoBtn = document.getElementById("annot-undo");
+  const redoBtn = document.getElementById("annot-redo");
+  const saveBtn = document.getElementById("annot-save");
+  toolbar.style.display = "none";
+  undoBtn.style.display = "none";
+  redoBtn.style.display = "none";
+  saveBtn.style.display = "none";
+  editBtn.style.display = kind === "code" ? "none" : "";
+  editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn, saveBtn);
 
   buildAnnotToolbar(toolbar);
 
@@ -1394,6 +1735,20 @@ async function openAnnotationViewer(file, kind) {
 
   // Keyboard
   window.addEventListener("keydown", annotKeyHandler);
+}
+
+// Switches the viewer from read-only preview into drawing mode. Only
+// freehand pencil drawing is available here (no highlighter/text/pan/color
+// picker/size/clear/zoom) — just the pen, plus undo/redo/save in the topbar.
+function enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn, saveBtn) {
+  if (annotState.editMode) return;
+  annotState.editMode = true;
+  annotState.tool = "pen";
+  undoBtn.style.display = "";
+  redoBtn.style.display = "";
+  saveBtn.style.display = "";
+  editBtn.style.display = "none";
+  updateCursor();
 }
 
 function closeAnnotationViewer() {
@@ -1683,7 +2038,8 @@ function onPointerDown(e, pageIdx) {
   canvas.setPointerCapture(e.pointerId);
   annotState.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-  // 2+ fingers → pan mode
+  // 2+ fingers → pan mode (allowed even before Edit is tapped, so people can
+  // still pinch-zoom/pan while just previewing).
   if (annotState.touches.size >= 2 || annotState.tool === "pan") {
     annotState.isPanning = true;
     annotState.drawing = false;
@@ -1694,6 +2050,13 @@ function onPointerDown(e, pageIdx) {
       x: e.clientX,
       y: e.clientY
     };
+    return;
+  }
+
+  // Not in edit mode yet: single-finger/mouse taps just do nothing (no
+  // accidental doodles) until the user taps the Edit (pencil) button.
+  if (!annotState.editMode) {
+    annotState.drawing = false;
     return;
   }
 
@@ -1890,12 +2253,12 @@ async function saveAnnotated() {
       const imgEl = p.el.querySelector("img");
       octx.drawImage(imgEl, 0, 0, p.imgW, p.imgH);
       octx.drawImage(p.canvas, 0, 0);
-      off.toBlob(async (blob) => {
+      off.toBlob((blob) => {
         if (!blob) return;
-        const name = annotState.file.filename.replace(/(\.[^.]+)$/, "_annotated$1");
+        const name = annotState.file.filename;
         const file = new File([blob], name, { type: "image/png" });
-        await uploadFile(file);
-        showToast("Annotated rasm drive'ga saqlandi");
+        downloadFileLocally(file);
+        showToast("Rasm \"" + name + "\" nomi bilan yuklab olindi");
         closeAnnotationViewer();
       }, "image/png");
     } else if (annotState.type === "pdf") {
@@ -1932,16 +2295,29 @@ async function saveAnnotated() {
 
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: "application/pdf" });
-      const name = annotState.file.filename.replace(/\.pdf$/i, "_annotated.pdf");
+      const name = annotState.file.filename;
       const file = new File([blob], name, { type: "application/pdf" });
-      await uploadFile(file);
-      showToast("Annotated PDF (barcha sahifalar) drive'ga saqlandi");
+      downloadFileLocally(file);
+      showToast("Fayl \"" + name + "\" nomi bilan yuklab olindi");
       closeAnnotationViewer();
     }
   } catch (err) {
     console.error(err);
     showToast("Saqlash muvaffaqiyatsiz", "error");
   }
+}
+
+// Triggers a browser download of the given File/Blob to the user's local
+// machine instead of uploading it anywhere.
+function downloadFileLocally(file) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function toggleAnnotFullscreen() {

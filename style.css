@@ -538,6 +538,27 @@ header button:hover { background: var(--bg); }
 }
 .public-preview.is-image { background: #f4f4f5; }
 .public-preview.is-video { background: #000; }
+.public-preview.is-pdf {
+  background: #52525b;
+  overflow-y: auto;
+  overflow-x: hidden;
+  align-items: flex-start;
+  padding: 12px;
+  gap: 12px;
+  flex-direction: column;
+}
+.public-pdf-page {
+  position: relative;
+  max-width: 100%;
+  margin: 0 auto;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.35);
+  line-height: 0;
+}
+.public-pdf-render-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 
 .public-preview img,
 .public-preview video {
@@ -586,7 +607,8 @@ header button:hover { background: var(--bg); }
   width: 100%;
 }
 .public-actions #public-download-btn { flex: 1 1 auto; min-width: 0; }
-.public-modal-box .public-fs-btn {
+.public-modal-box .public-fs-btn,
+.public-modal-box .public-edit-btn {
   flex: 0 0 46px;
   width: 46px;
   padding: 0;
@@ -597,6 +619,21 @@ header button:hover { background: var(--bg); }
   border: 1px solid var(--border);
 }
 .public-modal-box .public-fs-btn:hover:not(:disabled) { background: #e4e4e7; opacity: 1; }
+.public-modal-box .public-edit-btn:hover { background: #e4e4e7; opacity: 1; }
+.public-modal-box .public-edit-btn.active {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+}
+
+/* Pencil-drawing overlay on the public image preview. Positioned exactly
+   over the rendered (object-fit: contain) image area via JS. */
+.public-edit-canvas {
+  position: absolute;
+  pointer-events: none;
+  touch-action: none;
+  cursor: crosshair;
+}
 
 /* Small "No thanks"-style link */
 .public-go-link {
