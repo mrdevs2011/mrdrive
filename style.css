@@ -1762,3 +1762,45 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 .annot-page {
   transition: transform 0.15s ease;
 }
+
+
+/* Public share: loading states */
+.public-spinner { animation: spin 0.9s linear infinite; }
+.public-modal-icon.is-loading { background: transparent; }
+.public-modal-icon.is-loading svg { width: 28px; height: 28px; }
+#public-preview-wrap { position: relative; }
+.public-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 13px;
+  transition: opacity 0.2s ease;
+}
+.public-loading.is-hiding { opacity: 0; pointer-events: none; }
+.public-preview img.public-fade-in { opacity: 0; transition: opacity 0.25s ease; }
+.public-preview img.public-fade-in.is-loaded { opacity: 1; }
+
+/* MRdrive link — plain text link under the size/date line */
+.public-brand-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: inherit;
+  font-weight: inherit;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.public-brand-link:hover { color: var(--text); }
+.public-topbar-text .public-brand-link { display: block; width: fit-content; margin-top: 2px; font-size: 12px; }
+.public-modal-box:not(.has-preview) .public-topbar-text .public-brand-link { margin: 8px auto 0; font-size: 13px; }

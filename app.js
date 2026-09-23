@@ -10,6 +10,7 @@ const bootLoader = document.getElementById("boot-loader");
 
 const ICON_FULLSCREEN = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 9V4H9M15 4H20V9M20 15V20H15M9 20H4V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ICON_EXIT_FULLSCREEN = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 4V9H4M20 9H15V4M15 20V15H20M4 15H9V20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_SPINNER = `<svg class="public-spinner" width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.2" stroke-width="2.5"/><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>`;
 const ICON_DOWNLOAD = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V16M12 16L7 11M12 16L17 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_DELETE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 7L7 19C7 19.5523 7.44772 20 8 20H16C16.5523 20 17 19.5523 17 19L18 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7V4C9 3.44772 9.44772 3 10 3H14C14.5523 3 15 3.44772 15 4V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_LINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -302,10 +303,11 @@ function showPublicDownloadModal(token) {
       <div class="public-modal-box" id="public-modal-box">
         <div class="public-topbar" id="public-info">
           <div class="public-topbar-main">
-            <div class="public-modal-icon" id="public-modal-icon">${ICON_DOWNLOAD}</div>
+            <div class="public-modal-icon is-loading" id="public-modal-icon">${ICON_SPINNER}</div>
             <div class="public-topbar-text">
-              <h2 id="public-filename">Loading...</h2>
+              <h2 id="public-filename">Loading…</h2>
               <p id="public-meta" class="public-meta"></p>
+              <a class="public-brand-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer" title="MRdrive">MRdrive</a>
             </div>
           </div>
           <div class="public-actions">
@@ -314,7 +316,6 @@ function showPublicDownloadModal(token) {
             </button>
             <button id="public-download-btn" class="public-download-btn" disabled title="Download" aria-label="Download">${ICON_DOWNLOAD}</button>
             <button id="public-fs-btn" class="public-fs-btn" title="Fullscreen" aria-label="Fullscreen" style="display:none;">${ICON_FULLSCREEN}</button>
-            <a class="public-go-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer" title="MRdrive">MRdrive</a>
           </div>
           <p id="public-status" class="public-status"></p>
         </div>
@@ -345,12 +346,16 @@ function showPublicDownloadModal(token) {
     .single()
     .then(async ({ data, error }) => {
       if (error || !data) {
+        modalIcon.classList.remove("is-loading");
+        modalIcon.innerHTML = ICON_DOWNLOAD;
         filenameEl.textContent = "File not found";
         metaEl.textContent = "This link was removed or doesn't exist.";
         return;
       }
 
       if (data.expires_at && new Date(data.expires_at) < new Date()) {
+        modalIcon.classList.remove("is-loading");
+        modalIcon.innerHTML = ICON_DOWNLOAD;
         filenameEl.textContent = "Expired";
         metaEl.textContent = "This link has expired.";
         return;
@@ -367,14 +372,37 @@ function showPublicDownloadModal(token) {
 
       const kind = getFileKind(data.filename);
 
+      // Previewable files: switch to the full preview layout IMMEDIATELY
+      // with a loading spinner, instead of flashing the plain download card
+      // while the signed URL / media loads.
+      const loaderEl = document.createElement("div");
+      loaderEl.className = "public-loading";
+      loaderEl.innerHTML = `${ICON_SPINNER}<span>Loading preview…</span>`;
+      const hideLoader = () => {
+        loaderEl.classList.add("is-hiding");
+        setTimeout(() => loaderEl.remove(), 220);
+      };
+      if (kind === "image" || kind === "video" || kind === "pdf") {
+        modalIcon.style.display = "none";
+        modalBox.classList.add("has-preview");
+        previewWrap.appendChild(loaderEl);
+      } else {
+        modalIcon.classList.remove("is-loading");
+        modalIcon.innerHTML = ICON_DOWNLOAD;
+      }
+
       if (kind === "image" || kind === "video") {
         const { data: previewUrlData, error: previewUrlError } = await sb.storage
           .from(BUCKET)
           .createSignedUrl(data.storage_path, 3600);
 
-        if (!previewUrlError && previewUrlData) {
-          modalIcon.style.display = "none";
-          modalBox.classList.add("has-preview");
+        if (previewUrlError || !previewUrlData) {
+          hideLoader();
+          modalBox.classList.remove("has-preview");
+          modalIcon.style.display = "";
+          modalIcon.classList.remove("is-loading");
+          modalIcon.innerHTML = ICON_DOWNLOAD;
+        } else {
           fsBtn.style.display = "flex";
           setupPublicFullscreen(fsBtn, modalBox, previewWrap);
           setupPublicControlsFade(modalBox, previewWrap, kind !== "video");
@@ -387,20 +415,40 @@ function showPublicDownloadModal(token) {
             imgEl.crossOrigin = "anonymous";
             imgEl.alt = data.filename;
             imgEl.loading = "eager";
-            imgEl.src = previewUrlData.signedUrl;
+            imgEl.classList.add("public-fade-in");
             wrap.appendChild(imgEl);
-            previewWrap.innerHTML = "";
+            // keep the loader in place; remove only the old content
+            Array.from(previewWrap.children).forEach((c) => { if (c !== loaderEl) c.remove(); });
             previewWrap.appendChild(wrap);
-            editBtn.style.display = "flex";
             imgEl.addEventListener("load", () => {
+              hideLoader();
+              imgEl.classList.add("is-loaded");
+              editBtn.style.display = "flex";
               publicEdit = setupPublicImageEdit(editBtn, previewWrap, imgEl);
             }, { once: true });
+            imgEl.addEventListener("error", () => {
+              hideLoader();
+              statusEl.textContent = "Could not load this image";
+            }, { once: true });
+            imgEl.src = previewUrlData.signedUrl;
           } else {
-            previewWrap.innerHTML = `
-              <div class="public-preview is-video">
-                <video src="${previewUrlData.signedUrl}" controls playsinline webkit-playsinline preload="metadata"></video>
-              </div>
-            `;
+            Array.from(previewWrap.children).forEach((c) => { if (c !== loaderEl) c.remove(); });
+            const wrap = document.createElement("div");
+            wrap.className = "public-preview is-video";
+            const videoEl = document.createElement("video");
+            videoEl.controls = true;
+            videoEl.playsInline = true;
+            videoEl.setAttribute("webkit-playsinline", "");
+            videoEl.preload = "metadata";
+            videoEl.addEventListener("loadeddata", hideLoader, { once: true });
+            videoEl.addEventListener("loadedmetadata", hideLoader, { once: true });
+            videoEl.addEventListener("error", () => {
+              hideLoader();
+              statusEl.textContent = "Could not load this video";
+            }, { once: true });
+            videoEl.src = previewUrlData.signedUrl;
+            wrap.appendChild(videoEl);
+            previewWrap.appendChild(wrap);
           }
         }
       } else if (kind === "pdf") {
@@ -408,18 +456,23 @@ function showPublicDownloadModal(token) {
           .from(BUCKET)
           .createSignedUrl(data.storage_path, 3600);
 
-        if (!previewUrlError && previewUrlData && window.pdfjsLib) {
-          modalIcon.style.display = "none";
-          modalBox.classList.add("has-preview");
-          statusEl.textContent = "Loading PDF…";
+        if (previewUrlError || !previewUrlData || !window.pdfjsLib) {
+          hideLoader();
+          modalBox.classList.remove("has-preview");
+          modalIcon.style.display = "";
+          modalIcon.classList.remove("is-loading");
+          modalIcon.innerHTML = ICON_DOWNLOAD;
+        } else {
           try {
             const pages = await renderPublicPdf(previewUrlData.signedUrl, previewWrap);
+            hideLoader();
             statusEl.textContent = "";
             editBtn.style.display = "flex";
             publicEdit = setupPublicPdfEdit(editBtn, pages);
             setupPublicControlsFade(modalBox, previewWrap, true);
           } catch (err) {
             console.error(err);
+            hideLoader();
             statusEl.textContent = "Could not preview this PDF";
           }
         }
@@ -500,7 +553,9 @@ function showPublicDownloadModal(token) {
 async function renderPublicPdf(url, previewWrap) {
   const wrap = document.createElement("div");
   wrap.className = "public-preview is-pdf";
-  previewWrap.innerHTML = "";
+  Array.from(previewWrap.children).forEach((c) => {
+    if (!c.classList.contains("public-loading")) c.remove();
+  });
   previewWrap.appendChild(wrap);
 
   const pdf = await pdfjsLib.getDocument(url).promise;
