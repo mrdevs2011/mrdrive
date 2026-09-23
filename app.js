@@ -30,6 +30,44 @@ let allFiles = [];
 let allFolders = [];
 let currentSearch = "";
 let currentFolder = null;
+let realtimeChannel = null;
+let realtimeDebounce = null;
+
+// ==========================================
+// REALTIME (instant updates without manual refresh)
+// ==========================================
+// Subscribes to Postgres changes on the files/folders tables so that any
+// insert/update/delete (from this tab, another tab, or the MCP tools)
+// reflects here immediately, without waiting for a manual reload.
+// NOTE: requires the tables to be added to Supabase's realtime publication
+// -- see enable-realtime.sql.
+function setupRealtime(userId) {
+  if (realtimeChannel) {
+    sb.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+  if (!userId) return;
+
+  const scheduleReload = () => {
+    // Debounce so a burst of changes (e.g. bulk upload) triggers one reload.
+    clearTimeout(realtimeDebounce);
+    realtimeDebounce = setTimeout(loadFiles, 50);
+  };
+
+  realtimeChannel = sb
+    .channel(`mrdrive-changes-${userId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: TABLE, filter: `user_id=eq.${userId}` },
+      scheduleReload
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: FOLDERS_TABLE, filter: `user_id=eq.${userId}` },
+      scheduleReload
+    )
+    .subscribe();
+}
 
 // ==========================================
 // PUBLIC LINK MODAL
@@ -52,6 +90,7 @@ if (shareToken) {
       const name = session.user.user_metadata?.name || session.user.user_metadata?.username || "";
       userEmailEl.textContent = name;
       loadFiles();
+      setupRealtime(session.user.id);
     } else {
       authScreen.style.display = "flex";
     }
@@ -342,9 +381,11 @@ sb.auth.onAuthStateChange((event, session) => {
     const name = session.user.user_metadata?.name || session.user.user_metadata?.username || "";
     userEmailEl.textContent = name;
     loadFiles();
+    setupRealtime(session.user.id);
   } else {
     authScreen.style.display = "flex";
     appScreen.style.display = "none";
+    setupRealtime(null);
   }
 });
 
