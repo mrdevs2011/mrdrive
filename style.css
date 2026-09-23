@@ -986,6 +986,28 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 }
 .confirm-ok:hover { opacity: 0.85; }
 
+/* PROMPT (text input) DIALOG */
+.prompt-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: -8px 0 18px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.prompt-input:focus {
+  border-color: var(--text);
+}
+.prompt-input::placeholder {
+  color: var(--text-muted);
+}
+
 /* RESPONSIVE */
 @media (max-width: 600px) {
   header { padding: 14px 20px; }
@@ -1096,18 +1118,9 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 }
 .annot-btn svg { animation: annotMorphPop 0.2s ease; }
 
-/* Toolbar */
+/* Toolbar — removed: only freehand pen draw is used (img + pdf) */
 .annot-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  background: #18181b;
-  border-bottom: 1px solid #27272a;
-  overflow-x: auto;
-  flex-shrink: 0;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  display: none !important;
 }
 .annot-toolbar::-webkit-scrollbar { display: none; }
 
@@ -1401,22 +1414,9 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   color: #6b7383;
 }
 
-/* Status bar */
+/* Status bar — hidden for all previews (no footer hints) */
 .annot-status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 12px;
-  background: #18181b;
-  border-top: 1px solid #27272a;
-  font-size: 12px;
-  color: #71717a;
-  flex-shrink: 0;
-  min-height: 32px;
-}
-/* Code preview: bottom status bar hidden (no useful gesture hints) */
-.annot-viewer.kind-code .annot-status {
-  display: none;
+  display: none !important;
 }
 
 /* Image / video: light header, toolbar & status (only code stays dark) */

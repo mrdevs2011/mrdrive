@@ -29,36 +29,127 @@ let allFolders = [];
 let currentSearch = "";
 let currentFolder = null;
 
-// URL: / → barcha fayllar; /f/claude/ → "claude" papkasi
-function parseFolderFromPath(pathname) {
-  const m = (pathname || "").match(/^\/f\/([^/]+)\/?$/);
-  if (!m) return null;
-  try {
-    return decodeURIComponent(m[1]);
-  } catch {
-    return m[1];
+// URL routing (SPA):
+//   /                              → all files
+//   /f/folder/                     → folder
+//   /f/image.png                   → root file
+//   /f/folder/image.png            → file in folder
+//   /f/image.png/20260908/         → same name disambiguated by upload date (YYYYMMDD)
+function decodePathSeg(s) {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+function formatDateKey(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${day}`;
+}
+function looksLikeFilename(seg) {
+  if (!seg || !seg.includes(".")) return false;
+  // any extension-looking tail; isViewable decides preview, others still route
+  return /\.[a-zA-Z0-9]{1,12}$/.test(seg);
+}
+function parseAppPath(pathname) {
+  const raw = (pathname || "/").replace(/\/+$/, "") || "/";
+  if (raw === "/" || !raw.startsWith("/f/")) {
+    return { folder: null, filename: null, dateKey: null };
   }
+  const parts = raw.slice(3).split("/").filter(Boolean).map(decodePathSeg);
+  let dateKey = null;
+  if (parts.length && /^\d{8}$/.test(parts[parts.length - 1])) {
+    dateKey = parts.pop();
+  }
+  if (!parts.length) return { folder: null, filename: null, dateKey: null };
+  if (looksLikeFilename(parts[parts.length - 1])) {
+    const filename = parts.pop();
+    const folder = parts.length ? parts[0] : null;
+    return { folder, filename, dateKey };
+  }
+  return { folder: parts[0] || null, filename: null, dateKey: null };
+}
+function parseFolderFromPath(pathname) {
+  return parseAppPath(pathname).folder;
 }
 function folderToPath(folder) {
   if (folder == null || folder === "") return "/";
   return "/f/" + encodeURIComponent(folder) + "/";
 }
-function syncFolderUrl(folder, replace) {
-  const path = folderToPath(folder);
+function fileToPath(file) {
+  if (!file || !file.filename) return folderToPath(file && file.folder);
+  const folder = file.folder || null;
+  const name = file.filename;
+  let path = folder
+    ? "/f/" + encodeURIComponent(folder) + "/" + encodeURIComponent(name)
+    : "/f/" + encodeURIComponent(name);
+  // Same name in same folder → append YYYYMMDD from uploaded_at
+  const same = (allFiles || []).filter(
+    (f) => f.filename === name && (f.folder || null) === folder
+  );
+  if (same.length > 1) {
+    const key = formatDateKey(file.uploaded_at);
+    if (key) path += "/" + key;
+  }
+  return path;
+}
+function syncUrl(path, state, replace) {
   const qs = window.location.search || "";
   const hash = window.location.hash || "";
   const url = path + qs + hash;
+  const norm = (p) => (p || "/").replace(/\/+$/, "") || "/";
   if (replace) {
-    history.replaceState({ folder: folder }, "", url);
+    history.replaceState(state, "", url);
+  } else if (norm(window.location.pathname) === norm(path)) {
+    history.replaceState(state, "", url);
   } else {
-    const cur = window.location.pathname.replace(/\/?$/, "") || "/";
-    const next = path.replace(/\/?$/, "") || "/";
-    if (cur === next) {
-      history.replaceState({ folder: folder }, "", url);
-    } else {
-      history.pushState({ folder: folder }, "", url);
-    }
+    history.pushState(state, "", url);
   }
+}
+function syncFolderUrl(folder, replace) {
+  syncUrl(folderToPath(folder), { folder: folder, filename: null, dateKey: null }, replace);
+}
+function syncFileUrl(file, replace) {
+  const path = fileToPath(file);
+  syncUrl(path, {
+    folder: file.folder || null,
+    filename: file.filename,
+    dateKey: formatDateKey(file.uploaded_at) || null,
+    fileId: file.id
+  }, replace);
+}
+function findFileFromPath(parsed) {
+  if (!parsed || !parsed.filename) return null;
+  const folder = parsed.folder || null;
+  let candidates = (allFiles || []).filter(
+    (f) => f.filename === parsed.filename && (f.folder || null) === folder
+  );
+  if (parsed.dateKey) {
+    const byDate = candidates.filter((f) => formatDateKey(f.uploaded_at) === parsed.dateKey);
+    if (byDate.length) candidates = byDate;
+  }
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length > 1) {
+    // Prefer exact date, else newest
+    candidates.sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
+    return candidates[0];
+  }
+  return null;
+}
+/** After list load: open file from URL if path points to one. */
+function applyPathAfterLoad(opts) {
+  const parsed = parseAppPath(window.location.pathname);
+  if (parsed.folder !== undefined) {
+    currentFolder = parsed.folder;
+  }
+  if (!parsed.filename) return;
+  const file = findFileFromPath(parsed);
+  if (!file) return;
+  const kind = isViewable(file.filename);
+  if (!kind) return;
+  if (annotState.open && annotState.file && annotState.file.id === file.id) return;
+  openAnnotationViewer(file, kind, { skipUrl: true });
 }
 
 let realtimeChannel = null;
@@ -136,10 +227,14 @@ if (shareToken) {
     if (session) {
       bootLoader.style.display = "none";
       if (appScreen) appScreen.style.display = "block";
-      currentFolder = parseFolderFromPath(window.location.pathname);
-      // URL ni toza holatga keltirish (trailing slash va h.k.)
-      syncFolderUrl(currentFolder, true);
-      loadFiles();
+      const parsed = parseAppPath(window.location.pathname);
+      currentFolder = parsed.folder;
+      // Don't rewrite URL on boot if it already has a file path — loadFiles
+      // will open that file. Folder-only paths get a clean trailing slash.
+      if (!parsed.filename) {
+        syncFolderUrl(currentFolder, true);
+      }
+      loadFiles().then(() => applyPathAfterLoad());
       setupRealtime(session.user.id);
       startPolling(session.user.id);
     } else {
@@ -1039,6 +1134,8 @@ function renderToolbar() {
 function setFolder(folder, opts) {
   currentFolder = folder;
   if (!opts || opts.updateUrl !== false) {
+    // Closing a file preview when switching folders via tab
+    if (annotState.open) closeAnnotationViewer({ skipUrl: true });
     syncFolderUrl(folder, !!(opts && opts.replace));
   }
   renderToolbar();
@@ -1046,18 +1143,34 @@ function setFolder(folder, opts) {
 }
 
 window.addEventListener("popstate", (e) => {
-  const folder = (e.state && "folder" in e.state)
-    ? e.state.folder
-    : parseFolderFromPath(window.location.pathname);
-  currentFolder = folder;
+  const parsed = (e.state && (e.state.filename || e.state.folder !== undefined))
+    ? { folder: e.state.folder ?? null, filename: e.state.filename || null, dateKey: e.state.dateKey || null, fileId: e.state.fileId }
+    : parseAppPath(window.location.pathname);
+  currentFolder = parsed.folder;
   renderToolbar();
   renderFiles();
+  if (parsed.filename) {
+    let file = null;
+    if (parsed.fileId) file = allFiles.find((f) => f.id === parsed.fileId) || null;
+    if (!file) file = findFileFromPath(parsed);
+    const kind = file && isViewable(file.filename);
+    if (file && kind) {
+      if (!(annotState.open && annotState.file && annotState.file.id === file.id)) {
+        openAnnotationViewer(file, kind, { skipUrl: true });
+      }
+      return;
+    }
+  }
+  if (annotState.open) closeAnnotationViewer({ skipUrl: true });
 });
 
 async function createFolder() {
-  const name = prompt("Folder name:");
-  if (!name || !name.trim()) return;
-  const trimmed = name.trim();
+  const name = await showPrompt("Folder name", {
+    okLabel: "Create",
+    placeholder: "e.g. Claude, Work, Photos"
+  });
+  if (name == null || !String(name).trim()) return;
+  const trimmed = String(name).trim();
 
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return;
@@ -1500,6 +1613,66 @@ function showAlert(message) {
   });
 }
 
+// In-app text input dialog — never use native prompt().
+function showPrompt(message, opts = {}) {
+  const {
+    okLabel = "OK",
+    cancelLabel = "Cancel",
+    placeholder = "",
+    defaultValue = ""
+  } = opts;
+  return new Promise((resolve) => {
+    const existing = document.getElementById("prompt-modal");
+    if (existing) existing.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "prompt-modal";
+    modal.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-box">
+          <p class="confirm-msg"></p>
+          <input type="text" class="prompt-input" autocomplete="off" spellcheck="false" />
+          <div class="confirm-actions">
+            <button type="button" class="confirm-cancel"></button>
+            <button type="button" class="confirm-ok"></button>
+          </div>
+        </div>
+      </div>
+    `;
+    modal.querySelector(".confirm-msg").textContent = message;
+    const input = modal.querySelector(".prompt-input");
+    input.placeholder = placeholder;
+    input.value = defaultValue;
+    modal.querySelector(".confirm-cancel").textContent = cancelLabel;
+    modal.querySelector(".confirm-ok").textContent = okLabel;
+    document.body.appendChild(modal);
+
+    const onKey = (e) => {
+      if (e.key === "Escape") done(null);
+      if (e.key === "Enter") {
+        e.preventDefault();
+        done(input.value);
+      }
+    };
+    const done = (value) => {
+      document.removeEventListener("keydown", onKey);
+      modal.remove();
+      resolve(value);
+    };
+    document.addEventListener("keydown", onKey);
+
+    modal.querySelector(".confirm-cancel").onclick = () => done(null);
+    modal.querySelector(".confirm-ok").onclick = () => done(input.value);
+    modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
+      if (e.target.classList.contains("modal-backdrop")) done(null);
+    });
+    requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
+  });
+}
+
 function showDurationPicker(onSelect) {
   const existing = document.getElementById("duration-modal");
   if (existing) existing.remove();
@@ -1765,12 +1938,24 @@ function getFilteredFiles() {
   return filtered;
 }
 
-async function openAnnotationViewer(file, kind) {
+async function openAnnotationViewer(file, kind, opts) {
   const viewer = document.getElementById("annot-viewer");
   const scroll = document.getElementById("annot-scroll");
   const filenameEl = document.getElementById("annot-filename");
   const toolbar = document.getElementById("annot-toolbar");
   const statusHint = document.getElementById("annot-tool-hint");
+
+  // Align list folder tab with the file being opened (don't wipe file URL)
+  if (file.folder) {
+    currentFolder = file.folder;
+    renderToolbar();
+  } else if (file.folder == null && currentFolder != null) {
+    currentFolder = null;
+    renderToolbar();
+  }
+  if (!(opts && opts.skipUrl)) {
+    syncFileUrl(file, false);
+  }
 
   annotState.open = true;
   annotState.file = file;
@@ -1817,8 +2002,11 @@ async function openAnnotationViewer(file, kind) {
   editBtn.style.display = (kind === "code" || kind === "video") ? "none" : "";
   editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
   if (saveBtn) saveBtn.onclick = () => saveAnnotated();
-
-  buildAnnotToolbar(toolbar);
+  // Drawing tools bar removed — only freehand pen when edit mode is on
+  if (toolbar) {
+    toolbar.innerHTML = "";
+    toolbar.style.display = "none";
+  }
 
   // Loading indicator
   const loader = document.createElement("div");
@@ -1865,14 +2053,17 @@ async function openAnnotationViewer(file, kind) {
   window.addEventListener("keydown", annotKeyHandler);
 }
 
-// Enter drawing mode: pencil stays pencil but turns gray (active).
+// Enter drawing mode: pencil gray (active). Only freehand pen — no tools bar.
 // Save is a separate ✓ button. Tapping pencil again exits edit mode.
 function enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
   if (annotState.editMode) return;
   annotState.editMode = true;
   annotState.tool = "pen";
+  annotState.color = "#ef4444";
+  annotState.size = 4;
   const saveBtn = document.getElementById("annot-save");
-  toolbar.style.display = "flex";
+  // Tools bar removed entirely — only draw (pen) is enough
+  if (toolbar) toolbar.style.display = "none";
   if (saveBtn) saveBtn.style.display = "";
   undoBtn.style.display = "";
   redoBtn.style.display = "";
@@ -1880,16 +2071,15 @@ function enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
   editBtn.classList.remove("is-save");
   editBtn.title = "Chizish rejimi (yana bosing — yopish)";
   editBtn.innerHTML = ICON_PENCIL;
-  // Second tap on pencil exits edit mode (does not save)
   editBtn.onclick = () => exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
   updateCursor();
 }
 
-// Exit drawing mode: hide toolbar / save / undo / redo; pencil back to normal.
+// Exit drawing mode: hide save / undo / redo; pencil back to normal.
 function exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
   annotState.editMode = false;
   const saveBtn = document.getElementById("annot-save");
-  toolbar.style.display = "none";
+  if (toolbar) toolbar.style.display = "none";
   if (saveBtn) saveBtn.style.display = "none";
   undoBtn.style.display = "none";
   redoBtn.style.display = "none";
@@ -1900,7 +2090,7 @@ function exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
   updateCursor();
 }
 
-function closeAnnotationViewer() {
+function closeAnnotationViewer(opts) {
   const viewer = document.getElementById("annot-viewer");
   const videoEl = viewer.querySelector("#annot-scroll video");
   if (videoEl) { videoEl.pause(); videoEl.removeAttribute("src"); videoEl.load(); }
@@ -1911,10 +2101,17 @@ function closeAnnotationViewer() {
   viewer.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
   const workspaceEl = document.getElementById("annot-workspace");
   if (workspaceEl) workspaceEl.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
+  const closedFile = annotState.file;
   annotState.open = false;
+  annotState.file = null;
   annotState.pages = [];
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   window.removeEventListener("keydown", annotKeyHandler);
+  // Restore folder (or All) URL when leaving the file preview
+  if (!(opts && opts.skipUrl)) {
+    const folder = (closedFile && closedFile.folder) || currentFolder;
+    syncFolderUrl(folder, false);
+  }
 }
 
 function annotKeyHandler(e) {
@@ -1990,13 +2187,13 @@ function buildAnnotToolbar(toolbar) {
   clearBtn.className = "annot-tool";
   clearBtn.dataset.tip = "Barcha chizmalarni tozalash";
   clearBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none"><path d="M4 7H20M9 7V4H15V7M10 11V17M14 11V17M6 7L7 19C7 19.5523 7.44772 20 8 20H16C16.5523 20 17 19.5523 17 19L18 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  clearBtn.onclick = () => {
-    if (confirm("Ushbu sahifadagi barcha chizmalarni o'chirishni xohlaysizmi?")) {
-      annotState.pages.forEach(p => {
-        p.ctx.clearRect(0, 0, p.canvas.width, p.canvas.height);
-      });
-      pushHistory();
-    }
+  clearBtn.onclick = async () => {
+    const ok = await showConfirm("Ushbu sahifadagi barcha chizmalarni o'chirishni xohlaysizmi?", "Tozalash");
+    if (!ok) return;
+    annotState.pages.forEach(p => {
+      p.ctx.clearRect(0, 0, p.canvas.width, p.canvas.height);
+    });
+    pushHistory();
   };
   clearGroup.appendChild(clearBtn);
   toolbar.appendChild(clearGroup);
@@ -2044,9 +2241,19 @@ function setAnnotZoom(scale) {
 
 function updateCursor() {
   const scroll = document.getElementById("annot-scroll");
-  if (annotState.tool === "pan") scroll.style.cursor = "grab";
-  else if (annotState.tool === "text") scroll.style.cursor = "text";
-  else scroll.style.cursor = "crosshair";
+  if (!scroll) return;
+  // Crosshair (+) only while drawing (edit mode). Otherwise default arrow.
+  let cur = "default";
+  if (annotState.editMode) {
+    if (annotState.tool === "pan") cur = "grab";
+    else if (annotState.tool === "text") cur = "text";
+    else cur = "crosshair";
+  }
+  scroll.style.cursor = cur;
+  // Canvas sits on top of the image — set cursor there too
+  scroll.querySelectorAll("canvas.annot-layer").forEach((c) => {
+    c.style.cursor = cur;
+  });
 }
 
 async function loadImageForAnnot(url, scroll, loader) {
@@ -2252,7 +2459,7 @@ function getPos(e, canvas) {
   };
 }
 
-function onPointerDown(e, pageIdx) {
+async function onPointerDown(e, pageIdx) {
   if (!annotState.open) return;
   const canvas = annotState.pages[pageIdx].canvas;
   canvas.setPointerCapture(e.pointerId);
@@ -2282,12 +2489,12 @@ function onPointerDown(e, pageIdx) {
 
   if (annotState.tool === "text") {
     const pos = getPos(e, canvas);
-    const text = prompt("Matn kiriting:");
-    if (text) {
+    const text = await showPrompt("Matn kiriting", { okLabel: "Qo'shish", placeholder: "Matn..." });
+    if (text != null && String(text).length) {
       const ctx = annotState.pages[pageIdx].ctx;
       ctx.fillStyle = annotState.color;
       ctx.font = `${Math.max(14, annotState.size * 4)}px sans-serif`;
-      ctx.fillText(text, pos.x, pos.y);
+      ctx.fillText(String(text), pos.x, pos.y);
       pushHistory();
     }
     return;
