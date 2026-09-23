@@ -20,10 +20,16 @@ qismi. Ikkalasi bitta deploy, bitta domen ostida ishlaydi:
 
 ## Tool'lar
 
-- **push** — faylni (base64) MRdrive'ga yuklaydi — web ilovada darhol ko'rinadi
-- **pull** — fayl uchun vaqtinchalik yuklab olish linkini qaytaradi
-- **list** — barcha fayllar ro'yxati
-- **delete** — faylni o'chiradi
+- **push** — faylni (base64) MRdrive'ga yuklaydi (ixtiyoriy: papkaga) — web ilovada darhol ko'rinadi
+- **pull** — fayl uchun ochiq (`?share=...`) link qaytaradi (default: muddatsiz)
+- **list** — fayllar ro'yxati (papka, hajm, ochiq/yopiqligi bilan; papka bo'yicha filtrlash mumkin)
+- **delete** — faylni butunlay o'chiradi
+- **move_file** — faylni boshqa papkaga ko'chiradi / papkadan chiqaradi
+- **unpublish** — faylning ochiq linkini bekor qiladi
+- **refresh_link** — eski linkni bekor qilib, yangisini yaratadi
+- **list_folders** — barcha papkalar ro'yxati
+- **create_folder** — yangi papka yaratadi
+- **delete_folder** — papkani o'chiradi (fayllar o'chmaydi, "papkasiz"ga o'tadi)
 
 ## O'rnatish
 
