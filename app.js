@@ -1588,6 +1588,79 @@ function updateSelectionClasses() {
   fileListEl.querySelectorAll(".file-card").forEach((card) => {
     card.classList.toggle("selected", selectedFileIds.has(card.dataset.fileId));
   });
+  updateSelectionBar();
+}
+
+// Reliable alternative to dragging files out to the OS file manager (which
+// browsers on Linux/Wayland mostly can't do): a bar with real save buttons.
+function updateSelectionBar() {
+  let bar = document.getElementById("selection-bar");
+  const n = selectedFileIds.size;
+  if (!n) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "selection-bar";
+    bar.className = "selection-bar";
+    document.body.appendChild(bar);
+  }
+  const canPick = typeof window.showDirectoryPicker === "function";
+  bar.innerHTML = `
+    <span>${n} selected</span>
+    ${canPick ? `<button onclick="saveSelectedToFolder()">Save to folder…</button>` : ""}
+    <button onclick="downloadSelectedZip()">${n > 1 ? "Download ZIP" : "Download"}</button>
+    <button onclick="selectedFileIds.clear(); updateSelectionClasses();">✕</button>`;
+}
+
+async function fetchSelectedBlobs() {
+  const files = allFiles.filter((f) => selectedFileIds.has(String(f.id)));
+  return Promise.all(files.map(async (f) => {
+    const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(f.storage_path, 300);
+    if (error) throw error;
+    const r = await fetch(data.signedUrl);
+    if (!r.ok) throw new Error(f.filename + ": HTTP " + r.status);
+    sb.rpc("increment_download_count", { file_id: f.id });
+    return { name: f.filename, blob: await r.blob() };
+  }));
+}
+
+// Chromium only: pick a folder once, write every selected file straight into it.
+async function saveSelectedToFolder() {
+  try {
+    const dir = await window.showDirectoryPicker({ mode: "readwrite" });
+    showToast("Saving…");
+    const items = await fetchSelectedBlobs();
+    for (const it of items) {
+      const fh = await dir.getFileHandle(it.name, { create: true });
+      const w = await fh.createWritable();
+      await w.write(it.blob);
+      await w.close();
+    }
+    showToast(`Saved ${items.length} file(s)`);
+  } catch (err) {
+    if (err && err.name === "AbortError") return;
+    showAlert("Error: " + (err.message || err));
+  }
+}
+
+async function downloadSelectedZip() {
+  try {
+    const items = await fetchSelectedBlobs();
+    const triggerSave = (blob, name) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    };
+    if (items.length === 1) return triggerSave(items[0].blob, items[0].name);
+    const zip = new JSZip();
+    items.forEach((it) => zip.file(it.name, it.blob));
+    triggerSave(await zip.generateAsync({ type: "blob" }), "mrdrive-files.zip");
+  } catch (err) {
+    showAlert("Error: " + (err.message || err));
+  }
 }
 
 function selectRange(fromId, toId) {
@@ -1772,19 +1845,21 @@ fileListEl.addEventListener("dragstart", (e) => {
   e.dataTransfer.setData("application/x-mrdrive-file", id); // back-compat, primary file
   e.dataTransfer.setData("application/x-mrdrive-files", JSON.stringify(idsToMove));
   e.dataTransfer.setData("text/plain", idsToMove.join(",")); // fallback
-  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.effectAllowed = "copyMove"; // "move" makes native file managers reject the drop
 
   // Drop onto the OS file manager / desktop (outside the browser) saves the
   // real file(s) there. One "mime:filename:url" entry per line; only works
   // for files whose signed URL was already prefetched.
+  // Chromium honours only ONE DownloadURL entry (a multi-line value is
+  // ignored), and ":" in the filename breaks its "mime:name:url" parsing.
   const lines = idsToMove
     .map((fid) => {
       const f = allFiles.find((x) => String(x.id) === String(fid));
       const cached = f && dragUrlCache.get(f.id);
-      return f && cached ? `application/octet-stream:${f.filename}:${cached.url}` : null;
+      return f && cached ? `application/octet-stream:${f.filename.replace(/[:\\/]/g, "_")}:${cached.url}` : null;
     })
     .filter(Boolean);
-  if (lines.length) e.dataTransfer.setData("DownloadURL", lines.join("\n"));
+  if (lines.length) e.dataTransfer.setData("DownloadURL", lines[0]);
 
   const ghost = buildDragGhost(idsToMove.length);
   e.dataTransfer.setDragImage(ghost, 22, 22);
