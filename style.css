@@ -1,22 +1,37 @@
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
 
+/* ===== 3 brand colors — change these and the whole app follows ===== */
 :root {
+  --primary: #18181b;   /* 1) buttons, active tabs, main actions */
+  --accent:  #3b82f6;   /* 2) selection, focus, drag-over, public/success */
+  --danger:  #dc2626;   /* 3) delete, errors */
+
+  /* tints derived from the 3 colors above (don't edit) */
+  --accent-soft:   color-mix(in srgb, var(--accent) 10%, #fff);
+  --accent-strong: color-mix(in srgb, var(--accent) 72%, #000);
+  --danger-soft:   color-mix(in srgb, var(--danger) 10%, #fff);
+  --danger-strong: color-mix(in srgb, var(--danger) 72%, #000);
+
+  /* neutrals */
   --bg: #fafafa;
   --surface: #ffffff;
   --border: #e4e4e7;
   --border-strong: #d4d4d8;
   --text: #18181b;
   --text-muted: #71717a;
-  --accent: #18181b;
-  --green: #16a34a;
-  --green-bg: #dcfce7;
-  --green-text: #166534;
-  --amber-bg: #fef3c7;
-  --amber-text: #92400e;
-  --red-bg: #fee2e2;
-  --red-text: #991b1b;
-  --blue-bg: #dbeafe;
-  --blue-text: #1e40af;
+  --neutral-soft: #f4f4f5;
+  --neutral-text: #52525b;
+
+  /* status colors now reuse the 3 brand colors / neutrals */
+  --green: var(--accent);
+  --green-bg: var(--accent-soft);
+  --green-text: var(--accent-strong);
+  --amber-bg: var(--neutral-soft);
+  --amber-text: var(--neutral-text);
+  --red-bg: var(--danger-soft);
+  --red-text: var(--danger-strong);
+  --blue-bg: var(--neutral-soft);
+  --blue-text: var(--neutral-text);
 }
 
 body { background: var(--bg); color: var(--text); }
@@ -67,7 +82,7 @@ body { background: var(--bg); color: var(--text); }
 .auth-box button {
   width: 100%;
   padding: 12px;
-  background: var(--accent);
+  background: var(--primary);
   color: white;
   border: none;
   border-radius: 10px;
@@ -166,9 +181,9 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   border-radius: 4px;
   flex-shrink: 0;
 }
-.settings-logout { color: #dc2626; }
-.settings-logout:hover { background: #fef2f2; }
-.settings-logout svg { color: #dc2626; }
+.settings-logout { color: var(--danger); }
+.settings-logout:hover { background: var(--danger-soft); }
+.settings-logout svg { color: var(--danger); }
 .settings-divider {
   height: 1px;
   background: var(--border);
@@ -217,7 +232,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 }
 .dz-icon { color: var(--text-muted); }
 .dropzone p { font-size: 14px; }
-.dropzone.dragover { border-color: var(--accent); background: #f4f4f5; }
+.dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
 .dropzone.dragover .dz-icon { color: var(--accent); }
 .upload-label {
   color: var(--text);
@@ -266,7 +281,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   transition: none;
 }
 .folder-tab:hover { border-color: var(--border-strong); color: var(--text); }
-.folder-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+.folder-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
 .new-folder-btn { color: var(--text); font-weight: 600; }
 
 .folder-tab-wrap {
@@ -278,7 +293,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   background: var(--surface);
 }
 .folder-tab-wrap .folder-tab { border: none; border-radius: 0; }
-.folder-tab-wrap .folder-tab.active { background: var(--accent); color: white; }
+.folder-tab-wrap .folder-tab.active { background: var(--primary); color: white; }
 .folder-del-btn {
   border: none;
   background: transparent;
@@ -301,14 +316,14 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 
 /* Multi-select (mouse marquee / ctrl-click / shift-click) */
 .file-card.selected {
-  border-color: #6366f1;
-  background: #eef0fd;
-  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35) inset;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent) inset;
 }
 .selection-box {
   position: fixed;
-  border: 1.5px solid rgba(59, 130, 246, 0.85);
-  background: rgba(59, 130, 246, 0.12);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 85%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-radius: 12px;
   pointer-events: none;
   z-index: 9999;
@@ -337,18 +352,18 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   border-radius: 4px;
   padding: 1px 5px;
   background: var(--bg, #fafafa);
-  color: var(--text, #18181b);
+  color: var(--text, var(--primary));
 }
 .folder-tab.drag-over,
 .new-folder-btn.drag-over,
 .folder-tab-wrap.drag-over {
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
-  background: #eff6ff;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent-soft);
 }
 .folder-tab.drag-over.active,
 .folder-tab-wrap.drag-over .folder-tab.active {
-  background: #2563eb !important;
+  background: var(--accent-strong) !important;
   color: #fff !important;
 }
 body.is-dragging-file .folder-tab:not(.new-folder-btn),
@@ -414,7 +429,7 @@ body.is-dragging-file .folder-tab-wrap {
   height: 100%;
   width: 0%;
   border-radius: 3px;
-  background: var(--accent);
+  background: var(--primary);
   transition: width 0.15s linear, background 0.2s;
 }
 .upload-item.saving .upload-bar-fill { animation: uploadPulse 1s ease-in-out infinite; }
@@ -471,14 +486,14 @@ body.is-dragging-file .folder-tab-wrap {
 
 /* Remote add (Claude MCP) — green highlight, fades out */
 .file-card.file-card-new {
-  border-color: #86efac;
-  background: #f0fdf4;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 40%, #fff);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
   animation: fileCardNewIn 0.35s ease;
 }
 @keyframes fileCardNewIn {
-  from { background: #dcfce7; box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2); }
-  to { background: #f0fdf4; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12); }
+  from { background: var(--accent-soft); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
+  to { background: var(--accent-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
 }
 .file-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .file-name { font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -728,7 +743,7 @@ body.is-dragging-file .folder-tab-wrap {
   border-radius: 50%;
   background: #f4f4f5;
   margin: 0 auto 18px;
-  color: #18181b;
+  color: var(--primary);
 }
 .public-modal-icon svg { width: 24px; height: 24px; }
 
@@ -913,9 +928,9 @@ body.is-dragging-file .folder-tab-wrap {
   transition: none;
 }
 .public-modal-box .public-download-btn {
-  background: #18181b;
+  background: var(--primary);
   color: #fff;
-  border-color: #18181b;
+  border-color: var(--primary);
 }
 .public-modal-box .public-download-btn:hover:not(:disabled) {
   opacity: 0.9;
@@ -937,9 +952,9 @@ body.is-dragging-file .folder-tab-wrap {
   border: 1px solid var(--border);
 }
 .public-modal-box.has-preview .public-download-btn {
-  background: #18181b;
+  background: var(--primary);
   color: #fff;
-  border-color: #18181b;
+  border-color: var(--primary);
 }
 .public-modal-box .public-fs-btn:hover:not(:disabled),
 .public-modal-box .public-edit-btn:hover {
@@ -954,9 +969,9 @@ body.is-dragging-file .folder-tab-wrap {
 }
 .public-modal-box .public-edit-btn.active,
 .public-modal-box.has-preview .public-edit-btn.active {
-  background: #ef4444 !important;
+  background: var(--danger) !important;
   color: #fff !important;
-  border-color: #ef4444 !important;
+  border-color: var(--danger) !important;
 }
 .public-modal-box .public-edit-btn.active svg,
 .public-modal-box.has-preview .public-edit-btn.active svg {
@@ -1120,9 +1135,9 @@ body.is-dragging-file .folder-tab-wrap {
   transition: none;
 }
 .duration-options button:hover {
-  background: var(--accent);
+  background: var(--primary);
   color: white;
-  border-color: var(--accent);
+  border-color: var(--primary);
 }
 .duration-options .default-opt {
   grid-column: 1 / -1;
@@ -1168,9 +1183,9 @@ body.is-dragging-file .folder-tab-wrap {
 }
 .confirm-cancel:hover { background: var(--bg); }
 .confirm-ok {
-  background: var(--accent);
+  background: var(--primary);
   color: white;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--primary);
 }
 .confirm-ok:hover { opacity: 0.85; }
 
@@ -1204,7 +1219,7 @@ body.is-dragging-file .folder-tab-wrap {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .prompt-input:focus {
-  border-color: #18181b;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(24, 24, 27, 0.08);
 }
 .prompt-input::placeholder {
@@ -1234,9 +1249,9 @@ body.is-dragging-file .folder-tab-wrap {
   color: var(--text);
 }
 .prompt-btn-ok {
-  background: #18181b;
+  background: var(--primary);
   color: #fff;
-  border: 1px solid #18181b;
+  border: 1px solid var(--primary);
 }
 .prompt-btn-ok:hover {
   opacity: 0.9;
@@ -1331,21 +1346,21 @@ body.is-dragging-file .folder-tab-wrap {
 /* Pencil in edit mode — same red-active chip as the public edit button */
 .annot-btn.is-edit,
 .annot-btn.is-edit.active {
-  background: #ef4444;
+  background: var(--danger);
   color: #fff;
-  border-color: #ef4444;
+  border-color: var(--danger);
 }
 .annot-btn.is-edit:hover {
-  background: #dc2626;
-  border-color: #dc2626;
+  background: var(--danger);
+  border-color: var(--danger);
   color: #fff;
 }
 .annot-btn:disabled {
   opacity: 0.35;
   pointer-events: none;
 }
-.annot-btn.is-save { background: #18181b; color: #fff; border-color: #18181b; }
-.annot-btn.is-save:hover { opacity: 0.9; background: #18181b; color: #fff; }
+.annot-btn.is-save { background: var(--primary); color: #fff; border-color: var(--primary); }
+.annot-btn.is-save:hover { opacity: 0.9; background: var(--primary); color: #fff; }
 .annot-btn.is-save:disabled {
   opacity: 0.85;
   pointer-events: none;
@@ -1388,7 +1403,7 @@ body.is-dragging-file .folder-tab-wrap {
   color: #fafafa;
 }
 .annot-tool.active {
-  background: #3b82f6;
+  background: var(--accent);
   color: #fff;
 }
 .annot-tool svg {
@@ -1447,7 +1462,7 @@ body.is-dragging-file .folder-tab-wrap {
   cursor: pointer;
 }
 .annot-size-btn.active {
-  background: #3b82f6;
+  background: var(--accent);
   color: #fff;
 }
 
@@ -1657,7 +1672,7 @@ body.is-dragging-file .folder-tab-wrap {
 
 /* Text/code previews: header always dark (matches dark code workspace) */
 .annot-viewer.kind-code .annot-topbar {
-  background: #18181b;
+  background: var(--primary);
   border-bottom-color: #27272a;
   color: #e4e4e7;
 }
@@ -1703,7 +1718,7 @@ body.is-dragging-file .folder-tab-wrap {
 }
 .annot-viewer.kind-image .annot-tool.active,
 .annot-viewer.kind-video .annot-tool.active {
-  background: #3b82f6;
+  background: var(--accent);
   color: #fff;
 }
 .annot-viewer.kind-image .annot-size-btn,
@@ -1713,7 +1728,7 @@ body.is-dragging-file .folder-tab-wrap {
 }
 .annot-viewer.kind-image .annot-size-btn.active,
 .annot-viewer.kind-video .annot-size-btn.active {
-  background: #3b82f6;
+  background: var(--accent);
   color: #fff;
 }
 /* Lighter loading overlay on light workspace */
@@ -1773,7 +1788,7 @@ body.is-dragging-file .folder-tab-wrap {
 
 /* View button in file list */
 .file-actions .view-btn {
-  color: #3b82f6;
+  color: var(--accent);
 }
 
 /* Zoom controls */
@@ -1904,12 +1919,12 @@ body.is-dragging-file .folder-tab-wrap {
   height: 40px;
   border-radius: 12px;
 }
-.public-modal-box.has-preview .public-download-btn { background: #18181b; }
+.public-modal-box.has-preview .public-download-btn { background: var(--primary); }
 .public-modal-box.has-preview .public-fs-btn:hover:not(:disabled) { background: var(--bg); border-color: var(--border-strong); }
 .public-modal-box.has-preview .public-edit-btn:hover:not(.active) { background: var(--bg); border-color: var(--border-strong); }
 .public-modal-box.has-preview .public-edit-btn.active:hover {
-  background: #dc2626 !important;
-  border-color: #dc2626 !important;
+  background: var(--danger) !important;
+  border-color: var(--danger) !important;
   color: #fff !important;
 }
 
@@ -1930,7 +1945,7 @@ body.is-dragging-file .folder-tab-wrap {
 
 .selection-fab { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 2000;
   width: 58px; height: 58px; display: flex; align-items: center; justify-content: center; padding: 0;
-  color: var(--accent); background: #fff; border: 0; cursor: pointer;
+  color: var(--primary); background: #fff; border: 0; cursor: pointer;
   border-radius: 50%;
   box-shadow: 0 8px 24px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.12);
   animation: fab-in .18s ease-out; transition: transform .15s, background .15s; }
@@ -1940,3 +1955,12 @@ body.is-dragging-file .folder-tab-wrap {
 @keyframes fab-in { from { opacity: 0; transform: translate(-50%, 14px) scale(.85); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 @keyframes fab-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
 body.is-marquee, body.is-marquee * { user-select: none !important; -webkit-user-select: none !important; cursor: default !important; }
+
+/* While dragging files, invite the drop onto the download button */
+body.is-dragging-file .selection-fab { animation: fab-invite 1s ease-in-out infinite; }
+.selection-fab.drop-hover, body.is-dragging-file .selection-fab.drop-hover {
+  animation: none; background: var(--accent-soft); color: var(--accent-strong);
+  transform: translateX(-50%) scale(1.18);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent), 0 12px 30px rgba(0,0,0,.22);
+}
+@keyframes fab-invite { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.08); } }

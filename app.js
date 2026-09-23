@@ -1630,6 +1630,27 @@ function updateSelectionBar() {
       bar.classList.add("busy");
       try { await downloadSelectedZip(); } finally { bar.classList.remove("busy"); }
     };
+    // Drop target: drag selected file cards onto the button to get them as a ZIP.
+    const isCardDrag = (e) => Array.from(e.dataTransfer.types || []).some((t) => t.startsWith("application/x-mrdrive-file"));
+    bar.addEventListener("dragover", (e) => {
+      if (!isCardDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      bar.classList.add("drop-hover");
+    });
+    bar.addEventListener("dragleave", () => bar.classList.remove("drop-hover"));
+    bar.addEventListener("drop", async (e) => {
+      if (!isCardDrag(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      bar.classList.remove("drop-hover");
+      let ids = [];
+      try { ids = JSON.parse(e.dataTransfer.getData("application/x-mrdrive-files") || "[]"); } catch { ids = []; }
+      if (!ids.length) { const one = e.dataTransfer.getData("application/x-mrdrive-file"); if (one) ids = [one]; }
+      if (!ids.length || bar.classList.contains("busy")) return;
+      bar.classList.add("busy");
+      try { await downloadSelectedZip(ids); } finally { bar.classList.remove("busy"); }
+    });
     document.body.appendChild(bar);
   }
   bar.title = n > 1 ? `Download ${n} files as ZIP` : "Download";
@@ -1645,8 +1666,9 @@ document.addEventListener("mousedown", (e) => {
   updateSelectionClasses();
 });
 
-async function fetchSelectedBlobs() {
-  const files = allFiles.filter((f) => selectedFileIds.has(String(f.id)));
+async function fetchSelectedBlobs(ids) {
+  const want = new Set((ids || Array.from(selectedFileIds)).map(String));
+  const files = allFiles.filter((f) => want.has(String(f.id)));
   return Promise.all(files.map(async (f) => {
     const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(f.storage_path, 300);
     if (error) throw error;
@@ -1676,9 +1698,9 @@ async function saveSelectedToFolder() {
   }
 }
 
-async function downloadSelectedZip() {
+async function downloadSelectedZip(ids) {
   try {
-    const items = await fetchSelectedBlobs();
+    const items = await fetchSelectedBlobs(Array.isArray(ids) ? ids : undefined);
     const triggerSave = (blob, name) => {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -1942,7 +1964,7 @@ fileListEl.addEventListener("dragstart", (e) => {
   if (lines.length) e.dataTransfer.setData("DownloadURL", lines[0]);
 
   const ghost = buildDragGhost(idsToMove.length);
-  e.dataTransfer.setDragImage(ghost, 22, 22);
+  e.dataTransfer.setDragImage(ghost, -16, 6); // negative x: icon sits to the RIGHT of the cursor, not under it
   setTimeout(() => ghost.remove(), 0); // browser has already snapshotted it by now
 
   fileListEl.querySelectorAll(".file-card").forEach((c) => {
