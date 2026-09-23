@@ -29,6 +29,8 @@ let allFiles = [];
 let allFolders = [];
 let currentSearch = "";
 let currentFolder = null;
+let selectedFileIds = new Set(); // ids currently selected via click/marquee
+let lastClickedFileId = null; // for shift-click range select
 
 // Claude / remote activity: don't toast our own uploads/deletes as "Claude"
 const localUploadKeys = new Set(); // "filename:::size"
@@ -1198,6 +1200,31 @@ window.addEventListener("paste", (e) => {
 // LIST + TOOLBAR + FOLDERS
 // ==========================================
 
+// Cache of short-lived signed URLs, keyed by file id, used so dragging a
+// file card out of the browser window (onto the desktop / a file manager)
+// can drop the real file there. The "DownloadURL" dataTransfer format has
+// to be set synchronously inside the dragstart handler, but creating a
+// signed URL is an async Supabase call — so URLs are pre-fetched here
+// whenever the file list changes, and dragstart just reads the cache.
+const dragUrlCache = new Map(); // id -> { url, expiresAt }
+
+async function prefetchDragUrls(files) {
+  const now = Date.now();
+  const stale = files.filter((f) => {
+    const cached = dragUrlCache.get(f.id);
+    return !cached || cached.expiresAt - now < 5 * 60 * 1000;
+  });
+  if (!stale.length) return;
+  await Promise.all(stale.map(async (f) => {
+    const { data, error } = await sb.storage
+      .from(BUCKET)
+      .createSignedUrl(f.storage_path, 3600, { download: f.filename });
+    if (!error && data) {
+      dragUrlCache.set(f.id, { url: data.signedUrl, expiresAt: Date.now() + 3600 * 1000 });
+    }
+  }));
+}
+
 async function loadFiles(silent) {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return;
@@ -1232,8 +1259,11 @@ async function loadFiles(silent) {
   allFiles = newFiles;
   allFolders = newFolders;
   filesListReady = true;
+  const liveIds = new Set(newFiles.map((f) => String(f.id)));
+  Array.from(selectedFileIds).forEach((id) => { if (!liveIds.has(id)) selectedFileIds.delete(id); });
   renderToolbar();
   renderFiles();
+  prefetchDragUrls(newFiles).catch(() => {}); // best-effort, drag-out just won't work if this fails
 }
 
 function renderToolbar() {
@@ -1280,6 +1310,13 @@ function renderToolbar() {
 /** Folder tabs as drop targets for dragging files between folders. */
 function wireFolderDropTargets(toolbar) {
   if (!toolbar) return;
+  // Toolbar node is reused across renders (getElementById), only its
+  // innerHTML changes. Without this guard, every re-render (including the
+  // ~2s polling refresh) would stack another set of drop/dragover
+  // listeners on the same node, so a single drop fires moveFileToFolder
+  // (and showToast) once per accumulated listener.
+  if (toolbar.dataset.dropWired === "1") return;
+  toolbar.dataset.dropWired = "1";
 
   function clearDragOver() {
     toolbar.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
@@ -1287,7 +1324,11 @@ function wireFolderDropTargets(toolbar) {
 
   function isFileDrag(dt) {
     const types = Array.from(dt.types || []);
-    return types.includes("application/x-mrdrive-file") || types.includes("text/plain");
+    return (
+      types.includes("application/x-mrdrive-file") ||
+      types.includes("application/x-mrdrive-files") ||
+      types.includes("text/plain")
+    );
   }
 
   function onDragOver(e) {
@@ -1318,13 +1359,23 @@ function wireFolderDropTargets(toolbar) {
     e.preventDefault();
     e.stopPropagation();
     clearDragOver();
-    const fileId =
-      e.dataTransfer.getData("application/x-mrdrive-file") ||
-      e.dataTransfer.getData("text/plain");
-    if (!fileId) return;
+
+    let fileIds = [];
+    const multiRaw = e.dataTransfer.getData("application/x-mrdrive-files");
+    if (multiRaw) {
+      try { fileIds = JSON.parse(multiRaw); } catch { fileIds = []; }
+    }
+    if (!fileIds.length) {
+      const single =
+        e.dataTransfer.getData("application/x-mrdrive-file") ||
+        e.dataTransfer.getData("text/plain");
+      if (single) fileIds = single.split(",");
+    }
+    if (!fileIds.length) return;
+
     const raw = target.getAttribute("data-folder");
     const targetFolder = raw === "" || raw == null ? null : raw;
-    moveFileToFolder(fileId, targetFolder);
+    moveFilesToFolder(fileIds, targetFolder);
   }
 
   // Bind once on the toolbar (re-created each render, so always fresh)
@@ -1333,26 +1384,27 @@ function wireFolderDropTargets(toolbar) {
   toolbar.addEventListener("drop", onDrop);
 }
 
-async function moveFileToFolder(fileId, targetFolder) {
-  const file = allFiles.find((f) => String(f.id) === String(fileId));
-  if (!file) return;
+async function moveFilesToFolder(fileIds, targetFolder) {
+  const ids = fileIds.map(String);
+  const files = allFiles.filter((f) => ids.includes(String(f.id)));
+  if (!files.length) return;
 
-  const current = file.folder || null;
   const next = targetFolder || null;
-  if (current === next) {
+  const toMove = files.filter((f) => (f.folder || null) !== next);
+  if (!toMove.length) {
     showToast(next ? `Already in "${next}"` : "Already in All", "warning");
     return;
   }
 
-  const { error } = await sb.from(TABLE).update({ folder: next }).eq("id", fileId);
+  const { error } = await sb.from(TABLE).update({ folder: next }).in("id", toMove.map((f) => f.id));
   if (error) {
     showAlert("Error: " + error.message);
     return;
   }
 
-  file.folder = next;
+  toMove.forEach((f) => { f.folder = next; });
   const label = next ? `"${next}"` : "All";
-  showToast(`Moved to ${label}`);
+  showToast(toMove.length === 1 ? `Moved to ${label}` : `Moved ${toMove.length} files to ${label}`);
   renderFiles();
   // If we're viewing a folder and the file left it, list updates above already.
 }
@@ -1495,7 +1547,7 @@ function renderFiles() {
     }
 
     return `
-    <div class="file-card" data-file-id="${f.id}" draggable="true" title="Drag to a folder">
+    <div class="file-card${selectedFileIds.has(String(f.id)) ? ' selected' : ''}" data-file-id="${f.id}" draggable="true" title="Drag to a folder">
       <div class="file-info">
         <span class="file-name">${escapeHtml(f.filename)}</span>
         <span class="file-meta">${meta}</span>
@@ -1526,16 +1578,53 @@ document.addEventListener("click", (e) => {
   });
 });
 
+function updateSelectionClasses() {
+  fileListEl.querySelectorAll(".file-card").forEach((card) => {
+    card.classList.toggle("selected", selectedFileIds.has(card.dataset.fileId));
+  });
+}
+
+function selectRange(fromId, toId) {
+  const order = Array.from(fileListEl.querySelectorAll(".file-card")).map((c) => c.dataset.fileId);
+  const i = order.indexOf(String(fromId));
+  const j = order.indexOf(String(toId));
+  if (i === -1 || j === -1) {
+    selectedFileIds.add(String(toId));
+    return;
+  }
+  const [start, end] = i < j ? [i, j] : [j, i];
+  for (let k = start; k <= end; k++) selectedFileIds.add(order[k]);
+}
+
 // Card click: open preview when the file is viewable (image/video/pdf/code).
 // Clicks on action buttons are ignored. Non-viewable files still toggle the
-// mobile action row (actions-open).
+// mobile action row (actions-open). Ctrl/Cmd toggles the file into the
+// multi-selection instead; Shift extends the selection to a range.
 fileListEl.addEventListener("click", (e) => {
   if (e.target.closest(".file-actions")) return;
   const card = e.target.closest(".file-card");
   if (!card) return;
+  const id = card.dataset.fileId;
+
+  if (e.ctrlKey || e.metaKey) {
+    if (selectedFileIds.has(id)) selectedFileIds.delete(id); else selectedFileIds.add(id);
+    lastClickedFileId = id;
+    updateSelectionClasses();
+    return;
+  }
+  if (e.shiftKey && lastClickedFileId) {
+    selectRange(lastClickedFileId, id);
+    updateSelectionClasses();
+    return;
+  }
+  // Plain click: collapse any multi-selection down to just this file.
+  if (selectedFileIds.size) {
+    selectedFileIds.clear();
+    updateSelectionClasses();
+  }
+  lastClickedFileId = id;
 
   const filtered = getFilteredFiles();
-  const id = card.dataset.fileId;
   const f = filtered.find((x) => String(x.id) === id) || allFiles.find((x) => String(x.id) === id);
   if (f) {
     const kind = isViewable(f.filename);
@@ -1550,7 +1639,100 @@ fileListEl.addEventListener("click", (e) => {
   if (!wasOpen) card.classList.add("actions-open");
 });
 
-// Drag file cards onto folder tabs to move them
+// Rubber-band (marquee) selection: mousedown on empty space inside the file
+// list and drag to select every card the box touches.
+let marquee = null;
+fileListEl.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return; // left click only
+  if (e.target.closest(".file-card") || e.target.closest("button") || e.target.closest("input")) return;
+
+  const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+  const baseSelection = additive ? new Set(selectedFileIds) : new Set();
+  if (!additive && selectedFileIds.size) {
+    selectedFileIds.clear();
+    updateSelectionClasses();
+  }
+
+  const box = document.createElement("div");
+  box.className = "selection-box";
+  document.body.appendChild(box);
+  marquee = { startX: e.clientX, startY: e.clientY, box, baseSelection, moved: false };
+});
+
+document.addEventListener("mousemove", (e) => {
+  if (!marquee) return;
+  marquee.moved = true;
+  const x1 = Math.min(marquee.startX, e.clientX);
+  const y1 = Math.min(marquee.startY, e.clientY);
+  const x2 = Math.max(marquee.startX, e.clientX);
+  const y2 = Math.max(marquee.startY, e.clientY);
+  Object.assign(marquee.box.style, {
+    left: `${x1}px`, top: `${y1}px`, width: `${x2 - x1}px`, height: `${y2 - y1}px`,
+  });
+
+  const next = new Set(marquee.baseSelection);
+  fileListEl.querySelectorAll(".file-card").forEach((card) => {
+    const r = card.getBoundingClientRect();
+    const intersects = r.left < x2 && r.right > x1 && r.top < y2 && r.bottom > y1;
+    if (intersects) next.add(card.dataset.fileId);
+  });
+  selectedFileIds = next;
+  updateSelectionClasses();
+});
+
+document.addEventListener("mouseup", () => {
+  if (!marquee) return;
+  marquee.box.remove();
+  marquee = null;
+});
+
+// Small floating file-icon used as the drag image instead of the full
+// card. When several files are dragged together, a few icons are stacked
+// behind the front one with a count badge.
+const DRAG_ICON_SVG = `<svg width="44" height="44" viewBox="0 0 48 48" fill="none">
+  <path d="M10 4H29L38 13V44H10V4Z" fill="#eef2f8" stroke="#18181b" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M29 4L38 13H29V4Z" fill="#3b82f6" stroke="#18181b" stroke-width="2.5" stroke-linejoin="round"/>
+  <line x1="16" y1="20" x2="32" y2="20" stroke="#18181b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="16" y1="26" x2="32" y2="26" stroke="#18181b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="16" y1="32" x2="32" y2="32" stroke="#18181b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="16" y1="38" x2="25" y2="38" stroke="#18181b" stroke-width="2.5" stroke-linecap="round"/>
+</svg>`;
+
+function buildDragGhost(count) {
+  const ghost = document.createElement("div");
+  ghost.style.cssText = "position:fixed; top:-1000px; left:-1000px; width:56px; height:56px; pointer-events:none;";
+
+  const stackCount = Math.min(count, 3);
+  for (let i = stackCount - 1; i >= 1; i--) {
+    const layer = document.createElement("div");
+    layer.style.cssText = `position:absolute; top:${i * 4}px; left:${i * 4}px; filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));`;
+    layer.innerHTML = DRAG_ICON_SVG;
+    ghost.appendChild(layer);
+  }
+  const front = document.createElement("div");
+  front.style.cssText = "position:absolute; top:0; left:0; filter:drop-shadow(0 2px 5px rgba(0,0,0,.3));";
+  front.innerHTML = DRAG_ICON_SVG;
+  ghost.appendChild(front);
+
+  if (count > 1) {
+    const badge = document.createElement("div");
+    badge.textContent = String(count);
+    badge.style.cssText =
+      "position:absolute; top:-6px; right:-6px; background:#ef4444; color:#fff; " +
+      "font:700 11px/1 -apple-system,system-ui,sans-serif; min-width:17px; height:17px; " +
+      "padding:0 4px; border-radius:9px; display:flex; align-items:center; justify-content:center; " +
+      "box-shadow:0 1px 3px rgba(0,0,0,.3);";
+    ghost.appendChild(badge);
+  }
+
+  document.body.appendChild(ghost);
+  return ghost;
+}
+
+// Drag file cards onto folder tabs to move them. Dragging a card that's
+// part of the current multi-selection carries every selected file;
+// dragging one outside the selection drags just that file (and replaces
+// the selection with it).
 fileListEl.addEventListener("dragstart", (e) => {
   // Don't start drag from action buttons
   if (e.target.closest(".file-actions") || e.target.closest("button")) {
@@ -1562,15 +1744,45 @@ fileListEl.addEventListener("dragstart", (e) => {
     e.preventDefault();
     return;
   }
-  e.dataTransfer.setData("application/x-mrdrive-file", card.dataset.fileId);
-  e.dataTransfer.setData("text/plain", card.dataset.fileId); // fallback
+  const id = card.dataset.fileId;
+
+  let idsToMove;
+  if (selectedFileIds.has(id) && selectedFileIds.size > 1) {
+    idsToMove = Array.from(selectedFileIds);
+  } else {
+    idsToMove = [id];
+    selectedFileIds = new Set(idsToMove);
+    updateSelectionClasses();
+  }
+
+  e.dataTransfer.setData("application/x-mrdrive-file", id); // back-compat, primary file
+  e.dataTransfer.setData("application/x-mrdrive-files", JSON.stringify(idsToMove));
+  e.dataTransfer.setData("text/plain", idsToMove.join(",")); // fallback
   e.dataTransfer.effectAllowed = "move";
-  card.classList.add("is-dragging");
+
+  // Drop onto the OS file manager / desktop (outside the browser) saves the
+  // real file(s) there. One "mime:filename:url" entry per line; only works
+  // for files whose signed URL was already prefetched.
+  const lines = idsToMove
+    .map((fid) => {
+      const f = allFiles.find((x) => String(x.id) === String(fid));
+      const cached = f && dragUrlCache.get(f.id);
+      return f && cached ? `application/octet-stream:${f.filename}:${cached.url}` : null;
+    })
+    .filter(Boolean);
+  if (lines.length) e.dataTransfer.setData("DownloadURL", lines.join("\n"));
+
+  const ghost = buildDragGhost(idsToMove.length);
+  e.dataTransfer.setDragImage(ghost, 22, 22);
+  setTimeout(() => ghost.remove(), 0); // browser has already snapshotted it by now
+
+  fileListEl.querySelectorAll(".file-card").forEach((c) => {
+    if (idsToMove.includes(c.dataset.fileId)) c.classList.add("is-dragging");
+  });
   document.body.classList.add("is-dragging-file");
 });
 fileListEl.addEventListener("dragend", (e) => {
-  const card = e.target.closest(".file-card");
-  if (card) card.classList.remove("is-dragging");
+  fileListEl.querySelectorAll(".file-card.is-dragging").forEach((c) => c.classList.remove("is-dragging"));
   document.body.classList.remove("is-dragging-file");
   document.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
 });
