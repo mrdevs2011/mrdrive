@@ -4,11 +4,11 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import crypto from "crypto";
 
-// Faqat public kalitlar — service_role ISHLATILMAYDI.
-// SUPABASE_URL + SUPABASE_ANON_KEY (skrinshotdagi) yetarli.
-// Token = sha256(sha256(username)+sha256(password))[:48] — server siri YO'Q.
+// Public + service_role (faqat serverda, hech qachon frontendga qo'yilmaydi)
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+// Token = sha256(sha256(username)+sha256(password))[:48] — server siri YO'Q.
+// service_role RLS'ni chetlab o'tadi; har so'rovda aniq user_id bilan filtrlaymiz.
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // MRdrive web ilovasi qaysi domenda turibdi — pull/push/refresh_link
 // qaytaradigan link shu domenga ?share=TOKEN qo'shib hosil qilinadi.
@@ -33,10 +33,9 @@ function generateToken() {
 }
 
 /**
- * ?name= + ?token= orqali foydalanuvchini topadi (service_role siz).
- * resolve_mcp_user RPC (setup-mcp-anon.sql) ishlatiladi.
- * Token: user_metadata.mcp_token (48 hex)
- * Name:  user_metadata.name — case-sensitive
+ * ?name= + ?token= orqali foydalanuvchini topadi.
+ * - token: user_metadata.mcp_token bilan mos kelishi shart (48 hex)
+ * - name:  user_metadata.name bilan ANIQ (case-sensitive) mos kelishi shart
  */
 async function resolveUserFromNameAndToken(name, token) {
   if (!name || typeof name !== "string") {
@@ -47,56 +46,66 @@ async function resolveUserFromNameAndToken(name, token) {
       "MCP havolasi noto'g'ri — token topilmadi yoki formati xato (48 hex belgi kerak)."
     );
   }
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error(
-      "SUPABASE_URL yoki SUPABASE_ANON_KEY environment variable topilmadi."
+      "SUPABASE_URL yoki SUPABASE_SERVICE_ROLE_KEY environment variable topilmadi."
     );
   }
 
-  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const { data: userId, error } = await sb.rpc("resolve_mcp_user", {
-    p_name: name,
-    p_token: token.toLowerCase(),
-  });
+  const tokenLower = token.toLowerCase();
+  let page = 1;
+  const perPage = 200;
+  let matchedByToken = null;
 
-  if (error) {
-    // RPC hali yaratilmagan bo'lsa aniq ko'rsatma
-    if (
-      /function.*resolve_mcp_user|does not exist|404/i.test(error.message || "")
-    ) {
-      throw new Error(
-        "resolve_mcp_user funksiyasi topilmadi. Supabase SQL Editor'da setup-mcp-anon.sql ni bir marta ishga tushiring."
-      );
+  // Barcha foydalanuvchilarni sahifalab qidiramiz (mcp_token unique bo'lishi kutiladi).
+  for (;;) {
+    const { data, error } = await sbAdmin.auth.admin.listUsers({ page, perPage });
+    if (error) throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
+    const users = data?.users || [];
+    if (users.length === 0) break;
+
+    for (const u of users) {
+      const meta = u.user_metadata || {};
+      const storedToken = (meta.mcp_token || "").toLowerCase();
+      if (storedToken && storedToken === tokenLower) {
+        matchedByToken = u;
+        break;
+      }
     }
-    throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
+    if (matchedByToken) break;
+    if (users.length < perPage) break;
+    page += 1;
+    if (page > 50) break; // himoya
   }
 
-  if (!userId) {
+  if (!matchedByToken) {
     throw new Error(
-      "MCP havolasi yaroqsiz — token/name topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling."
+      "MCP havolasi yaroqsiz — token topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling."
     );
   }
 
-  return { id: userId, name };
+  const storedName = matchedByToken.user_metadata?.name || "";
+  // Name case-sensitive: "Muhammadrasul" ≠ "muhammadrasul"
+  if (storedName !== name) {
+    throw new Error(
+      `Name mos kelmadi: havolada "${name}", hisobda "${storedName}". ` +
+        `Katta/kichik harflar ham bir xil bo'lishi shart. /mcp sahifasidan to'g'ri havolani oling.`
+    );
+  }
+
+  return { id: matchedByToken.id, name: storedName };
 }
 
-/**
- * ANON_KEY + x-mcp-token header bilan klient.
- * RLS setup-mcp-anon.sql dagi mcp_token_matches orqali ruxsat beradi.
- * HAR BIR so'rovda aniq user_id bilan filtrlaymiz.
- */
+// name + token orqali user topiladi; service_role klient bilan ishlaymiz
+// va HAR BIR so'rovda aniq user_id bilan filtrlaymiz.
 async function getAuthedClient(name, token) {
   const user = await resolveUserFromNameAndToken(name, token);
-  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
-    global: {
-      headers: {
-        "x-mcp-token": token.toLowerCase(),
-      },
-    },
   });
   return { sb, user };
 }
