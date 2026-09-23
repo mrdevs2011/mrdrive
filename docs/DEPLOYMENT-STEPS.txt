@@ -1,0 +1,168 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    MRDRIVE DEPLOYMENT - STEP BY STEP
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: PREPARE SUPABASE                                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  1. Create project
+     ➜ Go to https://supabase.com/dashboard
+     ➜ New Project → Fill in details → Wait for creation
+
+  2. Get API Keys
+     ➜ Settings → API
+     ➜ Copy: Project URL (looks like https://xxxxx.supabase.co)
+     ➜ Copy: anon public key (looks like sb_publishable_xxxxx)
+
+  3. Enable Email Auth
+     ➜ Authentication → Providers
+     ➜ Email should be enabled (default) - leave it
+
+  4. Create Storage Bucket
+     ➜ Storage → New bucket
+     ➜ Name: files
+     ➜ Public: OFF ← Very important!
+     ➜ Create
+
+  5. Run SQL Setup
+     ➜ SQL Editor
+     ➜ Paste contents of: mrdrive-main/setup.sql
+     ➜ Click Run
+     ➜ Should show "Success"
+
+✅ Supabase is ready!
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: DEPLOY PROXY                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  1. Install Vercel CLI
+     $ npm i -g vercel
+
+  2. Login to Vercel
+     $ vercel login
+     ➜ Follow prompts
+
+  3. Deploy Proxy
+     $ cd mrdrive-main/proxy
+     $ vercel deploy
+     
+     When asked:
+       "Set up and deploy?" → y
+       "Which scope?" → your account
+       "Link to existing project?" → n
+       "Project name?" → mrdrive-proxy
+       "Modify vercel.json?" → n
+     
+     ➜ COPY THE URL (e.g., https://mrdrive-proxy-abc123.vercel.app)
+
+✅ Proxy is deployed!
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: DEPLOY MRDRIVE                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  1. Update Config
+     $ cd ../  # Back to mrdrive-main root
+     $ nano config.js
+     
+     Change:
+       CONST SUPABASE_URL = "https://hharvpgnqmjbbgnfsauq.supabase.co";
+     To:
+       const SUPABASE_URL = "https://mrdrive-proxy-abc123.vercel.app";
+     
+     (Use the proxy URL from Phase 2.3)
+     
+     Save (Ctrl+X, Y, Enter)
+
+  2. Deploy MRdrive
+     $ vercel deploy --prod
+     
+     When asked:
+       "Set up and deploy?" → y
+       "Which scope?" → your account
+       "Link to existing project?" → n
+       "Project name?" → mrdrive
+       "Modify vercel.json?" → n
+     
+     ➜ COPY THE URL (e.g., https://mrdrive-xyz.vercel.app)
+
+✅ MRdrive is deployed!
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: TEST & GO LIVE                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  1. Test Signup
+     ➜ Open: https://mrdrive-xyz.vercel.app/login
+     ➜ Click "Sign up"
+     ➜ Fill in:
+        Name: Test User
+        Username: testuser
+        Password: testpass123
+     ➜ Click "Sign up"
+
+     ✅ Should redirect to main app
+
+  2. Test File Upload
+     ➜ Select a file to upload
+     ➜ Should appear in file list
+     ➜ Should be downloadable
+
+  3. Test Folder
+     ➜ Create a folder
+     ➜ Upload file into folder
+     ➜ Should work
+
+✅ Everything works!
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 5: SHARE & SCALE                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  1. Share URL
+     ➜ Send https://mrdrive-xyz.vercel.app to users
+
+  2. Users Can
+     ✅ Sign up
+     ✅ Upload files
+     ✅ Download files
+     ✅ Create folders
+     ✅ Make files public (shareable links)
+
+  3. Maintenance
+     ✅ Monitor Supabase usage
+     ✅ Upgrade plan if needed
+     ✅ Backup files regularly
+
+═══════════════════════════════════════════════════════════════════════════════
+
+⏱️  ESTIMATED TIME:
+    Phase 1 (Supabase):     5 minutes
+    Phase 2 (Proxy):        3 minutes
+    Phase 3 (MRdrive):      5 minutes
+    Phase 4 (Testing):      3 minutes
+    ───────────────────────
+    TOTAL:                  15-20 minutes
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🆘 STUCK?
+
+  Error: "ERR_NAME_NOT_RESOLVED"
+  → You're in Phase 1 or 2. Make sure proxy is deployed.
+
+  Error: "SUPABASE_URL is undefined"
+  → You missed Phase 1.2 or 3.1. Get your Supabase keys.
+
+  Error: "User already exists"
+  → Normal. Try different username (testuser2, etc.)
+
+  Error: "Upload fails"
+  → Make sure storage bucket "files" is created (Phase 1.4)
+
+  Everything else?
+  → Check the browser console (F12) for error messages
+
+═══════════════════════════════════════════════════════════════════════════════
