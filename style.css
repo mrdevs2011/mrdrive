@@ -376,34 +376,12 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 }
 .file-card:hover { border-color: var(--border-strong); }
 
-/* Telegram-style delete: collapse + sand scatter */
+/* Telegram-style delete: row collapses while particles float upward.
+   max-height / padding / opacity are driven from JS (playDeleteDissolve). */
 .file-card.is-deleting {
   pointer-events: none;
   overflow: hidden;
-  animation: fileCardDissolve 0.4s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
-}
-@keyframes fileCardDissolve {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0);
-  }
-  35% {
-    opacity: 0.55;
-    filter: blur(0.4px);
-  }
-  100% {
-    opacity: 0;
-    height: 0 !important;
-    min-height: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    margin-top: 0;
-    margin-bottom: 0;
-    border-width: 0;
-    transform: scale(0.97);
-    filter: blur(1px);
-  }
+  min-height: 0;
 }
 /* Canvas overlay that draws the disintegrating ash tiles — positioned
    over the card's screen rect (plus padding) by playDeleteDissolve(). */

@@ -1517,14 +1517,16 @@ async function explainDeleteFailure(id) {
 /** Telegram-style dissolve: the card's real pixels (fonts, colors, icons —
  *  exactly as rendered) break into tiny tiles that drift away and fade,
  *  like ash. The card itself collapses out of the list shortly after. */
-const DISSOLVE_ANIM_MS   = 1300;  // total particle lifetime
-const DISSOLVE_SWEEP_MS  = 320;   // spread of the "sweep" wave from the click point
-const DISSOLVE_COLLAPSE_DELAY = 420; // when the list-row collapse kicks in (Promise resolves)
-const DISSOLVE_TILE      = 2.2;   // px per tile (css px, before dpr)
-const DISSOLVE_DRIFT_X   = 26;
-const DISSOLVE_DRIFT_Y   = -95;
-const DISSOLVE_FLOAT_UP  = -0.045;
-const DISSOLVE_NOISE_AMP = 12;
+// Telegram-style message disintegration (matches demo.html timing/feel)
+const DISSOLVE_ANIM_MS   = 1800;  // total particle lifetime
+const DISSOLVE_SWEEP_MS  = 450;   // sweep wave from the click point
+const DISSOLVE_COLLAPSE_DELAY = 700; // when the list-row collapse starts
+const DISSOLVE_TILE      = 1.6;   // px per tile (css px, before dpr)
+const DISSOLVE_DRIFT_X   = 20;
+const DISSOLVE_DRIFT_Y   = -70;
+const DISSOLVE_FLOAT_UP  = -0.04;
+const DISSOLVE_NOISE_AMP = 10;
+const DISSOLVE_PAD       = 120;   // room for particles to float upward
 
 let __mrdriveCssTextPromise = null;
 function getAppCssText() {
@@ -1622,10 +1624,14 @@ function __dissolveBuildTiles(canvas, cssWidth, cssHeight, dpr, epX, epY) {
   return tiles;
 }
 
-function __dissolvePaintLoop(overlayCtx, canvas, tiles, pad) {
+function __dissolvePaintLoop(overlayCtx, canvas, tiles, pad, cssW, cssH) {
   const startT = performance.now();
+  const clearW = cssW + pad * 2;
+  const clearH = cssH + pad * 2;
+
   function paint(elapsed) {
-    overlayCtx.clearRect(0, 0, overlayCtx.canvas.width, overlayCtx.canvas.height);
+    // clear in current (scaled) user space
+    overlayCtx.clearRect(0, 0, clearW, clearH);
     let anyAlive = false;
     for (let i = 0; i < tiles.length; i++) {
       const t = tiles[i];
@@ -1664,33 +1670,36 @@ function __dissolvePaintLoop(overlayCtx, canvas, tiles, pad) {
   }
 
   paint(0);
+  const overlayEl = overlayCtx.canvas;
   function frame(now) {
     const alive = paint(now - startT);
     if (alive) requestAnimationFrame(frame);
     else overlayEl.remove();
   }
-  const overlayEl = overlayCtx.canvas;
   requestAnimationFrame(frame);
 }
 
 /** Telegram-style dissolve: card's exact pixels break into ash-like tiles
- *  that drift away and fade from the click point, then the row collapses. */
+ *  that drift upward and fade from the click point, then the row collapses. */
 function playDeleteDissolve(card, clickX, clickY) {
   return new Promise((resolve) => {
     if (!card || !card.isConnected) {
       resolve();
       return;
     }
-    const rect = card.getBoundingClientRect();
-    card.style.height = rect.height + "px";
+    const startRect = card.getBoundingClientRect();
+    card.style.height = startRect.height + "px";
+    card.style.maxHeight = startRect.height + "px";
     card.style.boxSizing = "border-box";
+    card.style.overflow = "hidden";
+    card.style.transition = "max-height .5s cubic-bezier(.22,.61,.36,1), margin .5s cubic-bezier(.22,.61,.36,1), opacity .5s ease, padding .5s ease, border-width .5s ease";
 
     getAppCssText().then((cssText) => __dissolveSnapshot(card, cssText)).then(({ canvas, width, height, rect, dpr }) => {
       const epX = clickX !== undefined ? clickX - rect.left : width;
       const epY = clickY !== undefined ? clickY - rect.top : 0;
       const tiles = __dissolveBuildTiles(canvas, width, height, dpr, epX, epY);
 
-      const pad = 60;
+      const pad = DISSOLVE_PAD;
       const overlay = document.createElement("canvas");
       overlay.className = "particle-canvas";
       overlay.width = Math.ceil((width + pad * 2) * dpr);
@@ -1705,16 +1714,37 @@ function playDeleteDissolve(card, clickX, clickY) {
       octx.scale(dpr, dpr);
       octx.imageSmoothingEnabled = false;
 
+      // Hide the real card; particles take over visually
       card.style.visibility = "hidden";
-      __dissolvePaintLoop(octx, canvas, tiles, pad);
+      __dissolvePaintLoop(octx, canvas, tiles, pad, width, height);
     }).catch(() => {
-      // Snapshot failed (e.g. cross-origin asset) — fall back to a plain collapse.
+      // Snapshot failed — still collapse the row
     });
 
-    // Collapse the row out of the list a beat later; this is what the
-    // returned Promise waits on so the caller can safely re-render the list.
-    card.classList.add("is-deleting");
-    setTimeout(resolve, DISSOLVE_COLLAPSE_DELAY);
+    // Collapse the row a beat later (same timing as Telegram demo)
+    setTimeout(() => {
+      if (!card.isConnected) {
+        resolve();
+        return;
+      }
+      card.classList.add("is-deleting");
+      card.style.maxHeight = "0";
+      card.style.marginTop = "0";
+      card.style.marginBottom = "0";
+      card.style.paddingTop = "0";
+      card.style.paddingBottom = "0";
+      card.style.opacity = "0";
+      card.style.borderWidth = "0";
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      card.addEventListener("transitionend", done, { once: true });
+      // Safety: resolve even if transitionend never fires
+      setTimeout(done, 600);
+    }, DISSOLVE_COLLAPSE_DELAY);
   });
 }
 
@@ -2342,16 +2372,18 @@ async function openAnnotationViewer(file, kind, opts) {
   viewer.classList.remove(...kindClasses);
   viewer.classList.add("kind-" + kind);
 
-  // Start in view-only mode: hide the drawing toolbar and save button
-  // until the user explicitly taps Edit. Code/video stay read-only.
+  // View-only by default (drawing off). Pen toggles drawing on/off like
+  // the public share preview. Save/download stays visible for image/pdf.
+  // Code/video stay read-only (no pen, no save).
   const editBtn = document.getElementById("annot-edit");
   const saveBtn = document.getElementById("annot-save");
   toolbar.style.display = "none";
-  if (saveBtn) saveBtn.style.display = "none";
+  const isReadOnly = kind === "code" || kind === "video";
+  if (saveBtn) saveBtn.style.display = isReadOnly ? "none" : "";
   editBtn.classList.remove("is-edit", "is-save", "active");
   editBtn.title = "Tahrirlash";
   editBtn.innerHTML = ICON_PENCIL;
-  editBtn.style.display = (kind === "code" || kind === "video") ? "none" : "";
+  editBtn.style.display = isReadOnly ? "none" : "";
   editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn);
   if (saveBtn) saveBtn.onclick = () => saveAnnotated();
   // Drawing tools bar removed — only freehand pen when edit mode is on
@@ -2403,32 +2435,28 @@ async function openAnnotationViewer(file, kind, opts) {
   window.addEventListener("keydown", annotKeyHandler);
 }
 
-// Enter drawing mode: pencil gray (active). Only freehand pen — no tools bar.
-// Save is a separate ✓ button. Tapping pencil again exits edit mode.
+// Enter drawing mode: pencil active (gray). Only freehand pen — no tools bar.
+// Save stays visible always (like public preview). Tapping pencil again exits.
 function enterAnnotEditMode(toolbar, editBtn) {
   if (annotState.editMode) return;
   annotState.editMode = true;
   annotState.tool = "pen";
   annotState.color = "#ef4444";
   annotState.size = 4;
-  const saveBtn = document.getElementById("annot-save");
-  // Tools bar removed entirely — only draw (pen) is enough
+  // Tools bar stays hidden — only freehand pen
   if (toolbar) toolbar.style.display = "none";
-  if (saveBtn) saveBtn.style.display = "";
   editBtn.classList.add("is-edit", "active");
   editBtn.classList.remove("is-save");
-  editBtn.title = "Chizish rejimi (yana bosing — yopish)";
+  editBtn.title = "Chizishni tugatish";
   editBtn.innerHTML = ICON_PENCIL;
   editBtn.onclick = () => exitAnnotEditMode(toolbar, editBtn);
   updateCursor();
 }
 
-// Exit drawing mode: hide save button; pencil back to normal.
+// Exit drawing mode: pencil back to normal. Save stays visible.
 function exitAnnotEditMode(toolbar, editBtn) {
   annotState.editMode = false;
-  const saveBtn = document.getElementById("annot-save");
   if (toolbar) toolbar.style.display = "none";
-  if (saveBtn) saveBtn.style.display = "none";
   editBtn.classList.remove("is-edit", "active", "is-save");
   editBtn.title = "Tahrirlash";
   editBtn.innerHTML = ICON_PENCIL;
