@@ -1187,14 +1187,25 @@ document.addEventListener("click", (e) => {
   });
 });
 
-// Tapping a card reveals its action row (mobile-friendly alternative to
-// hover — there's no separate "more" button to tap anymore). A tap that
-// lands on an action itself just runs that action, since the row is
-// already open by then.
+// Card click: open preview when the file is viewable (image/video/pdf/code).
+// Clicks on action buttons are ignored. Non-viewable files still toggle the
+// mobile action row (actions-open).
 fileListEl.addEventListener("click", (e) => {
-  if (e.target.closest(".file-actions-more")) return;
+  if (e.target.closest(".file-actions")) return;
   const card = e.target.closest(".file-card");
   if (!card) return;
+
+  const filtered = getFilteredFiles();
+  const id = card.dataset.fileId;
+  const f = filtered.find((x) => String(x.id) === id) || allFiles.find((x) => String(x.id) === id);
+  if (f) {
+    const kind = isViewable(f.filename);
+    if (kind) {
+      openAnnotationViewer(f, kind);
+      return;
+    }
+  }
+
   const wasOpen = card.classList.contains("actions-open");
   document.querySelectorAll(".file-card.actions-open").forEach(c => c.classList.remove("actions-open"));
   if (!wasOpen) card.classList.add("actions-open");
@@ -1724,32 +1735,23 @@ const CODE_LANG_MAP = {
 // the tab never freezes on a huge log/data file).
 const CODE_HIGHLIGHT_MAX_CHARS = 400000;
 
-// Patch renderFiles to add View button
+// Patch renderFiles: stable data-id on cards (no eye/view button —
+// opening preview is done by tapping the card itself).
 const _origRenderFiles = renderFiles;
 renderFiles = function () {
+  const openIds = new Set();
+  fileListEl.querySelectorAll(".file-card.actions-open").forEach((c) => {
+    if (c.dataset.fileId) openIds.add(c.dataset.fileId);
+  });
+
   _origRenderFiles();
-  // Re-render with view buttons by intercepting the HTML is hard; instead
-  // we enhance after render.
-  const cards = fileListEl.querySelectorAll(".file-card");
-  cards.forEach((card, i) => {
-    const filtered = getFilteredFiles();
-    if (!filtered[i]) return;
+
+  const filtered = getFilteredFiles();
+  fileListEl.querySelectorAll(".file-card").forEach((card, i) => {
     const f = filtered[i];
-    const kind = isViewable(f.filename);
-    if (!kind) return;
-    const actions = card.querySelector(".file-actions");
-    if (!actions) return;
-    const moreGroup = actions.querySelector(".file-actions-more");
-    if (!moreGroup || moreGroup.querySelector(".view-btn")) return;
-    const btn = document.createElement("button");
-    btn.className = "view-btn";
-    btn.title = "Ochish va chizish";
-    btn.innerHTML = ICON_VIEW;
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      openAnnotationViewer(f, kind);
-    };
-    moreGroup.insertBefore(btn, moreGroup.firstChild);
+    if (!f) return;
+    card.dataset.fileId = String(f.id);
+    if (openIds.has(String(f.id))) card.classList.add("actions-open");
   });
 };
 
@@ -1791,24 +1793,30 @@ async function openAnnotationViewer(file, kind) {
 
   // Image/video previews sit on a near-white workspace; code/text previews
   // stay dark. Toggled via a class so CSS owns the actual colors.
+  // Kind class is also on the viewer so topbar / status / toolbar can match.
   const workspaceEl = document.getElementById("annot-workspace");
-  workspaceEl.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
+  const kindClasses = ["kind-image", "kind-video", "kind-pdf", "kind-code"];
+  workspaceEl.classList.remove(...kindClasses);
   workspaceEl.classList.add("kind-" + kind);
+  viewer.classList.remove(...kindClasses);
+  viewer.classList.add("kind-" + kind);
 
   // Start in view-only mode: hide the drawing toolbar and undo/redo/save
-  // until the user explicitly taps Edit. Code files stay read-only, so the
-  // Edit button itself is hidden for them.
+  // until the user explicitly taps Edit. Code/video stay read-only.
   const editBtn = document.getElementById("annot-edit");
+  const saveBtn = document.getElementById("annot-save");
   const undoBtn = document.getElementById("annot-undo");
   const redoBtn = document.getElementById("annot-redo");
   toolbar.style.display = "none";
+  if (saveBtn) saveBtn.style.display = "none";
   undoBtn.style.display = "none";
   redoBtn.style.display = "none";
-  editBtn.classList.remove("is-save");
+  editBtn.classList.remove("is-edit", "is-save", "active");
   editBtn.title = "Tahrirlash";
   editBtn.innerHTML = ICON_PENCIL;
   editBtn.style.display = (kind === "code" || kind === "video") ? "none" : "";
   editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
+  if (saveBtn) saveBtn.onclick = () => saveAnnotated();
 
   buildAnnotToolbar(toolbar);
 
@@ -1857,40 +1865,35 @@ async function openAnnotationViewer(file, kind) {
   window.addEventListener("keydown", annotKeyHandler);
 }
 
-// Switches the viewer from read-only preview into drawing mode. The Edit
-// button itself morphs into the Save button (same slot, pencil → check),
-// instead of a separate button appearing elsewhere — one control, two
-// states, like a record/send button that swaps on tap.
+// Enter drawing mode: pencil stays pencil but turns gray (active).
+// Save is a separate ✓ button. Tapping pencil again exits edit mode.
 function enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
   if (annotState.editMode) return;
   annotState.editMode = true;
   annotState.tool = "pen";
+  const saveBtn = document.getElementById("annot-save");
+  toolbar.style.display = "flex";
+  if (saveBtn) saveBtn.style.display = "";
   undoBtn.style.display = "";
   redoBtn.style.display = "";
-  editBtn.classList.add("is-save");
-  editBtn.title = "Saqlash";
-  editBtn.innerHTML = ICON_CHECK;
-  // Tapping again: if something was actually drawn, save it (same as
-  // before). If nothing was drawn yet, the tap just backs out of edit
-  // mode — the pencil deactivates instead of "saving" an untouched file.
-  editBtn.onclick = () => {
-    if (annotState.historyIdx >= 0) {
-      saveAnnotated();
-    } else {
-      exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
-    }
-  };
+  editBtn.classList.add("is-edit", "active");
+  editBtn.classList.remove("is-save");
+  editBtn.title = "Chizish rejimi (yana bosing — yopish)";
+  editBtn.innerHTML = ICON_PENCIL;
+  // Second tap on pencil exits edit mode (does not save)
+  editBtn.onclick = () => exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
   updateCursor();
 }
 
-// Reverts the Edit/Save button back to its pencil, read-only state without
-// saving or closing the viewer — used when the button is tapped a second
-// time before any drawing happened.
+// Exit drawing mode: hide toolbar / save / undo / redo; pencil back to normal.
 function exitAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn) {
   annotState.editMode = false;
+  const saveBtn = document.getElementById("annot-save");
+  toolbar.style.display = "none";
+  if (saveBtn) saveBtn.style.display = "none";
   undoBtn.style.display = "none";
   redoBtn.style.display = "none";
-  editBtn.classList.remove("is-save");
+  editBtn.classList.remove("is-edit", "active", "is-save");
   editBtn.title = "Tahrirlash";
   editBtn.innerHTML = ICON_PENCIL;
   editBtn.onclick = () => enterAnnotEditMode(toolbar, editBtn, undoBtn, redoBtn);
@@ -1904,6 +1907,10 @@ function closeAnnotationViewer() {
   viewer.style.display = "none";
   viewer.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
+  // Clear kind classes so next open starts clean
+  viewer.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
+  const workspaceEl = document.getElementById("annot-workspace");
+  if (workspaceEl) workspaceEl.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
   annotState.open = false;
   annotState.pages = [];
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -2053,14 +2060,21 @@ async function loadImageForAnnot(url, scroll, loader) {
 
   const page = document.createElement("div");
   page.className = "annot-page";
-  // Fit to viewport width roughly
-  const maxW = Math.min(img.naturalWidth, window.innerWidth - 40);
-  const scale = maxW / img.naturalWidth;
-  const w = Math.round(img.naturalWidth * scale);
-  const h = Math.round(img.naturalHeight * scale);
+
+  // Fit into available workspace (both width AND height), keep aspect ratio.
+  // Uses the scroll area size so the image fills the preview like the
+  // "Men xohlagan preview" layout — not a small box in the middle.
+  const pad = 16;
+  const availW = Math.max(120, (scroll.clientWidth || window.innerWidth) - pad);
+  const availH = Math.max(120, (scroll.clientHeight || (window.innerHeight - 120)) - pad);
+  const scale = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
   page.style.width = w + "px";
+  page.style.height = h + "px";
 
   const displayImg = document.createElement("img");
+  displayImg.crossOrigin = "anonymous"; // needed so canvas export isn't tainted
   displayImg.src = url;
   displayImg.width = w;
   displayImg.height = h;
@@ -2142,6 +2156,25 @@ async function loadVideoForAnnot(url, scroll) {
   video.controls = true;
   video.playsInline = true;
   video.preload = "metadata";
+
+  const fitVideo = () => {
+    const pad = 16;
+    const availW = Math.max(120, (scroll.clientWidth || window.innerWidth) - pad);
+    const availH = Math.max(120, (scroll.clientHeight || (window.innerHeight - 120)) - pad);
+    const vw = video.videoWidth || 16;
+    const vh = video.videoHeight || 9;
+    const scale = Math.min(availW / vw, availH / vh);
+    const w = Math.max(1, Math.round(vw * scale));
+    const h = Math.max(1, Math.round(vh * scale));
+    video.style.width = w + "px";
+    video.style.height = h + "px";
+    page.style.width = w + "px";
+    page.style.height = h + "px";
+  };
+  video.addEventListener("loadedmetadata", fitVideo);
+  // In case metadata is already available
+  if (video.readyState >= 1) fitVideo();
+
   page.appendChild(video);
   annotState.pages = [];
   scroll.innerHTML = "";
@@ -2422,8 +2455,8 @@ function annotRedo() {
 }
 
 async function saveAnnotated() {
-  if (annotState.type === "code") {
-    showToast("Kod ko'rinishi faqat o'qish uchun", "error");
+  if (annotState.type === "code" || annotState.type === "video") {
+    showToast("Bu fayl faqat o'qish uchun", "error");
     return;
   }
   if (!annotState.pages.length) return;
@@ -2431,6 +2464,8 @@ async function saveAnnotated() {
   showToast("Annotated fayl tayyorlanmoqda…");
 
   try {
+    const originalName = annotState.file.filename || "annotated";
+
     if (annotState.type === "image") {
       const p = annotState.pages[0];
       const off = document.createElement("canvas");
@@ -2440,16 +2475,20 @@ async function saveAnnotated() {
       const imgEl = p.el.querySelector("img");
       octx.drawImage(imgEl, 0, 0, p.imgW, p.imgH);
       octx.drawImage(p.canvas, 0, 0);
-      off.toBlob((blob) => {
-        if (!blob) return;
-        const name = annotState.file.filename;
-        const file = new File([blob], name, { type: "image/png" });
-        downloadFileLocally(file);
-        showToast("Rasm \"" + name + "\" nomi bilan yuklab olindi");
-        closeAnnotationViewer();
-      }, "image/png");
+
+      const blob = await new Promise((resolve, reject) => {
+        try {
+          off.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))), "image/png");
+        } catch (e) {
+          reject(e);
+        }
+      });
+
+      // Keep original filename (user asked for same name); content is PNG.
+      downloadFileLocally(new File([blob], originalName, { type: "image/png" }));
+      showToast("\"" + originalName + "\" yuklab olindi");
+      closeAnnotationViewer();
     } else if (annotState.type === "pdf") {
-      // Full multi-page annotated PDF via pdf-lib
       if (!window.PDFLib) {
         showToast("PDF kutubxonasi yuklanmadi", "error");
         return;
@@ -2459,7 +2498,6 @@ async function saveAnnotated() {
 
       for (let i = 0; i < annotState.pages.length; i++) {
         const p = annotState.pages[i];
-        // Composite PDF page + annotations
         const off = document.createElement("canvas");
         off.width = p.imgW;
         off.height = p.imgH;
@@ -2482,15 +2520,13 @@ async function saveAnnotated() {
 
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: "application/pdf" });
-      const name = annotState.file.filename;
-      const file = new File([blob], name, { type: "application/pdf" });
-      downloadFileLocally(file);
-      showToast("Fayl \"" + name + "\" nomi bilan yuklab olindi");
+      downloadFileLocally(new File([blob], originalName, { type: "application/pdf" }));
+      showToast("\"" + originalName + "\" yuklab olindi");
       closeAnnotationViewer();
     }
   } catch (err) {
     console.error(err);
-    showToast("Saqlash muvaffaqiyatsiz", "error");
+    showToast("Yuklab olish muvaffaqiyatsiz", "error");
   }
 }
 
@@ -2518,10 +2554,8 @@ function toggleAnnotFullscreen() {
   }
 }
 
-// Re-call renderFiles after load so view buttons appear
-const _origLoadFiles = loadFiles;
-loadFiles = async function () {
-  await _origLoadFiles();
-  // force re-render with view buttons
-  renderFiles();
-};
+// NOTE: do NOT force renderFiles() after every loadFiles().
+// Silent polling runs every 2s; re-rendering the whole list each time
+// destroys :hover on file cards (actions flicker open/closed).
+// View buttons are already injected by the patched renderFiles() whenever
+// a real data change triggers a render.

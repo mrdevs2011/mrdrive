@@ -1073,6 +1073,16 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   background: #3f3f46;
   color: #fafafa;
 }
+/* Pencil in edit mode — stays pencil, gray active chip */
+.annot-btn.is-edit,
+.annot-btn.is-edit.active {
+  background: #3f3f46;
+  color: #e4e4e7;
+}
+.annot-btn.is-edit:hover {
+  background: #52525b;
+  color: #fafafa;
+}
 .annot-btn:disabled {
   opacity: 0.35;
   pointer-events: none;
@@ -1210,6 +1220,12 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   box-shadow: 0 4px 20px rgba(0,0,0,0.12);
   border: 1px solid var(--border);
 }
+/* Center enlarged image/video in the workspace */
+.annot-workspace.kind-image .annot-scroll,
+.annot-workspace.kind-video .annot-scroll {
+  justify-content: center;
+  padding: 8px;
+}
 
 .annot-scroll {
   width: 100%;
@@ -1262,11 +1278,20 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   pointer-events: none;
   user-select: none;
 }
+.annot-page-video {
+  max-width: 100%;
+  max-height: 100%;
+  background: #000;
+}
 .annot-page-video video {
   display: block;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
-  max-height: calc(100vh - 160px);
+  max-height: 100%;
+  object-fit: contain;
   pointer-events: auto;
+  background: #000;
 }
 
 /* Code / text viewer — fills the whole workspace, edge to edge */
@@ -1274,6 +1299,8 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   padding: 0;
   gap: 0;
   align-items: stretch;
+  /* Outer scroll off — only the <pre> scrolls (stops infinite horizontal scroll) */
+  overflow: hidden;
 }
 .annot-code-wrap {
   width: 100%;
@@ -1290,11 +1317,14 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 }
 .annot-scroll.is-text .annot-code-wrap {
   max-width: none;
+  width: 100%;
+  min-width: 0; /* allow shrink below long-line content width */
   height: 100%;
   border-radius: 0;
   box-shadow: none;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .annot-code-wrap pre {
   margin: 0;
@@ -1318,6 +1348,12 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   padding: 0;
   color: inherit;
   white-space: pre;
+  display: block;
+  min-width: 0;
+}
+.annot-code-wrap pre code {
+  white-space: pre;
+  display: block;
 }
 .annot-code-wrap pre::-webkit-scrollbar { width: 8px; height: 8px; }
 .annot-code-wrap pre::-webkit-scrollbar-track { background: transparent; }
@@ -1328,19 +1364,15 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 .annot-code-wrap pre::-webkit-scrollbar-thumb:hover { background: #3a4152; }
 .annot-scroll.is-text .annot-code-wrap pre {
   flex: 1;
+  min-height: 0; /* required so overflow:auto works inside flex */
+  min-width: 0;
   max-height: none;
+  width: 100%;
+  overflow: auto;
 }
+/* Second header hidden — top annot-topbar already shows the filename */
 .annot-code-wrap .code-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 14px;
-  background: rgba(255,255,255,0.02);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  font-size: 11.5px;
-  color: #8b95a7;
-  flex-shrink: 0;
+  display: none;
 }
 .code-header-name {
   overflow: hidden;
@@ -1381,6 +1413,97 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   color: #71717a;
   flex-shrink: 0;
   min-height: 32px;
+}
+/* Code preview: bottom status bar hidden (no useful gesture hints) */
+.annot-viewer.kind-code .annot-status {
+  display: none;
+}
+
+/* Image / video: light header, toolbar & status (only code stays dark) */
+.annot-viewer.kind-image .annot-topbar,
+.annot-viewer.kind-video .annot-topbar,
+.annot-viewer.kind-image .annot-toolbar,
+.annot-viewer.kind-video .annot-toolbar {
+  background: var(--surface);
+  border-bottom-color: var(--border);
+}
+.annot-viewer.kind-image .annot-status,
+.annot-viewer.kind-video .annot-status {
+  background: var(--surface);
+  border-top-color: var(--border);
+  color: var(--text-muted);
+}
+.annot-viewer.kind-image .annot-filename,
+.annot-viewer.kind-video .annot-filename {
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-btn,
+.annot-viewer.kind-video .annot-btn {
+  color: var(--text-muted);
+}
+.annot-viewer.kind-image .annot-btn:hover,
+.annot-viewer.kind-image .annot-btn:active,
+.annot-viewer.kind-video .annot-btn:hover,
+.annot-viewer.kind-video .annot-btn:active {
+  background: var(--border);
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-btn.active,
+.annot-viewer.kind-video .annot-btn.active {
+  background: var(--border-strong);
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-btn.is-edit,
+.annot-viewer.kind-image .annot-btn.is-edit.active,
+.annot-viewer.kind-video .annot-btn.is-edit,
+.annot-viewer.kind-video .annot-btn.is-edit.active {
+  background: var(--border-strong);
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-btn.is-save,
+.annot-viewer.kind-video .annot-btn.is-save {
+  color: #16a34a;
+}
+.annot-viewer.kind-image .annot-btn.is-save:hover,
+.annot-viewer.kind-video .annot-btn.is-save:hover {
+  background: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+}
+.annot-viewer.kind-image .annot-tool-group,
+.annot-viewer.kind-video .annot-tool-group {
+  border-right-color: var(--border);
+}
+.annot-viewer.kind-image .annot-tool,
+.annot-viewer.kind-video .annot-tool {
+  color: var(--text-muted);
+}
+.annot-viewer.kind-image .annot-tool:hover,
+.annot-viewer.kind-image .annot-tool:active,
+.annot-viewer.kind-video .annot-tool:hover,
+.annot-viewer.kind-video .annot-tool:active {
+  background: var(--border);
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-tool.active,
+.annot-viewer.kind-video .annot-tool.active {
+  background: #3b82f6;
+  color: #fff;
+}
+.annot-viewer.kind-image .annot-size-btn,
+.annot-viewer.kind-video .annot-size-btn {
+  background: var(--border);
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-size-btn.active,
+.annot-viewer.kind-video .annot-size-btn.active {
+  background: #3b82f6;
+  color: #fff;
+}
+/* Lighter loading overlay on light workspace */
+.annot-viewer.kind-image .annot-loading,
+.annot-viewer.kind-video .annot-loading {
+  background: rgba(250, 250, 250, 0.75);
+  color: var(--text-muted);
 }
 
 /* Loading spinner inside viewer */
