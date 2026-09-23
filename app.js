@@ -3,7 +3,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const authScreen = document.getElementById("auth-screen");
 const appScreen = document.getElementById("app");
 const authStatus = document.getElementById("auth-status");
-const userEmailEl = document.getElementById("user-email");
+const userEmailEl = document.getElementById("user-email"); // optional, header da ism ko'rsatilmaydi
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("file-input");
 const fileListEl = document.getElementById("file-list");
@@ -108,7 +108,7 @@ if (shareToken) {
       authScreen.style.display = "none";
       appScreen.style.display = "block";
       const name = session.user.user_metadata?.name || session.user.user_metadata?.username || "";
-      userEmailEl.textContent = name;
+      if (userEmailEl) userEmailEl.textContent = name;
       loadFiles();
       setupRealtime(session.user.id);
       startPolling(session.user.id);
@@ -738,16 +738,21 @@ async function logout() {
   await sb.auth.signOut();
 }
 
-// Gear icon → sozlamalar modal (Claude ga ulang + Log out)
+// Gear icon → sozlamalar modal (Claude ga ulang + Account + Log out)
 (function initSettingsMenu() {
   const gearBtn = document.getElementById("gear-btn");
   const modal = document.getElementById("settings-modal");
   const logoutBtn = document.getElementById("settings-logout-btn");
+  const accountBtn = document.getElementById("settings-account-btn");
+  const accountPanel = document.getElementById("settings-account-panel");
+  const accountNameEl = document.getElementById("account-name");
+  const accountUsernameEl = document.getElementById("account-username");
   if (!gearBtn || !modal) return;
 
   function closeSettings() {
     modal.hidden = true;
     gearBtn.classList.remove("open");
+    if (accountPanel) accountPanel.hidden = true;
   }
   function openSettings() {
     modal.hidden = false;
@@ -759,6 +764,22 @@ async function logout() {
     if (modal.hidden) openSettings();
     else closeSettings();
   });
+
+  accountBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!accountPanel) return;
+    const opening = accountPanel.hidden;
+    if (opening) {
+      // Sessiyadan name / username
+      sb.auth.getSession().then(({ data: { session } }) => {
+        const meta = session?.user?.user_metadata || {};
+        if (accountNameEl) accountNameEl.textContent = meta.name || "—";
+        if (accountUsernameEl) accountUsernameEl.textContent = meta.username || "—";
+      });
+    }
+    accountPanel.hidden = !opening;
+  });
+
   logoutBtn?.addEventListener("click", () => {
     closeSettings();
     logout();
@@ -779,7 +800,7 @@ sb.auth.onAuthStateChange((event, session) => {
     authScreen.style.display = "none";
     appScreen.style.display = "block";
     const name = session.user.user_metadata?.name || session.user.user_metadata?.username || "";
-    userEmailEl.textContent = name;
+    if (userEmailEl) userEmailEl.textContent = name;
     loadFiles();
     setupRealtime(session.user.id);
     startPolling(session.user.id);

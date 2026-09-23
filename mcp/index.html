@@ -51,27 +51,19 @@
   .iconbtn:hover { background: #e4e4e7; color: #18181b; }
   .iconbtn.copied { color: #16a34a; }
   .muted { color: #71717a; font-size: 13px; margin-top: 8px; line-height: 1.6; }
-  .err { color: #dc2626; font-size: 13px; margin-top: 8px; line-height: 1.6; }
 
   .gate { text-align: center; padding: 8px 0 4px; }
   .gate p { color: #71717a; font-size: 14px; margin-bottom: 18px; line-height: 1.6; }
-  .gate a.btn, button.btn {
+  .gate a.btn {
     display: inline-block; background: #18181b; color: #fff; text-decoration: none;
-    border: none; border-radius: 8px; padding: 10px 18px; font-size: 14px; cursor: pointer;
+    border: none; border-radius: 8px; padding: 10px 18px; font-size: 14px;
   }
-  button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .skeleton {
     height: 38px; border-radius: 10px; background: #f0f0f1;
     animation: pulse 1.2s ease-in-out infinite;
   }
   @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
 
-  .field { margin-bottom: 14px; }
-  .field input {
-    width: 100%; padding: 10px 12px; border: 1px solid #e4e4e7; border-radius: 8px;
-    font-size: 14px; background: #fff;
-  }
-  .field input:focus { outline: none; border-color: #a1a1aa; }
   .name-badge {
     display: inline-block; background: #f4f4f5; border-radius: 6px;
     padding: 4px 10px; font-size: 13px; font-weight: 600; margin-bottom: 12px;
@@ -127,27 +119,6 @@
 
     <div id="gate" class="gate" style="display:none;"></div>
 
-    <div id="passwordForm" style="display:none;">
-      <p class="muted" style="margin-bottom:16px;">
-        MCP token username + parolingizdan brauzerda hisoblanadi (serverga parol yuborilmaydi).
-        Bir marta kiriting — keyin doimiy havola chiqadi.
-      </p>
-      <div class="field">
-        <label>Name (aniq, katta/kichik harf muhim)</label>
-        <input type="text" id="pf-name" autocomplete="name" />
-      </div>
-      <div class="field">
-        <label>Username</label>
-        <input type="text" id="pf-username" autocomplete="username" />
-      </div>
-      <div class="field">
-        <label>Parol</label>
-        <input type="password" id="pf-password" autocomplete="current-password" />
-      </div>
-      <p class="err" id="pf-error" style="display:none;"></p>
-      <button class="btn" id="pf-submit" style="width:100%; margin-top:8px;">Havolani yaratish</button>
-    </div>
-
     <div id="content" style="display:none;">
       <div class="row">
         <span class="name-badge" id="nameBadge"></span>
@@ -162,9 +133,7 @@
           </button>
         </div>
         <p class="muted">
-          Havola <strong>name</strong> + <strong>token</strong> dan iborat.
-          Name katta/kichik harflari aniq mos kelishi shart. Bir nechta hisobni
-          Claude ga ulanganda name orqali ajratasiz.
+          Bu havola faqat sizniki. Name + token birga Claude da hisobingizni aniqlaydi.
         </p>
       </div>
 
@@ -211,40 +180,19 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/api/config.js"></script>
   <script>
-    async function computeMcpToken(username, password) {
-      const enc = new TextEncoder();
-      const toHex = (buf) =>
-        [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-      const uHash = toHex(await crypto.subtle.digest("SHA-256", enc.encode(String(username))));
-      const pHash = toHex(await crypto.subtle.digest("SHA-256", enc.encode(String(password))));
-      const combined = toHex(await crypto.subtle.digest("SHA-256", enc.encode(uHash + pHash)));
-      return combined.slice(0, 48);
-    }
-
     (async function () {
       const gateEl = document.getElementById("gate");
       const contentEl = document.getElementById("content");
-      const passwordForm = document.getElementById("passwordForm");
       const subline = document.getElementById("subline");
 
       function showGate(html) {
         gateEl.innerHTML = html;
         gateEl.style.display = "block";
         contentEl.style.display = "none";
-        passwordForm.style.display = "none";
-      }
-
-      function showPasswordForm(prefill) {
-        gateEl.style.display = "none";
-        contentEl.style.display = "none";
-        passwordForm.style.display = "block";
-        if (prefill?.name) document.getElementById("pf-name").value = prefill.name;
-        if (prefill?.username) document.getElementById("pf-username").value = prefill.username;
       }
 
       function showUrl(mcpUrl, name) {
         gateEl.style.display = "none";
-        passwordForm.style.display = "none";
         contentEl.style.display = "block";
         document.getElementById("nameBadge").textContent = name || "";
         if (name) subline.textContent = "Claude uchun shaxsiy ulanish — " + name;
@@ -297,7 +245,6 @@
 
       const meta = session.user.user_metadata || {};
       const storedName = meta.name || meta.username || "";
-      const storedUsername = meta.username || "";
       const storedToken = meta.mcp_token || "";
 
       if (storedToken && /^[0-9a-f]{48}$/i.test(storedToken) && storedName) {
@@ -307,47 +254,11 @@
         return;
       }
 
-      showPasswordForm({ name: storedName, username: storedUsername });
-
-      document.getElementById("pf-submit").addEventListener("click", async () => {
-        const nameTrim = document.getElementById("pf-name").value.trim();
-        const username = document.getElementById("pf-username").value.trim();
-        const password = document.getElementById("pf-password").value;
-        const errEl = document.getElementById("pf-error");
-        errEl.style.display = "none";
-
-        if (!nameTrim || !username || !password) {
-          errEl.textContent = "Name, username va parolni to'ldiring.";
-          errEl.style.display = "block";
-          return;
-        }
-
-        const btn = document.getElementById("pf-submit");
-        btn.disabled = true;
-        btn.textContent = "Hisoblanmoqda...";
-
-        try {
-          const token = await computeMcpToken(username, password);
-          const { error: upErr } = await sb.auth.updateUser({
-            data: {
-              ...meta,
-              name: nameTrim,
-              username: meta.username || username,
-              mcp_token: token,
-            },
-          });
-          if (upErr) throw new Error(upErr.message);
-
-          const proto = location.protocol.replace(":", "");
-          const mcpUrl = `${proto}://${location.host}/api/mcp?name=${encodeURIComponent(nameTrim)}&token=${token}`;
-          showUrl(mcpUrl, nameTrim);
-        } catch (e) {
-          errEl.textContent = e.message || "Xato yuz berdi";
-          errEl.style.display = "block";
-          btn.disabled = false;
-          btn.textContent = "Havolani yaratish";
-        }
-      });
+      // Token yo'q — account tahrirlanmaydi; asosiy sahifada qayta login qilish kerak
+      showGate(
+        '<p>MCP token hali yaratilmagan. Asosiy sahifada <strong>username va parol</strong> bilan qayta tizimga kiring — token avtomatik saqlanadi. Keyin bu sahifaga qayting.</p>' +
+        '<a class="btn" href="/">MRdrive ga qaytish</a>'
+      );
     })();
   </script>
 </body>

@@ -174,6 +174,32 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   background: var(--border);
   margin: 4px 8px;
 }
+.settings-account-panel {
+  margin: 2px 6px 6px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+.settings-account-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.settings-account-row:last-child { margin-bottom: 0; }
+.settings-account-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.settings-account-value {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+  word-break: break-all;
+}
 
 /* DROPZONE */
 .dropzone {
