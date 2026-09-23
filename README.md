@@ -44,3 +44,11 @@ working for you, you don't need this step — the columns are already there.
 
 Run `fix-delete.sql` in the Supabase SQL Editor. It re-creates the delete
 policies for the `files` table and the storage bucket (safe to run repeatedly).
+
+## Claude orqali fayl almashish (MCP)
+
+`mcp/` papkasida Claude (AI) bilan shu MRdrive orasida fayl almashishga
+imkon beruvchi kichik MCP server bor — u xuddi shu Supabase `files`
+bucket'ni ishlatadi, alohida hisob yoki service_role kalit kerak emas.
+Batafsil: `mcp/README.md`.
+
