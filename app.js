@@ -1844,7 +1844,6 @@ fileListEl.addEventListener("dragstart", (e) => {
 
   e.dataTransfer.setData("application/x-mrdrive-file", id); // back-compat, primary file
   e.dataTransfer.setData("application/x-mrdrive-files", JSON.stringify(idsToMove));
-  e.dataTransfer.setData("text/plain", idsToMove.join(",")); // fallback
   e.dataTransfer.effectAllowed = "copyMove"; // "move" makes native file managers reject the drop
 
   // Drop onto the OS file manager / desktop (outside the browser) saves the
