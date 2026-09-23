@@ -49,8 +49,8 @@ token = sha256(uHash + pHash)[:48] # 48 hex — ikki marta hash
 3. Bo'lmasa (eski hisob) — username + parol so'raladi, brauzerda hash
    qilinadi, metadata ga yoziladi, URL chiqadi.
 4. Claude shu havolaga ulanganda server:
-   - `token` bo'yicha foydalanuvchini topadi
-   - `name` ni metadata dagi name bilan **aniq** (katta/kichik harf) solishtiradi
+   - `resolve_mcp_user(name, token)` RPC orqali user_id topadi (service_role siz)
+   - Har so'rovda `x-mcp-token` header yuboradi — RLS shu token orqali ruxsat beradi
    - Mos kelmasa xato; mos kelsa faqat shu user_id fayllari bilan ishlaydi
 
 ### Nega parol hash, UID emas?
@@ -63,18 +63,22 @@ token = sha256(uHash + pHash)[:48] # 48 hex — ikki marta hash
 
 ## O'rnatish
 
-### 1. Environment variables
+### 1. Environment variables (faqat 2 ta)
 
 | Nom | Qiymat |
 |---|---|
-| `SUPABASE_URL` | (mavjud) |
-| `SUPABASE_ANON_KEY` | (mavjud) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Dashboard → Settings → API → `service_role` |
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_ANON_KEY` | anon public key |
 
-**`MCP_TOKEN_SECRET` endi KERAK EMAS** — o'chirib tashlashingiz mumkin.
+**`SUPABASE_SERVICE_ROLE_KEY` endi KERAK EMAS** — o'chirib tashlang.
+**`MCP_TOKEN_SECRET` ham KERAK EMAS.**
 
-`SUPABASE_SERVICE_ROLE_KEY` nima uchun: MCP turli user nomidan ishlaydi;
-har so'rovda token+name orqali aniq `user_id` topiladi va qo'lda filtrlanadi.
+MCP endi faqat anon key + `setup-mcp-anon.sql` dagi `resolve_mcp_user`
+RPC va RLS header (`x-mcp-token`) tekshiruvi bilan ishlaydi.
+
+### 1b. SQL (bir marta)
+
+Dashboard → SQL Editor → `setup-mcp-anon.sql` ni Run qiling.
 
 ### 2. MCP havolangizni oling
 

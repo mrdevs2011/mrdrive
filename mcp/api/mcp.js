@@ -4,27 +4,20 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import crypto from "crypto";
 
-// Bular MRdrive'ning o'z frontend config.js'idagi bilan bir xil, ochiq
-// (public) qiymatlar — service_role kalit emas, xavfsiz.
-const SUPABASE_URL = process.env.SUPABASE_URL;
-// Bu MCP endpoint endi bitta hisob emas, KO'P foydalanuvchi uchun ishlaydi:
-// har so'rov o'zining ?name= + ?token= qiymati orqali "kim" ekanini isbotlaydi.
+// Faqat public kalitlar — service_role ISHLATILMAYDI.
+// SUPABASE_URL + SUPABASE_ANON_KEY (skrinshotdagi) yetarli.
 // Token = sha256(sha256(username)+sha256(password))[:48] — server siri YO'Q.
-// RLS'ni chetlab o'tuvchi service_role kalit kerak; so'rov ichida biz o'zimiz
-// har doim aniq user_id bilan filtrlaymiz.
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
 // MRdrive web ilovasi qaysi domenda turibdi — pull/push/refresh_link
-// qaytaradigan link shu domenga ?share=TOKEN qo'shib hosil qilinadi (xom
-// Supabase signed URL emas). Kerak bo'lsa Vercel env var orqali override qiling.
+// qaytaradigan link shu domenga ?share=TOKEN qo'shib hosil qilinadi.
 const APP_URL = (process.env.APP_URL || "https://mrdrive.vercel.app").replace(/\/+$/, "");
 
 const BUCKET = "files";
 const TABLE = "files";
 const FOLDERS_TABLE = "folders";
 
-// Web ilovadagi (app.js) bilan bir xil ro'yxat — xavfsizlik uchun
-// bloklangan fayl kengaytmalari.
 const BLOCKED_EXTENSIONS = [
   "exe", "bat", "cmd", "sh", "msi", "com", "scr",
   "vbs", "js", "jar", "ps1", "app", "dmg", "apk"
@@ -35,85 +28,75 @@ function isBlockedFile(filename) {
   return BLOCKED_EXTENSIONS.includes(ext);
 }
 
-// Web ilovadagi generateToken() bilan bir xil format (32 hex belgi).
 function generateToken() {
   return crypto.randomBytes(16).toString("hex");
 }
 
 /**
- * ?name= + ?token= orqali foydalanuvchini topadi.
- * - token: user_metadata.mcp_token bilan mos kelishi shart (48 hex)
- * - name:  user_metadata.name bilan ANIQ (case-sensitive) mos kelishi shart
- * Mos kelmasa aniq xato — Claude bir nechta account ulaganda aralashib ketmasin.
+ * ?name= + ?token= orqali foydalanuvchini topadi (service_role siz).
+ * resolve_mcp_user RPC (setup-mcp-anon.sql) ishlatiladi.
+ * Token: user_metadata.mcp_token (48 hex)
+ * Name:  user_metadata.name — case-sensitive
  */
 async function resolveUserFromNameAndToken(name, token) {
   if (!name || typeof name !== "string") {
     throw new Error("MCP havolasida ?name= yo'q yoki bo'sh.");
   }
   if (!/^[0-9a-f]{48}$/i.test(token || "")) {
-    throw new Error("MCP havolasi noto'g'ri — token topilmadi yoki formati xato (48 hex belgi kerak).");
-  }
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error(
-      "SUPABASE_URL yoki SUPABASE_SERVICE_ROLE_KEY environment variable topilmadi."
+      "MCP havolasi noto'g'ri — token topilmadi yoki formati xato (48 hex belgi kerak)."
+    );
+  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error(
+      "SUPABASE_URL yoki SUPABASE_ANON_KEY environment variable topilmadi."
     );
   }
 
-  const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const tokenLower = token.toLowerCase();
-  let page = 1;
-  const perPage = 200;
-  let matchedByToken = null;
+  const { data: userId, error } = await sb.rpc("resolve_mcp_user", {
+    p_name: name,
+    p_token: token.toLowerCase(),
+  });
 
-  // Barcha foydalanuvchilarni sahifalab qidiramiz (mcp_token unique bo'lishi kutiladi).
-  for (;;) {
-    const { data, error } = await sbAdmin.auth.admin.listUsers({ page, perPage });
-    if (error) throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
-    const users = data?.users || [];
-    if (users.length === 0) break;
-
-    for (const u of users) {
-      const meta = u.user_metadata || {};
-      const storedToken = (meta.mcp_token || "").toLowerCase();
-      if (storedToken && storedToken === tokenLower) {
-        matchedByToken = u;
-        break;
-      }
+  if (error) {
+    // RPC hali yaratilmagan bo'lsa aniq ko'rsatma
+    if (
+      /function.*resolve_mcp_user|does not exist|404/i.test(error.message || "")
+    ) {
+      throw new Error(
+        "resolve_mcp_user funksiyasi topilmadi. Supabase SQL Editor'da setup-mcp-anon.sql ni bir marta ishga tushiring."
+      );
     }
-    if (matchedByToken) break;
-    if (users.length < perPage) break;
-    page += 1;
-    if (page > 50) break; // himoya
+    throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
   }
 
-  if (!matchedByToken) {
+  if (!userId) {
     throw new Error(
-      "MCP havolasi yaroqsiz — token topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling."
+      "MCP havolasi yaroqsiz — token/name topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling."
     );
   }
 
-  const storedName = matchedByToken.user_metadata?.name || "";
-  // Name case-sensitive: "Muhammadrasul" ≠ "muhammadrasul"
-  if (storedName !== name) {
-    throw new Error(
-      `Name mos kelmadi: havolada "${name}", hisobda "${storedName}". ` +
-        `Katta/kichik harflar ham bir xil bo'lishi shart. /mcp sahifasidan to'g'ri havolani oling.`
-    );
-  }
-
-  return { id: matchedByToken.id, name: storedName };
+  return { id: userId, name };
 }
 
-// So'rov qanday foydalanuvchi nomidan bajarilishini aniqlaydi.
-// name + token orqali user topiladi; RLS'ni chetlab o'tuvchi service_role
-// klient bilan ishlaymiz va HAR BIR so'rovda aniq user_id bilan filtrlaymiz.
+/**
+ * ANON_KEY + x-mcp-token header bilan klient.
+ * RLS setup-mcp-anon.sql dagi mcp_token_matches orqali ruxsat beradi.
+ * HAR BIR so'rovda aniq user_id bilan filtrlaymiz.
+ */
 async function getAuthedClient(name, token) {
   const user = await resolveUserFromNameAndToken(name, token);
-  const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
+    global: {
+      headers: {
+        "x-mcp-token": token.toLowerCase(),
+      },
+    },
   });
   return { sb, user };
 }
@@ -415,10 +398,11 @@ function buildServer(name, token) {
     {
       name: z.string().describe("Yangi papka nomi"),
     },
-    async ({ name }) => {
-      const trimmed = name.trim();
+    async ({ name: folderName }) => {
+      const trimmed = (folderName || "").trim();
       if (!trimmed) throw new Error("Papka nomi bo'sh bo'lishi mumkin emas.");
 
+      // tashqi `name` = URL dagi foydalanuvchi nomi (shadowing tuzatildi)
       const { sb, user } = await getAuthedClient(name, token);
 
       const { data: existing, error: exErr } = await sb
@@ -444,24 +428,35 @@ function buildServer(name, token) {
     {
       name: z.string().describe("O'chiriladigan papka nomi"),
     },
-    async ({ name }) => {
+    async ({ name: folderName }) => {
+      const trimmed = (folderName || "").trim();
+      if (!trimmed) throw new Error("Papka nomi bo'sh bo'lishi mumkin emas.");
+
+      // tashqi `name` = URL dagi foydalanuvchi nomi (shadowing tuzatildi)
       const { sb, user } = await getAuthedClient(name, token);
 
       const { data: folder, error: fErr } = await sb
         .from(FOLDERS_TABLE)
         .select("id")
         .eq("user_id", user.id)
-        .eq("name", name)
+        .eq("name", trimmed)
         .maybeSingle();
       if (fErr) throw new Error(fErr.message);
-      if (!folder) throw new Error(`"${name}" nomli papka topilmadi.`);
+      if (!folder) throw new Error(`"${trimmed}" nomli papka topilmadi.`);
 
-      await sb.from(TABLE).update({ folder: null }).eq("user_id", user.id).eq("folder", name);
+      await sb.from(TABLE).update({ folder: null }).eq("user_id", user.id).eq("folder", trimmed);
 
       const { error } = await sb.from(FOLDERS_TABLE).delete().eq("id", folder.id);
       if (error) throw new Error(error.message);
 
-      return { content: [{ type: "text", text: `Papka o'chirildi: ${name} (fayllar "papkasiz"ga o'tdi)` }] };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Papka o'chirildi: ${trimmed} (fayllar "papkasiz"ga o'tdi)`,
+          },
+        ],
+      };
     }
   );
 

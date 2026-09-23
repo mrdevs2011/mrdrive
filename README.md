@@ -25,12 +25,19 @@ A simple HTML/JS/CSS drive app — Supabase auth + storage + Postgres.
    - `SUPABASE_URL` — Project URL
    - `SUPABASE_ANON_KEY` — anon public key
 
+   **SERVICE_ROLE_KEY KERAK EMAS** — MCP endi faqat anon key bilan ishlaydi.
+
    `index.html` bu qiymatlarni endi `/api/config.js` orqali runtime'da
    oladi (qarang `api/config.js`) — repo/kodda hech qanday haqiqiy kalit
    saqlanmaydi.
 
    Mahalliy (Vercel'siz) sinov uchun `config.local.js` faylidagi
    ko'rsatmalarga qarang.
+
+6b. **MCP uchun SQL (majburiy)** — Dashboard → SQL Editor →
+    `setup-mcp-anon.sql` ni Run qiling. Bu service_role o'rniga
+    `resolve_mcp_user` + RLS header tekshiruvini qo'shadi.
+    Bir marta ishga tushirish kifoya.
 
 7. **Deploy qiling / ishga tushiring**
    ```
@@ -42,8 +49,11 @@ A simple HTML/JS/CSS drive app — Supabase auth + storage + Postgres.
 ## Important notes
 
 - `SUPABASE_ANON_KEY` can be public — security is enforced through RLS
-- NEVER put the `service_role` key in the frontend
+- NEVER put the `service_role` key anywhere (frontend yoki MCP)
+- MCP faqat `SUPABASE_URL` + `SUPABASE_ANON_KEY` ishlatadi
 - Each user can only see/delete their own files (the RLS policies guarantee this)
+- MCP ulanish: `https://mrdrive.vercel.app/api/mcp?name=<Name>&token=<48hex>`
+  Token = sha256(sha256(username)+sha256(password))[:48]
 
 ## Updating the schema (if you installed earlier)
 
