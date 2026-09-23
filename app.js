@@ -22,7 +22,7 @@ const ICON_FOLDER = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
 const BUCKET = "files";
 const TABLE = "files";
 const FOLDERS_TABLE = "folders";
-const FAKE_EMAIL_DOMAIN = "mrdrive.local";
+const FAKE_EMAIL_DOMAIN = "gmail.com";
 
 let allFiles = [];
 let allFolders = [];
