@@ -1,6 +1,6 @@
 # MRdrive MCP
 
-Bu kichik loyiha Claude (AI) bilan MRdrive orasida fayl almashishga imkon
+Bu qism Claude (AI) bilan MRdrive orasida fayl almashishga imkon
 beradi — xuddi web ilovada login qilib fayl yuklagandek, lekin Claude
 orqali "shu faylni MRdrive'ga qo'y" yoki "u faylni menga ber" deb
 so'rash orqali.
@@ -11,6 +11,13 @@ sizning MRdrive ilovasidagi (web sahifada login qilgan) username/parolingiz
 ishlatiladi. Xavfsizlik xuddi web ilovadagi kabi RLS orqali ta'minlanadi:
 Claude faqat sizning o'z fayllaringizni ko'radi/o'zgartiradi.
 
+**Endi bu alohida Vercel loyiha emas** — asosiy MRdrive loyihasining bir
+qismi. Ikkalasi bitta deploy, bitta domen ostida ishlaydi:
+
+- `mcp/index.html` → holat sahifasi, `/mcp` manzilida ochiladi
+- `api/mcp.js` → haqiqiy MCP server (Claude connector shu manzilga ulanadi): `/api/mcp`
+- `api/mcp-info.js` → holat sahifasi uchun yordamchi endpoint: `/api/mcp-info`
+
 ## Tool'lar
 
 - **push** — faylni (base64) MRdrive'ga yuklaydi — web ilovada darhol ko'rinadi
@@ -20,40 +27,39 @@ Claude faqat sizning o'z fayllaringizni ko'radi/o'zgartiradi.
 
 ## O'rnatish
 
-### 1. Bu papkani (`mcp`) alohida Vercel loyihasi sifatida deploy qiling
+### 1. Environment variables qo'shish
 
-```bash
-cd mcp
-npm install
-npx vercel login
-npx vercel --prod
-```
-
-(`proxy/` papkasi qanday alohida Vercel loyihasi bo'lsa, `mcp/` ham xuddi
-shunday — bitta repo ichida, lekin Vercel'da alohida deploy qilinadi.)
-
-### 2. Environment variables qo'shish
-
-Vercel loyiha sozlamalarida (Project → Settings → Environment Variables):
+Asosiy MRdrive loyihasining Vercel sozlamalarida (Project → Settings →
+Environment Variables) — bular allaqachon `SUPABASE_URL` va
+`SUPABASE_ANON_KEY` uchun bor bo'lishi kerak; shularga qo'shimcha
+kiritilsin:
 
 | Nom | Qiymat |
 |---|---|
-| `SUPABASE_URL` | `config.js`dagi bilan bir xil (masalan `https://xxxx.supabase.co`) |
-| `SUPABASE_ANON_KEY` | `config.js`dagi bilan bir xil |
+| `SUPABASE_URL` | (mavjud bo'lsa, o'zgarmaydi) |
+| `SUPABASE_ANON_KEY` | (mavjud bo'lsa, o'zgarmaydi) |
 | `MRDRIVE_USERNAME` | MRdrive web ilovasida login qiladigan username |
 | `MRDRIVE_PASSWORD` | shu username uchun parol |
 
-Qo'shgandan so'ng qayta deploy qiling (`npx vercel --prod`).
+Qo'shgandan so'ng qayta deploy qiling (`npx vercel --prod`), aks holda
+yangi o'zgaruvchilar ishlamaydi.
 
-### 3. Claude'ga connector sifatida ulash
+### 2. MCP URL'ni oling
 
-Vercel bergan domenni oling, masalan:
-`https://mrdrive-mcp-xxxx.vercel.app`
+Deploy tugagach, brauzerda `https://<sizning-domeningiz>/mcp` sahifasini
+oching. U:
+- MCP URL'ni **avtomatik hisoblab** ko'rsatadi (`/api/mcp`) — qaysi
+  domenda turganidan qat'iy nazar (vercel.app, custom domen)
+- Environment Variables to'liq kiritilganini tekshiradi (yashil/qizil nuqta)
+- Ulangan hisob (`MRDRIVE_USERNAME`) qaysi ekanini ko'rsatadi — **parol
+  hech qachon ko'rsatilmaydi/qaytarilmaydi**
+- "Nusxalash" tugmasi bilan URL'ni bitta bosishda copy qilasiz
 
-MCP endpoint manzili: `https://mrdrive-mcp-xxxx.vercel.app/api/mcp`
+Shu URL'ni (`https://<domen>/api/mcp`) claude.ai → Settings → Connectors
+→ "Add custom connector"ga joylashtiring.
 
-claude.ai → Settings → Connectors → "Add custom connector" orqali shu
-URL'ni qo'shing.
+Domen bittaligi uchun endi hech qanday alohida deploy, subdomen yoki
+rewrite kerak emas — hammasi asosiy loyiha bilan birga deploy bo'ladi.
 
 ## Ishlatish
 

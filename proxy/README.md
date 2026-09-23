@@ -21,11 +21,15 @@ to Supabase.
 4. After the deploy finishes, you'll get an address like:
    `https://mrdrive-proxy-xxxx.vercel.app`
 
-5. **In MRdrive's `config.js`** replace `SUPABASE_URL` with the proxy address:
-   ```js
-   const SUPABASE_URL = "https://mrdrive-proxy-xxxx.vercel.app";
-   const SUPABASE_ANON_KEY = "..."; // this stays the same
+5. **In MRdrive's Vercel project** (Project → Settings → Environment
+   Variables), replace the `SUPABASE_URL` value with the proxy address:
    ```
+   SUPABASE_URL = https://mrdrive-proxy-xxxx.vercel.app
+   SUPABASE_ANON_KEY = ...   // this stays the same
+   ```
+   Then redeploy MRdrive. (`SUPABASE_URL` is read at runtime by
+   `api/config.js`, not hardcoded in a committed file — see the main
+   README.)
 
 That's it — MRdrive now talks to this Vercel address instead of hitting
 Supabase directly, and the proxy talks to Supabase in the background. Login,

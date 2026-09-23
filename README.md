@@ -19,13 +19,25 @@ A simple HTML/JS/CSS drive app — Supabase auth + storage + Postgres.
    - Project URL
    - anon public key
 
-6. **Fill in config.js** — put those two values into that file
+6. **Kalitlarni Vercel Environment Variables'ga qo'shing** (config.js'ga
+   emas!) — bu loyihani (repo ildizini) Vercel'ga deploy qilib, Project →
+   Settings → Environment Variables'da:
+   - `SUPABASE_URL` — Project URL
+   - `SUPABASE_ANON_KEY` — anon public key
 
-7. **Run it** — open `index.html` in a browser, or:
+   `index.html` bu qiymatlarni endi `/api/config.js` orqali runtime'da
+   oladi (qarang `api/config.js`) — repo/kodda hech qanday haqiqiy kalit
+   saqlanmaydi.
+
+   Mahalliy (Vercel'siz) sinov uchun `config.local.js` faylidagi
+   ko'rsatmalarga qarang.
+
+7. **Deploy qiling / ishga tushiring**
    ```
-   npx serve .
+   vercel --prod
    ```
-   (opening it directly via file:// works too, but serving it is recommended)
+   (mahalliy sinov uchun `vercel dev` ishlating — oddiy `npx serve .`
+   `/api/config.js`ni ishga tushira olmaydi, chunki u serverless function)
 
 ## Important notes
 
