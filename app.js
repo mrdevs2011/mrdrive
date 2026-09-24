@@ -432,9 +432,7 @@ function findFileFromPath(parsed) {
 /** After list load: open file from URL if path points to one. */
 function applyPathAfterLoad(opts) {
   const parsed = parseAppPath(window.location.pathname);
-  if (parsed.folder !== undefined) {
-    currentFolder = parsed.folder;
-  }
+  // Stay on All after refresh; only a file path may still open a preview.
   if (!parsed.filename) return;
   const file = findFileFromPath(parsed);
   if (!file) {
@@ -550,11 +548,10 @@ if (shareToken) {
       if (appScreen) appScreen.style.display = "block";
       preloadBootAssets();
       const parsed = parseAppPath(window.location.pathname);
-      currentFolder = parsed.folder;
-      // Don't rewrite URL on boot if it already has a file path — loadFiles
-      // will open that file. Folder-only paths get a clean trailing slash.
+      // Refresh / first paint always starts on All — folder tabs are session-only.
+      currentFolder = null;
       if (!parsed.filename) {
-        syncFolderUrl(currentFolder, true);
+        syncFolderUrl(null, true);
       }
       loadFiles().then(() => applyPathAfterLoad());
       setupRealtime(session.user.id);
@@ -2180,7 +2177,7 @@ async function moveFilesToFolder(fileIds, targetFolder, opts) {
   toMove.forEach((f) => { f.folder = next; });
   const label = next ? `"${next}"` : "All";
   showToast(toMove.length === 1 ? `Moved to ${label}` : `Moved ${toMove.length} files to ${label}`);
-  renderFiles();
+  setFolder(next);
   // Keep the moved files highlighted for a beat so the drop feels
   // confirmed, then fade the selection back to the default look.
   setTimeout(() => {
