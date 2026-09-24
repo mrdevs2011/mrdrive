@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MRdrive → Claude</title>
+<title>MRdrive → Agent</title>
 <link rel="icon" type="image/png" href="/assets/logo.png">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
@@ -26,7 +26,7 @@
     padding: 24px;
   }
 
-  /* ===== Splash: after connect, what Claude can do ===== */
+  /* ===== Splash: Agent (not Claude-only) ===== */
   #mcp-splash {
     position: fixed; inset: 0; z-index: 10000;
     display: flex; align-items: center; justify-content: center;
@@ -36,15 +36,15 @@
   #mcp-splash.is-hiding { opacity: 0; pointer-events: none; }
   .ms-scene {
     position: relative;
-    width: min(340px, 88vw);
+    width: min(360px, 90vw);
     text-align: center;
   }
   .ms-row {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 18px;
-    margin-bottom: 28px;
+    gap: 16px;
+    margin-bottom: 24px;
   }
   .ms-logo {
     width: 56px; height: 56px;
@@ -56,7 +56,14 @@
     animation: msPop 0.5s cubic-bezier(.2,.9,.25,1) both;
   }
   .ms-logo img { width: 34px; height: 34px; object-fit: contain; }
-  .ms-logo.claude { animation-delay: 0.12s; }
+  .ms-logo.agent {
+    animation-delay: 0.12s;
+    background: linear-gradient(145deg, #f8fafc, #eef2ff);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: -0.02em;
+  }
   .ms-bridge {
     position: relative;
     width: 72px; height: 4px;
@@ -68,11 +75,10 @@
     content: "";
     position: absolute; inset: 0;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--primary), #d97706);
+    background: linear-gradient(90deg, var(--primary), #7c3aed);
     transform-origin: left center;
     animation: msBridge 0.7s 0.25s cubic-bezier(.2,.9,.25,1) both;
   }
-  /* floating capability chips */
   .ms-caps {
     display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
     min-height: 88px;
@@ -122,7 +128,7 @@
   .ms-bar i {
     display: block; height: 100%; width: 0;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--primary), var(--accent));
+    background: linear-gradient(90deg, var(--primary), #7c3aed);
     animation: msProgress 2.6s 0.35s linear both;
   }
   @keyframes msPop {
@@ -159,7 +165,7 @@
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 28px;
-    max-width: 440px;
+    max-width: 480px;
     width: 100%;
     box-shadow: 0 8px 28px rgba(37, 99, 235, 0.06);
   }
@@ -192,14 +198,72 @@
   .iconbtn:hover { background: #dbe7fb; color: var(--primary); }
   .iconbtn.copied { color: var(--primary); }
   .hint { margin-top: 10px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+  /* Agent tabs */
   .steps { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
   .steps h2 {
     font-size: 12px; font-weight: 650; color: var(--muted);
-    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px;
   }
-  .steps ol { padding-left: 18px; font-size: 13.5px; color: var(--text); line-height: 1.7; }
-  .steps a { color: var(--primary); text-decoration: none; font-weight: 500; }
-  .steps a:hover { text-decoration: underline; }
+  .agent-tabs {
+    display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .agent-tab {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 10px;
+    padding: 7px 12px;
+    font-size: 13px; font-weight: 550;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .agent-tab:hover { border-color: #c7d5ef; color: var(--text); }
+  .agent-tab.active {
+    border-color: var(--primary);
+    background: #eff6ff;
+    color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+  }
+  .agent-tab img {
+    width: 20px; height: 20px; object-fit: contain; border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .agent-tab.grok img {
+    background: #0a0a0a;
+    border-radius: 5px;
+    padding: 2px;
+  }
+  .agent-tab.claude.active {
+    border-color: #d97706;
+    background: #fff7ed;
+    color: #c2410c;
+    box-shadow: 0 0 0 1px #d97706;
+  }
+  .agent-tab.grok.active {
+    border-color: #111827;
+    background: #f8fafc;
+    color: #111827;
+    box-shadow: 0 0 0 1px #111827;
+  }
+  .agent-tab.cursor.active {
+    border-color: #0ea5e9;
+    background: #f0f9ff;
+    color: #0369a1;
+    box-shadow: 0 0 0 1px #0ea5e9;
+  }
+  .agent-panel { display: none; }
+  .agent-panel.active { display: block; }
+  .agent-panel ol {
+    padding-left: 18px; font-size: 13.5px; color: var(--text); line-height: 1.75;
+  }
+  .agent-panel a { color: var(--primary); text-decoration: none; font-weight: 500; }
+  .agent-panel a:hover { text-decoration: underline; }
+  .agent-panel .note {
+    margin-top: 10px; font-size: 12.5px; color: var(--muted); line-height: 1.5;
+  }
+
   .gate { text-align: center; padding: 12px 0 4px; }
   .gate p { color: var(--muted); font-size: 14px; margin-bottom: 16px; line-height: 1.55; }
   .btn {
@@ -223,7 +287,7 @@
 </style>
 </head>
 <body>
-  <!-- Splash: what Claude can do after MCP is connected -->
+  <!-- Splash: Agent (general, not Claude-only) -->
   <div id="mcp-splash" aria-hidden="false">
     <div class="ms-scene">
       <div class="ms-row">
@@ -231,9 +295,7 @@
           <img src="/assets/logo.png" alt="MRdrive">
         </div>
         <div class="ms-bridge" aria-hidden="true"></div>
-        <div class="ms-logo claude" title="Claude">
-          <img src="/claude-icon.png" alt="Claude">
-        </div>
+        <div class="ms-logo agent" title="Agent">Agent</div>
       </div>
       <div class="ms-caps">
         <div class="ms-cap">
@@ -249,8 +311,8 @@
           Havola ochadi
         </div>
       </div>
-      <p class="ms-title">Claude MRdrive’ingiz bilan ishlaydi</p>
-      <p class="ms-sub">Ulangandan so‘ng chat orqali fayllarni boshqaradi</p>
+      <p class="ms-title">Agentlar MRdrive’ingiz bilan ishlaydi</p>
+      <p class="ms-sub">Claude, Grok va boshqa agentlarga ulashing — chat orqali fayllarni boshqaring</p>
       <div class="ms-bar" role="progressbar" aria-label="Yuklanmoqda"><i></i></div>
     </div>
   </div>
@@ -265,9 +327,9 @@
 
     <div class="brand">
       <img src="/assets/logo.png" alt="" width="28" height="28">
-      <h1>Claude ulanish</h1>
+      <h1>Agent ulanish</h1>
     </div>
-    <p class="sub" id="subline">MCP havolasini Claude sozlamalariga qo‘ying.</p>
+    <p class="sub" id="subline">MCP havolasini agent sozlamalariga qo‘ying.</p>
 
     <div id="gate" class="gate" style="display:none;"></div>
 
@@ -287,11 +349,47 @@
 
       <div class="steps">
         <h2>Qanday ulash</h2>
-        <ol>
-          <li><a href="https://claude.ai" target="_blank" rel="noopener">claude.ai</a> → Sozlamalar → Ulashlar</li>
-          <li>«Maxsus ulanish» → MCP URL maydoniga havolani qo‘ying</li>
-          <li>Saqlang va chatda sinab ko‘ring</li>
-        </ol>
+        <div class="agent-tabs" role="tablist">
+          <button type="button" class="agent-tab claude active" data-agent="claude" role="tab" aria-selected="true">
+            <img src="/assets/tab-claude.png" alt="Claude">
+            Claude
+          </button>
+          <button type="button" class="agent-tab grok" data-agent="grok" role="tab" aria-selected="false">
+            <img src="/assets/tab-grok.png" alt="Grok">
+            Grok
+          </button>
+          <button type="button" class="agent-tab cursor" data-agent="cursor" role="tab" aria-selected="false">
+            <img src="/assets/cursor-tab.png" alt="Cursor">
+            Cursor
+          </button>
+        </div>
+
+        <div class="agent-panel active" data-panel="claude" role="tabpanel">
+          <ol>
+            <li><a href="https://claude.ai" target="_blank" rel="noopener">claude.ai</a> → Sozlamalar → Ulashlar</li>
+            <li>«Maxsus ulanish» → MCP URL maydoniga havolani qo‘ying</li>
+            <li>Saqlang va chatda sinab ko‘ring</li>
+          </ol>
+          <p class="note">Claude Desktop yoki claude.ai web — ikkalasida ham ishlaydi.</p>
+        </div>
+
+        <div class="agent-panel" data-panel="grok" role="tabpanel">
+          <ol>
+            <li><a href="https://x.com/i/grok" target="_blank" rel="noopener">Grok</a> (x.com) yoki Grok ilovasida sozlamalarni oching</li>
+            <li>Connectors / MCP bo‘limiga o‘ting</li>
+            <li>MCP URL ni qo‘ying va ulanishni tasdiqlang</li>
+          </ol>
+          <p class="note">Grok MCP qo‘llab-quvvatlashi muhitga bog‘liq — URL ni nusxalab qo‘ying.</p>
+        </div>
+
+        <div class="agent-panel" data-panel="cursor" role="tabpanel">
+          <ol>
+            <li>Cursor → Settings → MCP (yoki Features → MCP)</li>
+            <li>«Add new MCP server» → URL ni joylashtiring</li>
+            <li>Saqlang, agentni qayta ishga tushiring</li>
+          </ol>
+          <p class="note">Cursor IDE da MCP server sifatida qo‘shiladi.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -313,6 +411,24 @@
           el.setAttribute("aria-hidden", "true");
         }, FADE);
       }, DURATION - FADE);
+    })();
+
+    // Agent tabs
+    (function tabs() {
+      var tabs = document.querySelectorAll(".agent-tab");
+      var panels = document.querySelectorAll(".agent-panel");
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          var id = tab.getAttribute("data-agent");
+          tabs.forEach(function (t) {
+            t.classList.toggle("active", t === tab);
+            t.setAttribute("aria-selected", t === tab ? "true" : "false");
+          });
+          panels.forEach(function (p) {
+            p.classList.toggle("active", p.getAttribute("data-panel") === id);
+          });
+        });
+      });
     })();
 
     (async function () {
