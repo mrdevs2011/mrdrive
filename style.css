@@ -1965,11 +1965,12 @@ body.is-dragging-file .selection-fab { animation: fab-invite 1s ease-in-out infi
 }
 @keyframes fab-invite { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.08); } }
 
-.folder-icon { display: block; flex-shrink: 0; width: 16px; height: 16px; object-fit: contain; pointer-events: none; }
+.folder-icon { display: block; flex-shrink: 0; width: 16px; height: 16px; pointer-events: none; color: var(--text-muted); }
 
-/* File-type icon at the left of each row */
+/* File-type icon at the left of each row (inline SVG) */
 .file-lead { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
-.file-type-icon { width: 34px; height: 34px; flex-shrink: 0; object-fit: contain; pointer-events: none; user-select: none;
-  transition: transform .2s ease; }
-.file-card.selected .file-type-icon { transform: scale(1.1); }
+.file-type-icon { width: 34px; height: 34px; flex-shrink: 0; pointer-events: none; user-select: none;
+  color: var(--text-muted); transition: transform .2s ease, color .2s ease; }
+.file-card:hover .file-type-icon { color: var(--text); }
+.file-card.selected .file-type-icon { transform: scale(1.1); color: var(--accent-strong, var(--accent)); }
 @media (max-width: 600px) { .file-lead { gap: 10px; } .file-type-icon { width: 30px; height: 30px; } }

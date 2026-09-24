@@ -18,16 +18,35 @@ const ICON_UNLINK = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 const ICON_COPY = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15V5C5 4.44772 5.44772 4 6 4H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_REFRESH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 4V9H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 20V15H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9C4 9 6 4 12 4C16 4 19 6 20 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 15C20 15 18 20 12 20C8 20 5 18 4 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const ICON_SEARCH = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21L16.5 16.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
-const ICON_FOLDER = `<img class="folder-icon" src="/assets/folder-icon.png" width="16" height="16" alt="" draggable="false">`; // PNG asset, not inline SVG
-// File-type icons: separate PNG assets (not inline SVG), chosen by extension.
-// Used for the icon in every file row AND for the drag ghost. Preloaded so the
-// first drag already has them decoded (setDragImage can't wait for a fetch).
-const DRAG_ICON_URL = "/assets/file-icon.png";
-const DRAG_ICON_ZIP_URL = "/assets/zip-icon.png";
-const DRAG_ICON_VIDEO_URL = "/assets/video-icon.png";
-const DRAG_ICON_IMAGE_URL = "/assets/image-icon.png";
+// Unified outline SVG icons (same stroke style as action buttons)
+const ICON_FOLDER = `<svg class="folder-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 7C3 5.89543 3.89543 5 5 5H9L11 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+const ICON_FILE = `<svg class="file-type-icon" width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M14 3H7C5.89543 3 5 3.89543 5 5V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V8L14 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3V8H19" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 13H15M9 17H13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const ICON_IMAGE = `<svg class="file-type-icon" width="34" height="34" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="8.5" cy="10" r="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M3 16.5L8 12L12 15.5L16 11L21 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_VIDEO = `<svg class="file-type-icon" width="34" height="34" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M10 10L15 12L10 14V10Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+const ICON_ZIP = `<svg class="file-type-icon" width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M14 3H7C5.89543 3 5 3.89543 5 5V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V8L14 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3V8H19" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M11 10V11M11 13V14M11 16V17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9.5" y="17.5" width="3" height="2" rx="0.5" stroke="currentColor" stroke-width="1.4"/></svg>`;
+
+// SVG markup for list rows; data-URL variants for drag ghosts (setDragImage needs an Image)
+function svgToDataUrl(svgMarkup) {
+  const cleaned = svgMarkup
+    .replace(/class="[^"]*"/g, "")
+    .replace(/width="\d+"/, 'width="44"')
+    .replace(/height="\d+"/, 'height="44"')
+    .replace(/currentColor/g, "#52525b");
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(cleaned);
+}
+const DRAG_ICON_URL = svgToDataUrl(ICON_FILE);
+const DRAG_ICON_ZIP_URL = svgToDataUrl(ICON_ZIP);
+const DRAG_ICON_VIDEO_URL = svgToDataUrl(ICON_VIDEO);
+const DRAG_ICON_IMAGE_URL = svgToDataUrl(ICON_IMAGE);
 [DRAG_ICON_URL, DRAG_ICON_ZIP_URL, DRAG_ICON_VIDEO_URL, DRAG_ICON_IMAGE_URL].forEach((u) => { const i = new Image(); i.src = u; });
 
+function fileIconSvgForName(name) {
+  name = name || "";
+  if (/\.zip$/i.test(name)) return ICON_ZIP;
+  if (/\.(mp4|m4v|mov|webm|mkv|avi|wmv|flv|mpe?g|3gp|ogv)$/i.test(name)) return ICON_VIDEO;
+  if (/\.(png|jpe?g|gif|webp|avif|bmp|svg|ico|heic|heif|tiff?)$/i.test(name)) return ICON_IMAGE;
+  return ICON_FILE;
+}
 function fileIconUrlForName(name) {
   name = name || "";
   if (/\.zip$/i.test(name)) return DRAG_ICON_ZIP_URL;
@@ -64,7 +83,8 @@ function markLocalDelete(id) {
   setTimeout(() => localDeleteIds.delete(String(id)), 20000);
 }
 function notifyRemoteFileChanges(prevFiles, nextFiles) {
-  if (!filesListReady) return;
+  const remoteDeleted = [];
+  if (!filesListReady) return remoteDeleted;
   const prevById = new Map((prevFiles || []).map((f) => [f.id, f]));
   const nextById = new Map((nextFiles || []).map((f) => [f.id, f]));
 
@@ -79,7 +99,9 @@ function notifyRemoteFileChanges(prevFiles, nextFiles) {
     if (nextById.has(f.id)) continue;
     if (localDeleteIds.has(String(f.id))) continue;
     showToast(`Claude ${f.filename} o'chirdi`, "warning");
+    remoteDeleted.push(f);
   }
+  return remoteDeleted;
 }
 
 // URL routing (SPA):
@@ -1270,7 +1292,19 @@ async function loadFiles(silent) {
   }
 
   // Remote (Claude MCP / other session) add/remove → toast + green flash
-  notifyRemoteFileChanges(allFiles, newFiles);
+  // + sand-like dissolve animation when Claude (MCP) deletes a file
+  const remoteDeleted = notifyRemoteFileChanges(allFiles, newFiles) || [];
+
+  if (remoteDeleted.length && fileListEl) {
+    const dissolvePromises = remoteDeleted.map((f) => {
+      const card = fileListEl.querySelector(`.file-card[data-file-id="${f.id}"]`);
+      if (!card) return Promise.resolve();
+      // No click coords for remote deletes — dissolve from the right side of the card
+      return playDeleteDissolve(card);
+    });
+    // Wait for collapse so the row animates out before we re-render the list
+    await Promise.all(dissolvePromises);
+  }
 
   allFiles = newFiles;
   allFolders = newFolders;
@@ -1592,7 +1626,7 @@ function renderFiles() {
     return `
     <div class="file-card${selectedFileIds.has(String(f.id)) ? ' selected' : ''}" data-file-id="${f.id}" draggable="true" title="Drag to a folder">
       <div class="file-lead">
-        <img class="file-type-icon" src="${fileIconUrlForName(f.filename)}" alt="" draggable="false">
+        ${fileIconSvgForName(f.filename)}
         <div class="file-info">
           <span class="file-name">${escapeHtml(f.filename)}</span>
           <span class="file-meta">${meta}</span>
