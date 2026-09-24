@@ -5553,7 +5553,7 @@ function mountMrAudioPlayer(host, opts) {
   const BIN_N = 128;
   let smoothBins = new Float32Array(BIN_N).fill(0.2);
   let smoothEnergy = 0.25;
-  const SMOOTH = 0.14;
+  const SMOOTH = 0.06;
 
   function envelope(nx) {
     // diamond skeleton: sharp pointed ends, full body in center
@@ -5597,22 +5597,22 @@ function mountMrAudioPlayer(host, opts) {
     // 8 bright core
     for (let i = 0; i < 8; i++) {
       const t = i / 7;
-      THREADS.push({ amp: 0.5 + t * 0.15, speed: 0.3 + t * 0.2, freq: 2 + t, phase: t * 5, thick: 1.2 + t * 0.4, r: 240, g: 248, b: 255, a: 0.5 - t * 0.15, kind: 0 });
+      THREADS.push({ amp: 0.5 + t * 0.15, speed: 0.12 + t * 0.08, freq: 2 + t, phase: t * 5, thick: 1.2 + t * 0.4, r: 240, g: 248, b: 255, a: 0.5 - t * 0.15, kind: 0 });
     }
     // 16 cyan silk
     for (let i = 0; i < 16; i++) {
       const t = i / 15;
-      THREADS.push({ amp: 0.6 + (i % 4) * 0.06, speed: 0.4 + t * 0.35, freq: 2.2 + t * 1.5, phase: t * 8 + 1, thick: 1.4 + (i % 3) * 0.3, r: 70 + (i % 5) * 15, g: 160 + (i % 4) * 12, b: 250, a: 0.28 - t * 0.08, kind: 1 });
+      THREADS.push({ amp: 0.6 + (i % 4) * 0.06, speed: 0.15 + t * 0.12, freq: 2.2 + t * 1.5, phase: t * 8 + 1, thick: 1.4 + (i % 3) * 0.3, r: 70 + (i % 5) * 15, g: 160 + (i % 4) * 12, b: 250, a: 0.28 - t * 0.08, kind: 1 });
     }
     // 12 royal membranes
     for (let i = 0; i < 12; i++) {
       const t = i / 11;
-      THREADS.push({ amp: 0.8 + (i % 3) * 0.05, speed: 0.32 + t * 0.25, freq: 1.6 + t * 1.2, phase: t * 6 + 3, thick: 2.5 + (i % 3) * 0.5, r: 30 + (i % 4) * 12, g: 80 + (i % 3) * 15, b: 210, a: 0.16 - t * 0.04, kind: 2 });
+      THREADS.push({ amp: 0.8 + (i % 3) * 0.05, speed: 0.12 + t * 0.1, freq: 1.6 + t * 1.2, phase: t * 6 + 3, thick: 2.5 + (i % 3) * 0.5, r: 30 + (i % 4) * 12, g: 80 + (i % 3) * 15, b: 210, a: 0.16 - t * 0.04, kind: 2 });
     }
     // 12 fine filaments
     for (let i = 0; i < 12; i++) {
       const t = i / 11;
-      THREADS.push({ amp: 0.35 + (i % 4) * 0.06, speed: 0.55 + t * 0.4, freq: 3.5 + t * 2, phase: t * 10 + 5, thick: 0.6, r: 140, g: 200, b: 255, a: 0.12, kind: 3 });
+      THREADS.push({ amp: 0.35 + (i % 4) * 0.06, speed: 0.2 + t * 0.15, freq: 3.5 + t * 2, phase: t * 10 + 5, thick: 0.6, r: 140, g: 200, b: 255, a: 0.12, kind: 3 });
     }
   })();
 
@@ -5668,7 +5668,7 @@ function mountMrAudioPlayer(host, opts) {
     smoothEnergy += (targetE - smoothEnergy) * SMOOTH;
     const e = smoothEnergy;
 
-    const t = idle ? performance.now() * 0.00038 : (audio.currentTime || 0);
+    const t = idle ? performance.now() * 0.00018 : (audio.currentTime || 0) * 0.45;
     const midY = h * 0.5;
     const n = STEPS;
 
@@ -5748,7 +5748,7 @@ function mountMrAudioPlayer(host, opts) {
     if (!alive) return;
     raf = requestAnimationFrame(draw);
     if (audio.paused && !dragging) {
-      drawFluidWave(0.22 + 0.05 * Math.sin(performance.now() / 1400), true);
+      drawFluidWave(0.22 + 0.04 * Math.sin(performance.now() / 2200), true);
       return;
     }
     let energy = 0.5;
