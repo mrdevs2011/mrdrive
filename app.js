@@ -2141,6 +2141,48 @@ function selectRange(fromId, toId) {
   for (let k = start; k <= end; k++) selectedFileIds.add(order[k]);
 }
 
+// Zoom-from-thumbnail open transition: when an image is clicked while its
+// hover-zoomed thumbnail is showing, a clone of exactly that thumbnail (same
+// spot, same size) grows to fill the screen while the real viewer loads
+// underneath — so it visually "opens" from where the user was looking.
+function playImageOpenZoom(thumbImg) {
+  const rect = thumbImg.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const clone = document.createElement("img");
+  clone.src = thumbImg.currentSrc || thumbImg.src;
+  clone.className = "thumb-zoom-clone";
+  clone.style.position = "fixed";
+  clone.style.left = rect.left + "px";
+  clone.style.top = rect.top + "px";
+  clone.style.width = rect.width + "px";
+  clone.style.height = rect.height + "px";
+  clone.style.objectFit = "cover";
+  clone.style.borderRadius = "8px";
+  clone.style.zIndex = "2100";
+  clone.style.pointerEvents = "none";
+  clone.style.willChange = "transform, opacity, border-radius";
+  clone.style.transform = "translate(0px, 0px) scale(1)";
+  clone.style.transition =
+    "transform .42s cubic-bezier(.22,1,.36,1), border-radius .42s cubic-bezier(.22,1,.36,1), opacity .25s ease .25s";
+  document.body.appendChild(clone);
+
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const scale = Math.max(vw / rect.width, vh / rect.height);
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const tx = vw / 2 - cx;
+  const ty = vh / 2 - cy;
+
+  requestAnimationFrame(() => {
+    clone.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    clone.style.borderRadius = "0px";
+    clone.style.opacity = "0";
+  });
+
+  setTimeout(() => clone.remove(), 480);
+}
+
 // Card click: open preview when the file is viewable (image/video/pdf/code).
 // Clicks on action buttons are ignored. Non-viewable files still toggle the
 // mobile action row (actions-open). Ctrl/Cmd toggles the file into the
@@ -2190,6 +2232,10 @@ fileListEl.addEventListener("click", (e) => {
   if (f) {
     const kind = isViewable(f.filename);
     if (kind) {
+      if (kind === "image") {
+        const thumbImg = card.querySelector("img.file-type-icon.file-thumb");
+        if (thumbImg && thumbImg.src) playImageOpenZoom(thumbImg);
+      }
       openAnnotationViewer(f, kind);
       return;
     }
@@ -2640,14 +2686,14 @@ async function explainDeleteFailure(id) {
    - Guaranteed visual effect (never snaps away)
    ============================================================ */
 const ANIM_DURATION  = 3000;   // sand falls fast, doesn't linger
-const SWEEP_DURATION = 1300;   // wave of grains breaking loose
+const SWEEP_DURATION = 1500;   // wave of grains breaking loose — a touch longer so it reads as a graceful cascade
 const COLLAPSE_DELAY = 1200;
-const FADE_IN_MS     = 120;    // canvas crossfades over the live card, grains stay still meanwhile
+const FADE_IN_MS     = 180;    // canvas crossfades over the live card, grains stay still meanwhile — longer = imperceptible hand-off
 const TILE_SIZE      = 1.0;    // finer grain = reads as sand, not confetti
-const DRIFT_X        = 5;      // gentle sideways scatter as grains fall
-const PUFF_Y         = 0;      // tiny initial lift before gravity takes over
-const GRAVITY        = 0.00085; // strong downward pull — grains fall, not float
-const START_SPEED     = 0.028;  // px/ms: grains are already moving the moment they break loose
+const DRIFT_X        = 8;      // gentle sideways scatter as grains fall
+const PUFF_Y         = 3;      // tiny initial lift before gravity takes over — decays fast, gives the fall a soft "breath"
+const GRAVITY        = 0.00065; // gentler downward pull — grains drift down like dust, not snap like rocks
+const START_SPEED     = 0.02;   // px/ms: grains ease into motion instead of jumping
 const NOISE_AMP      = 0;      // subtle jitter, not chaotic
 
 function __dissolveHash(n) {
@@ -2795,7 +2841,7 @@ function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY) {
       x[n] = xx; y[n] = yy;
       vx[n] = Math.random() - 0.5;
       g[n] = 0.8 + Math.random() * 0.5;                       // each grain falls a bit differently
-      delay[n] = ((cy / cssH) * 0.7 + (dist / maxDist) * 0.3) * SWEEP_DURATION + Math.random() * 500;
+      delay[n] = ((cy / cssH) * 0.7 + (dist / maxDist) * 0.3) * SWEEP_DURATION + Math.random() * 180;
       col[n] = c;
       n++;
     }
@@ -2944,6 +2990,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
       const gravDev = GRAVITY * dpr;
       const v0Dev = START_SPEED * dpr;
       const driftDev = DRIFT_X * dpr;
+      const puffDev = PUFF_Y * dpr;
       let started = false;
       let prevMin = -1, prevMax = -1;
 
@@ -2973,7 +3020,10 @@ async function playDeleteDissolve(card, clickX, clickY) {
             alive = true;
             const tSec = local * 0.55;
             px = gx[i] + gvx[i] * driftDev * life;
-            py = gy[i] + v0Dev * local + gravDev * gg[i] * tSec * tSec;
+            // Tiny soft "lift" right as the grain breaks loose (decays in ~150ms),
+            // then gravity takes over — reads as a gentle breath, not a hard drop.
+            const puff = puffDev * Math.exp(-local / 150);
+            py = gy[i] - puff + v0Dev * local + gravDev * gg[i] * tSec * tSec;
             // stays solid while falling, fades smoothly near the end
             let a = 1;
             if (life > 0.45) {
@@ -2981,7 +3031,10 @@ async function playDeleteDissolve(card, clickX, clickY) {
               a = 1 - f * f * (3 - 2 * f);
             }
             const room = OH - (py + oy);
-            if (room < fadeZone) a *= room / fadeZone;
+            if (room < fadeZone) {
+              const t = Math.max(0, room / fadeZone);
+              a *= t * t * (3 - 2 * t); // smoothstep — no hard edge cutoff
+            }
             if (a <= 0.01) continue;
             if (a < 1) c = (c & 0x00ffffff) | ((((c >>> 24) * a) | 0) << 24);
           }
