@@ -2381,7 +2381,7 @@ async function explainDeleteFailure(id) {
 const ANIM_DURATION  = 3000;   // sand falls fast, doesn't linger
 const SWEEP_DURATION = 1300;   // wave of grains breaking loose
 const COLLAPSE_DELAY = 1500;
-const FADE_IN_MS     = 450;    // canvas crossfades over the live card, grains stay still meanwhile
+const FADE_IN_MS     = 700;    // canvas crossfades over the live card, grains stay still meanwhile
 const TILE_SIZE      = 1.0;    // finer grain = reads as sand, not confetti
 const DRIFT_X        = 5;      // gentle sideways scatter as grains fall
 const PUFF_Y         = 0;      // tiny initial lift before gravity takes over
@@ -2634,10 +2634,12 @@ async function playDeleteDissolve(card, clickX, clickY) {
   card.style.overflow = "hidden";
 
   const padX = 40, padTop = 24;
-  const padBottom = Math.min(900, Math.max(240, window.innerHeight - startRect.top + 40));
-  let sdpr = Math.min(Math.round(window.devicePixelRatio || 1), 2) || 1;
-  // Big overlays are drawn at 1x so the per-frame pixel buffer stays small (no stutter).
-  if ((startRect.width + padX * 2) * (startRect.height + padTop + padBottom) * sdpr * sdpr > 1.6e6) sdpr = 1;
+  const padBottom = Math.min(340, Math.max(200, window.innerHeight - startRect.top + 40));
+  // Match the screen's real resolution (a 1x snapshot over a 2x card looks blurry -> visible "pop").
+  // Only step down if the pixel buffer would get too big.
+  const overlayCss = (startRect.width + padX * 2) * (startRect.height + padTop + padBottom);
+  let sdpr = Math.min(Math.round(window.devicePixelRatio || 1), 3) || 1;
+  while (sdpr > 1 && overlayCss * sdpr * sdpr > 2.4e6) sdpr--;
 
   let snap = null;
   try {
@@ -2676,6 +2678,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
       // Whole frame = one Uint32 pixel buffer + ONE putImageData (no per-grain draw calls).
       const img = octx.createImageData(OW, OH);
       const buf = new Uint32Array(img.data.buffer);
+      const fadeZone = 130 * dpr;            // grains dissolve smoothly before the canvas edge
       const gravDev = GRAVITY * dpr;
       const driftDev = DRIFT_X * dpr;
       let started = false;
@@ -2709,12 +2712,15 @@ async function playDeleteDissolve(card, clickX, clickY) {
             px = gx[i] + gvx[i] * driftDev * life;
             py = gy[i] + gravDev * gg[i] * tSec * tSec;
             // stays solid while falling, fades smoothly near the end
+            let a = 1;
             if (life > 0.45) {
               const f = (life - 0.45) / 0.55;
-              const a = 1 - f * f * (3 - 2 * f);
-              if (a <= 0.01) continue;
-              c = (c & 0x00ffffff) | ((((c >>> 24) * a) | 0) << 24);
+              a = 1 - f * f * (3 - 2 * f);
             }
+            const room = OH - (py + oy);
+            if (room < fadeZone) a *= room / fadeZone;
+            if (a <= 0.01) continue;
+            if (a < 1) c = (c & 0x00ffffff) | ((((c >>> 24) * a) | 0) << 24);
           }
 
           const ix = (px + ox) | 0, iy = (py + oy) | 0;
@@ -2747,10 +2753,16 @@ async function playDeleteDissolve(card, clickX, clickY) {
       // Crossfade: the canvas fades IN over the still-visible card (no instant swap).
       paint(0);
       overlay.style.opacity = "0";
-      overlay.style.transition = "opacity " + FADE_IN_MS + "ms ease-in-out";
-      void overlay.offsetHeight; // commit opacity:0 before transitioning
-      overlay.style.opacity = "1";
-      setTimeout(() => { card.style.visibility = "hidden"; }, FADE_IN_MS + 20);
+      if (overlay.animate) {
+        overlay.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: FADE_IN_MS, easing: "ease-in-out", fill: "forwards",
+        });
+      } else {
+        overlay.style.transition = "opacity " + FADE_IN_MS + "ms ease-in-out";
+        void overlay.offsetHeight;
+        overlay.style.opacity = "1";
+      }
+      setTimeout(() => { card.style.visibility = "hidden"; }, FADE_IN_MS + 30);
 
       // Particles run independently (do not block delete/API)
       function frame(now) {
