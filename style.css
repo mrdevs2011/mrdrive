@@ -1206,7 +1206,18 @@ body.is-dragging-file .folder-tab-wrap {
 }
 .public-preview.is-image { background: var(--bg); }
 .public-preview.is-video { background: #000; }
-.public-preview.is-audio { background: var(--bg); align-items: center; justify-content: center; }
+.public-preview.is-audio {
+  background: var(--bg);
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+.public-preview.is-audio .mr-audio-player {
+  overflow: visible;
+}
+.public-preview.is-audio .mr-audio-wave {
+  overflow: visible;
+}
 .public-preview.is-pdf {
   background: var(--bg);
   overflow-y: auto;
