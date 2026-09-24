@@ -25,34 +25,160 @@ const ICON_IMAGE = `<svg class="file-type-icon" width="34" height="34" viewBox="
 const ICON_VIDEO = `<svg class="file-type-icon" width="34" height="34" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M10 10L15 12L10 14V10Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
 const ICON_ZIP = `<svg class="file-type-icon" width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M14 3H7C5.89543 3 5 3.89543 5 5V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V8L14 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3V8H19" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M11 10V11M11 13V14M11 16V17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="9.5" y="17.5" width="3" height="2" rx="0.5" stroke="currentColor" stroke-width="1.4"/></svg>`;
 
-// SVG markup for list rows; data-URL variants for drag ghosts (setDragImage needs an Image)
-function svgToDataUrl(svgMarkup) {
+// List rows use inline SVG. Drag ghost needs a fully-decoded bitmap —
+// SVG data-URLs often paint blank in setDragImage, so we rasterize to PNG.
+const DRAG_ICON_SIZE = 44;
+function svgToPngDataUrl(svgMarkup, size) {
+  size = size || DRAG_ICON_SIZE;
   const cleaned = svgMarkup
     .replace(/class="[^"]*"/g, "")
-    .replace(/width="\d+"/, 'width="44"')
-    .replace(/height="\d+"/, 'height="44"')
+    .replace(/width="\d+"/, `width="${size}"`)
+    .replace(/height="\d+"/, `height="${size}"`)
     .replace(/currentColor/g, "#52525b");
-  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(cleaned);
+  // White rounded card behind the stroke so the ghost is visible on any bg
+  const wrapped =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
+    `<rect x="0.5" y="0.5" width="${size - 1}" height="${size - 1}" rx="8" fill="#fff" stroke="#e4e4e7"/>` +
+    `<g transform="translate(${(size - 28) / 2},${(size - 28) / 2}) scale(${28 / 24})">` +
+    cleaned.replace(/<svg[^>]*>/, "").replace(/<\/svg>/, "") +
+    `</g></svg>`;
+  const svgUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(wrapped);
+  // Synchronous path: draw via Image is async; we also keep a preloaded map below.
+  return svgUrl;
 }
-const DRAG_ICON_URL = svgToDataUrl(ICON_FILE);
-const DRAG_ICON_ZIP_URL = svgToDataUrl(ICON_ZIP);
-const DRAG_ICON_VIDEO_URL = svgToDataUrl(ICON_VIDEO);
-const DRAG_ICON_IMAGE_URL = svgToDataUrl(ICON_IMAGE);
-[DRAG_ICON_URL, DRAG_ICON_ZIP_URL, DRAG_ICON_VIDEO_URL, DRAG_ICON_IMAGE_URL].forEach((u) => { const i = new Image(); i.src = u; });
 
-function fileIconSvgForName(name) {
+// Preloaded, fully decoded Image elements (key = "file"|"zip"|"video"|"image")
+const dragIconReady = {}; // key -> HTMLImageElement (complete)
+const dragIconPngUrl = {}; // key -> png data URL (after rasterize)
+
+function rasterizeDragIcon(key, svgMarkup) {
+  const size = DRAG_ICON_SIZE;
+  const dpr = 2;
+  const cleaned = svgMarkup
+    .replace(/class="[^"]*"/g, "")
+    .replace(/width="\d+"/, 'width="24"')
+    .replace(/height="\d+"/, 'height="24"')
+    .replace(/currentColor/g, "#52525b");
+  const wrapped =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">` +
+    `<rect x="0.5" y="0.5" width="${size - 1}" height="${size - 1}" rx="8" fill="#ffffff" stroke="#e4e4e7"/>` +
+    `<g transform="translate(${(size - 28) / 2},${(size - 28) / 2}) scale(${28 / 24})">` +
+    cleaned.replace(/<svg[^>]*>/, "").replace(/<\/svg>/, "") +
+    `</g></svg>`;
+  const svgUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(wrapped);
+  const img = new Image();
+  img.decoding = "sync";
+  img.onload = () => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = size * dpr;
+      canvas.height = size * dpr;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+      ctx.drawImage(img, 0, 0, size, size);
+      const png = canvas.toDataURL("image/png");
+      dragIconPngUrl[key] = png;
+      const ready = new Image();
+      ready.src = png;
+      ready.width = size;
+      ready.height = size;
+      ready.onload = () => { dragIconReady[key] = ready; };
+      // If already cached by browser
+      if (ready.complete) dragIconReady[key] = ready;
+    } catch (_) {
+      dragIconReady[key] = img;
+      dragIconPngUrl[key] = svgUrl;
+    }
+  };
+  img.src = svgUrl;
+}
+
+rasterizeDragIcon("file", ICON_FILE);
+rasterizeDragIcon("zip", ICON_ZIP);
+rasterizeDragIcon("video", ICON_VIDEO);
+rasterizeDragIcon("image", ICON_IMAGE);
+
+function fileIconKeyForName(name) {
   name = name || "";
-  if (/\.zip$/i.test(name)) return ICON_ZIP;
-  if (/\.(mp4|m4v|mov|webm|mkv|avi|wmv|flv|mpe?g|3gp|ogv)$/i.test(name)) return ICON_VIDEO;
-  if (/\.(png|jpe?g|gif|webp|avif|bmp|svg|ico|heic|heif|tiff?)$/i.test(name)) return ICON_IMAGE;
+  if (/\.zip$/i.test(name)) return "zip";
+  if (/\.(mp4|m4v|mov|webm|mkv|avi|wmv|flv|mpe?g|3gp|ogv)$/i.test(name)) return "video";
+  if (/\.(png|jpe?g|gif|webp|avif|bmp|svg|ico|heic|heif|tiff?)$/i.test(name)) return "image";
+  return "file";
+}
+function isImageFileName(name) {
+  return fileIconKeyForName(name) === "image";
+}
+function fileIconSvgForName(name) {
+  const k = fileIconKeyForName(name);
+  if (k === "zip") return ICON_ZIP;
+  if (k === "video") return ICON_VIDEO;
+  if (k === "image") return ICON_IMAGE;
   return ICON_FILE;
 }
 function fileIconUrlForName(name) {
-  name = name || "";
-  if (/\.zip$/i.test(name)) return DRAG_ICON_ZIP_URL;
-  if (/\.(mp4|m4v|mov|webm|mkv|avi|wmv|flv|mpe?g|3gp|ogv)$/i.test(name)) return DRAG_ICON_VIDEO_URL;
-  if (/\.(png|jpe?g|gif|webp|avif|bmp|svg|ico|heic|heif|tiff?)$/i.test(name)) return DRAG_ICON_IMAGE_URL;
-  return DRAG_ICON_URL;
+  const k = fileIconKeyForName(name);
+  return dragIconPngUrl[k] || dragIconPngUrl.file || "";
+}
+
+// Signed preview URLs for image thumbnails (list + drag ghost)
+const thumbUrlCache = new Map(); // id -> { url, expiresAt }
+
+function thumbUrlFor(fileId) {
+  const c = thumbUrlCache.get(String(fileId));
+  return c && c.url ? c.url : "";
+}
+
+/** Left-side icon: real square crop for images, SVG otherwise */
+function fileLeadIconHtml(f) {
+  if (f && isImageFileName(f.filename)) {
+    const url = thumbUrlFor(f.id);
+    if (url) {
+      return `<img class="file-type-icon file-thumb" src="${escapeHtml(url)}" alt="" draggable="false" loading="lazy">`;
+    }
+    return `<span class="file-type-icon file-thumb file-thumb-pending" aria-hidden="true"></span>`;
+  }
+  return fileIconSvgForName(f ? f.filename : "");
+}
+
+async function prefetchThumbUrls(files) {
+  const now = Date.now();
+  const images = (files || []).filter((f) => isImageFileName(f.filename));
+  const stale = images.filter((f) => {
+    const cached = thumbUrlCache.get(String(f.id));
+    return !cached || cached.expiresAt - now < 5 * 60 * 1000;
+  });
+  if (!stale.length) {
+    // Still patch DOM in case cache was warm from a previous pass
+  } else {
+    await Promise.all(stale.map(async (f) => {
+      // No download disposition — must work as <img src>
+      const { data, error } = await sb.storage
+        .from(BUCKET)
+        .createSignedUrl(f.storage_path, 3600);
+      if (!error && data) {
+        thumbUrlCache.set(String(f.id), { url: data.signedUrl, expiresAt: Date.now() + 3600 * 1000 });
+      }
+    }));
+  }
+  if (!fileListEl) return;
+  fileListEl.querySelectorAll(".file-card[data-file-id]").forEach((card) => {
+    const id = card.dataset.fileId;
+    const url = thumbUrlFor(id);
+    if (!url) return;
+    const slot = card.querySelector(".file-type-icon");
+    if (!slot) return;
+    if (slot.tagName === "IMG") {
+      if (slot.getAttribute("src") !== url) slot.src = url;
+      return;
+    }
+    const img = document.createElement("img");
+    img.className = "file-type-icon file-thumb";
+    img.src = url;
+    img.alt = "";
+    img.draggable = false;
+    img.loading = "lazy";
+    slot.replaceWith(img);
+  });
 }
 
 const BUCKET = "files";
@@ -70,6 +196,7 @@ let lastClickedFileId = null; // for shift-click range select
 // Claude / remote activity: don't toast our own uploads/deletes as "Claude"
 const localUploadKeys = new Set(); // "filename:::size"
 const localDeleteIds = new Set();
+const localDeleteFolderIds = new Set();
 const highlightFileIds = new Set(); // ids to flash green after render
 let filesListReady = false;
 
@@ -81,6 +208,10 @@ function markLocalUpload(filename, size) {
 function markLocalDelete(id) {
   localDeleteIds.add(String(id));
   setTimeout(() => localDeleteIds.delete(String(id)), 20000);
+}
+function markLocalDeleteFolder(id) {
+  localDeleteFolderIds.add(String(id));
+  setTimeout(() => localDeleteFolderIds.delete(String(id)), 20000);
 }
 function notifyRemoteFileChanges(prevFiles, nextFiles) {
   const remoteDeleted = [];
@@ -99,6 +230,25 @@ function notifyRemoteFileChanges(prevFiles, nextFiles) {
     if (nextById.has(f.id)) continue;
     if (localDeleteIds.has(String(f.id))) continue;
     showToast(`Claude ${f.filename} o'chirdi`, "warning");
+    remoteDeleted.push(f);
+  }
+  return remoteDeleted;
+}
+/** Remote folder add/remove (Claude MCP). Returns folders deleted remotely. */
+function notifyRemoteFolderChanges(prevFolders, nextFolders) {
+  const remoteDeleted = [];
+  if (!filesListReady) return remoteDeleted;
+  const prevById = new Map((prevFolders || []).map((f) => [f.id, f]));
+  const nextById = new Map((nextFolders || []).map((f) => [f.id, f]));
+
+  for (const f of nextFolders || []) {
+    if (prevById.has(f.id)) continue;
+    showToast(`Claude papka qo'shdi: ${f.name}`);
+  }
+  for (const f of prevFolders || []) {
+    if (nextById.has(f.id)) continue;
+    if (localDeleteFolderIds.has(String(f.id))) continue;
+    showToast(`Claude papkani o'chirdi: ${f.name}`, "warning");
     remoteDeleted.push(f);
   }
   return remoteDeleted;
@@ -1292,19 +1442,27 @@ async function loadFiles(silent) {
   }
 
   // Remote (Claude MCP / other session) add/remove → toast + green flash
-  // + sand-like dissolve animation when Claude (MCP) deletes a file
+  // + sand-like dissolve when Claude deletes a file or folder
   const remoteDeleted = notifyRemoteFileChanges(allFiles, newFiles) || [];
+  const remoteFoldersDeleted = notifyRemoteFolderChanges(allFolders, newFolders) || [];
 
+  const dissolvePromises = [];
   if (remoteDeleted.length && fileListEl) {
-    const dissolvePromises = remoteDeleted.map((f) => {
+    for (const f of remoteDeleted) {
       const card = fileListEl.querySelector(`.file-card[data-file-id="${f.id}"]`);
-      if (!card) return Promise.resolve();
-      // No click coords for remote deletes — dissolve from the right side of the card
-      return playDeleteDissolve(card);
-    });
-    // Wait for collapse so the row animates out before we re-render the list
-    await Promise.all(dissolvePromises);
+      if (card) dissolvePromises.push(playDeleteDissolve(card));
+    }
   }
+  if (remoteFoldersDeleted.length) {
+    const toolbar = document.getElementById("toolbar");
+    for (const folder of remoteFoldersDeleted) {
+      const el =
+        (toolbar && toolbar.querySelector(`.folder-tab-wrap[data-folder-id="${folder.id}"]`)) ||
+        document.querySelector(`.folder-tab-wrap[data-folder-id="${folder.id}"]`);
+      if (el) dissolvePromises.push(playDeleteDissolve(el));
+    }
+  }
+  if (dissolvePromises.length) await Promise.all(dissolvePromises);
 
   allFiles = newFiles;
   allFolders = newFolders;
@@ -1314,6 +1472,7 @@ async function loadFiles(silent) {
   renderToolbar();
   renderFiles();
   prefetchDragUrls(newFiles).catch(() => {}); // best-effort, drag-out just won't work if this fails
+  prefetchThumbUrls(newFiles).catch(() => {}); // image square thumbs for list + drag
 }
 
 function renderToolbar() {
@@ -1335,11 +1494,11 @@ function renderToolbar() {
         ${ICON_FOLDER} All
       </button>
       ${allFolders.map(f => `
-        <div class="folder-tab-wrap" data-folder="${escapeHtml(f.name)}">
+        <div class="folder-tab-wrap" data-folder="${escapeHtml(f.name)}" data-folder-id="${f.id}">
           <button class="folder-tab ${currentFolder === f.name ? 'active' : ''}" data-folder="${escapeHtml(f.name)}" onclick="setFolder('${escapeJs(f.name)}')" title="Drop files here">
             ${ICON_FOLDER} ${escapeHtml(f.name)}
           </button>
-          <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}')" title="Delete folder">
+          <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}', event)" title="Delete folder">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
         </div>
@@ -1551,7 +1710,7 @@ async function createFolder(fileIds) {
   loadFiles();
 }
 
-async function deleteFolder(id, name) {
+async function deleteFolder(id, name, evt) {
   const filesInFolder = allFiles.filter(f => f.folder === name);
   let msg = `Delete folder "${name}"?`;
   if (filesInFolder.length > 0) {
@@ -1559,6 +1718,19 @@ async function deleteFolder(id, name) {
   }
 
   if (!(await showConfirm(msg, "Delete"))) return;
+
+  const clickX = evt ? evt.clientX : undefined;
+  const clickY = evt ? evt.clientY : undefined;
+  const toolbar = document.getElementById("toolbar");
+  let tabEl =
+    (toolbar && toolbar.querySelector(`.folder-tab-wrap[data-folder-id="${id}"]`)) ||
+    document.querySelector(`.folder-tab-wrap[data-folder-id="${id}"]`);
+  if (!tabEl && evt && evt.target) {
+    tabEl = evt.target.closest(".folder-tab-wrap");
+  }
+  if (tabEl) await playDeleteDissolve(tabEl, clickX, clickY);
+
+  markLocalDeleteFolder(id);
 
   if (filesInFolder.length > 0) {
     await sb.from(TABLE).update({ folder: null }).eq("folder", name);
@@ -1568,6 +1740,7 @@ async function deleteFolder(id, name) {
 
   if (error) {
     showAlert("Error: " + error.message);
+    loadFiles();
     return;
   }
 
@@ -1626,7 +1799,7 @@ function renderFiles() {
     return `
     <div class="file-card${selectedFileIds.has(String(f.id)) ? ' selected' : ''}" data-file-id="${f.id}" draggable="true" title="Drag to a folder">
       <div class="file-lead">
-        ${fileIconSvgForName(f.filename)}
+        ${fileLeadIconHtml(f)}
         <div class="file-info">
           <span class="file-name">${escapeHtml(f.filename)}</span>
           <span class="file-meta">${meta}</span>
@@ -1932,37 +2105,86 @@ window.addEventListener("blur", endMarquee);
 // Small floating file-icon used as the drag image instead of the full
 // card. When several files are dragged together, a few icons are stacked
 // behind the front one with a count badge.
-function dragIconUrlFor(fileId) {
+function dragIconKeyFor(fileId) {
   const f = allFiles.find((x) => String(x.id) === String(fileId));
-  return fileIconUrlForName((f && f.filename) || "");
+  return fileIconKeyForName((f && f.filename) || "");
 }
 
-function dragIconEl(url) {
+function dragIconEl(fileIdOrKey) {
+  const size = DRAG_ICON_SIZE;
+  const boxCss =
+    `display:block; width:${size}px; height:${size}px; object-fit:cover; ` +
+    `border-radius:8px; background:#f4f4f5; border:1px solid #e4e4e7;`;
+
+  // Real image thumbnail for image files (same square crop as list)
+  const isFileId = allFiles.some((f) => String(f.id) === String(fileIdOrKey));
+  if (isFileId) {
+    const f = allFiles.find((x) => String(x.id) === String(fileIdOrKey));
+    if (f && isImageFileName(f.filename)) {
+      const url = thumbUrlFor(f.id);
+      // Prefer already-decoded list thumb so setDragImage has pixels
+      const existing = fileListEl && fileListEl.querySelector(
+        `.file-card[data-file-id="${f.id}"] img.file-thumb`
+      );
+      if (existing && existing.complete && existing.naturalWidth > 0) {
+        const img = existing.cloneNode(true);
+        img.width = size;
+        img.height = size;
+        img.draggable = false;
+        img.style.cssText = boxCss;
+        return img;
+      }
+      if (url) {
+        const img = new Image();
+        img.width = size;
+        img.height = size;
+        img.draggable = false;
+        img.style.cssText = boxCss;
+        img.src = url;
+        return img;
+      }
+    }
+  }
+
+  // Fallback: type SVG rasterized to PNG
+  let key = isFileId ? dragIconKeyFor(fileIdOrKey) : fileIdOrKey;
+  const ready = dragIconReady[key] || dragIconReady.file;
+  if (ready && ready.complete && ready.naturalWidth > 0) {
+    const img = ready.cloneNode(true);
+    img.width = size;
+    img.height = size;
+    img.draggable = false;
+    img.style.cssText = `display:block; width:${size}px; height:${size}px;`;
+    return img;
+  }
   const img = new Image();
-  img.src = url || DRAG_ICON_URL;
-  img.width = 44;
-  img.height = 44;
+  img.width = size;
+  img.height = size;
   img.draggable = false;
-  img.style.cssText = "display:block; width:44px; height:44px;";
+  img.style.cssText = `display:block; width:${size}px; height:${size}px;`;
+  img.src = dragIconPngUrl[key] || dragIconPngUrl.file || "";
   return img;
 }
 
 function buildDragGhost(ids, frontId) {
   const count = ids.length;
   const ghost = document.createElement("div");
-  ghost.style.cssText = "position:fixed; top:-1000px; left:-1000px; width:56px; height:56px; pointer-events:none;";
+  // Keep on-screen (opacity 0) so Chromium paints the bitmap for setDragImage
+  ghost.style.cssText =
+    "position:fixed; top:0; left:0; width:56px; height:56px; pointer-events:none; " +
+    "opacity:0; z-index:99999;";
 
   // Front icon = the file you grabbed; the (up to 2) layers behind it = other dragged files.
   const rest = ids.filter((id) => String(id) !== String(frontId)).slice(0, 2);
   for (let i = rest.length; i >= 1; i--) {
     const layer = document.createElement("div");
     layer.style.cssText = `position:absolute; top:${i * 4}px; left:${i * 4}px; filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));`;
-    layer.appendChild(dragIconEl(dragIconUrlFor(rest[i - 1])));
+    layer.appendChild(dragIconEl(rest[i - 1]));
     ghost.appendChild(layer);
   }
   const front = document.createElement("div");
   front.style.cssText = "position:absolute; top:0; left:0; filter:drop-shadow(0 2px 5px rgba(0,0,0,.3));";
-  front.appendChild(dragIconEl(dragIconUrlFor(frontId)));
+  front.appendChild(dragIconEl(frontId));
   ghost.appendChild(front);
 
   if (count > 1) {
@@ -1977,6 +2199,8 @@ function buildDragGhost(ids, frontId) {
   }
 
   document.body.appendChild(ghost);
+  // Force layout/paint so the browser has pixels before setDragImage
+  void ghost.offsetWidth;
   return ghost;
 }
 
@@ -2172,10 +2396,25 @@ function __dissolveDomToCanvas(el) {
     clone.style.height = h + "px";
     __dissolveInlineAllStyles(el, clone);
 
-    // Hide action buttons in snapshot (cleaner, like a message bubble)
-    clone.querySelectorAll(".file-actions, .file-actions-more, button").forEach((b) => {
-      b.style.display = "none";
-    });
+    // Hide actions + type icons in snapshot (same clean bubble as download-icon;
+    // external PNGs / complex SVG would break foreignObject → blank → no sand)
+    // File cards: hide actions. Folder tabs: only hide the X, keep the name label.
+    if (clone.classList.contains("folder-tab-wrap")) {
+      clone.querySelectorAll(".folder-del-btn").forEach((b) => { b.style.display = "none"; });
+    } else {
+      clone.querySelectorAll(".file-actions, .file-actions-more, button, .file-type-icon, .folder-icon").forEach((b) => {
+        b.style.display = "none";
+      });
+    }
+    // Solid fallbacks so snapshot never depends on CSS variables
+    if (!clone.style.background || clone.style.background.includes("var(")) {
+      clone.style.background = "#ffffff";
+    }
+    if (!clone.style.color || clone.style.color.includes("var(")) {
+      clone.style.color = "#18181b";
+    }
+    clone.style.border = "1px solid #e4e4e7";
+    clone.style.borderRadius = "12px";
 
     const markup =
       `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +

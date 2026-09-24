@@ -291,6 +291,12 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   border-radius: 8px;
   overflow: hidden;
   background: var(--surface);
+  max-width: 280px;
+  transition:
+    max-width .5s cubic-bezier(.22,.61,.36,1),
+    opacity .5s ease,
+    margin .5s cubic-bezier(.22,.61,.36,1),
+    border-width .4s ease;
 }
 .folder-tab-wrap .folder-tab { border: none; border-radius: 0; }
 .folder-tab-wrap .folder-tab.active { background: var(--primary); color: white; }
@@ -307,6 +313,15 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   border-left: 1px solid var(--border);
 }
 .folder-del-btn:hover { background: var(--red-bg); color: var(--red-text); }
+/* Sand dissolve collapse for folder tabs */
+.folder-tab-wrap.is-deleting {
+  max-width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  margin: 0 !important;
+  border-width: 0;
+  pointer-events: none;
+}
 
 /* Drag file → folder tab */
 .file-card.is-dragging {
@@ -1967,10 +1982,56 @@ body.is-dragging-file .selection-fab { animation: fab-invite 1s ease-in-out infi
 
 .folder-icon { display: block; flex-shrink: 0; width: 16px; height: 16px; pointer-events: none; color: var(--text-muted); }
 
-/* File-type icon at the left of each row (inline SVG) */
+/* File-type icon at the left of each row (inline SVG or real image thumb) */
 .file-lead { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
 .file-type-icon { width: 34px; height: 34px; flex-shrink: 0; pointer-events: none; user-select: none;
   color: var(--text-muted); transition: transform .2s ease, color .2s ease; }
 .file-card:hover .file-type-icon { color: var(--text); }
 .file-card.selected .file-type-icon { transform: scale(1.1); color: var(--accent-strong, var(--accent)); }
-@media (max-width: 600px) { .file-lead { gap: 10px; } .file-type-icon { width: 30px; height: 30px; } }
+/* Real image: square crop — always sharp (no muted color / no scale blur) */
+img.file-type-icon.file-thumb,
+.file-thumb {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--border, #e4e4e7);
+  color: transparent;
+  opacity: 1 !important;
+  filter: none !important;
+  transform: none !important; /* scale(1.1) makes thumbs soft */
+  image-rendering: auto;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.file-card:hover img.file-type-icon.file-thumb,
+.file-card.selected img.file-type-icon.file-thumb {
+  opacity: 1 !important;
+  filter: none !important;
+  transform: none !important;
+  color: transparent;
+}
+.file-thumb-pending {
+  display: inline-block;
+  background: linear-gradient(90deg, #f4f4f5 25%, #e4e4e7 50%, #f4f4f5 75%);
+  background-size: 200% 100%;
+  animation: thumbShimmer 1.2s ease-in-out infinite;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e4e4e7);
+}
+@keyframes thumbShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.file-card.selected img.file-thumb {
+  box-shadow: 0 0 0 2px var(--accent-soft, rgba(59, 130, 246, 0.25));
+  border-color: var(--border-strong, #d4d4d8);
+}
+@media (max-width: 600px) {
+  .file-lead { gap: 10px; }
+  .file-type-icon,
+  img.file-type-icon.file-thumb,
+  .file-thumb { width: 30px; height: 30px; }
+}
