@@ -2843,22 +2843,21 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 }
 .mr-audio-wave {
   width: 100%;
-  height: 110px;
+  height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 14px 0 10px;
+  margin: 12px 0 8px;
   position: relative;
   overflow: visible;
 }
 .mr-audio-wave-canvas {
   width: 100%;
-  height: 110px;
+  height: 120px;
   display: block;
-  /* deep ethereal multi-layer glow */
-  filter: drop-shadow(0 0 6px rgba(147, 197, 253, 0.45))
-          drop-shadow(0 0 16px rgba(59, 130, 246, 0.35))
-          drop-shadow(0 0 32px rgba(37, 99, 235, 0.22));
+  filter: drop-shadow(0 0 8px rgba(180, 230, 255, 0.5))
+          drop-shadow(0 0 20px rgba(96, 165, 250, 0.4))
+          drop-shadow(0 0 40px rgba(37, 99, 235, 0.25));
 }
 /* legacy bar classes kept inert in case any residual markup appears */
 .mr-audio-bar { display: none; }
