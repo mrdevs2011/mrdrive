@@ -5551,36 +5551,104 @@ function mountMrAudioPlayer(host, opts) {
 
   function resetWave() {
     sizeCanvas();
-    drawFluidWave(0.28, true);
+    // reset temporal smoothers
+    for (let i = 0; i < smoothBins.length; i++) smoothBins[i] = 0.3;
+    smoothEnergy = 0.3;
+    drawFluidWave(0.3, true);
   }
 
-  /* Multi-layer realistic fluid wave — organic, glowing, tapered */
+  /* Temporal smoothers — kill jitter, make motion buttery */
+  const BIN_N = 160;
+  let smoothBins = new Float32Array(BIN_N).fill(0.3);
+  let smoothEnergy = 0.3;
+  const SMOOTH = 0.12; // lower = smoother (0.08–0.18 sweet spot)
+
   const LAYERS = [
-    // deep core
-    { amp: 0.92, speed: 0.55, freq: 2.4, phase: 0.0,  color: [37, 99, 235],  alpha: 0.42, thick: 0.55 },
-    // main body
-    { amp: 0.78, speed: 0.78, freq: 3.1, phase: 1.2,  color: [59, 130, 246], alpha: 0.50, thick: 0.48 },
-    // mid highlight
-    { amp: 0.62, speed: 1.05, freq: 4.0, phase: 2.4,  color: [96, 165, 250], alpha: 0.38, thick: 0.40 },
-    // light ribbon
-    { amp: 0.48, speed: 1.35, freq: 5.2, phase: 0.6,  color: [147, 197, 253], alpha: 0.32, thick: 0.32 },
-    // soft top veil
-    { amp: 0.35, speed: 1.60, freq: 6.5, phase: 3.1,  color: [191, 219, 254], alpha: 0.28, thick: 0.26 },
-    // ethereal outer glow streak
-    { amp: 0.55, speed: 0.92, freq: 2.8, phase: 4.5,  color: [125, 180, 255], alpha: 0.18, thick: 0.70 }
+    { amp: 0.95, speed: 0.42, freq: 2.15, phase: 0.0,  color: [29, 78, 216],  alpha: 0.38, thick: 0.58 },
+    { amp: 0.82, speed: 0.58, freq: 2.85, phase: 1.1,  color: [37, 99, 235],  alpha: 0.44, thick: 0.50 },
+    { amp: 0.70, speed: 0.74, freq: 3.55, phase: 2.3,  color: [59, 130, 246], alpha: 0.40, thick: 0.42 },
+    { amp: 0.55, speed: 0.95, freq: 4.40, phase: 0.7,  color: [96, 165, 250], alpha: 0.34, thick: 0.34 },
+    { amp: 0.42, speed: 1.18, freq: 5.50, phase: 3.4,  color: [147, 197, 253], alpha: 0.28, thick: 0.26 },
+    { amp: 0.32, speed: 1.40, freq: 6.80, phase: 4.8,  color: [191, 219, 254], alpha: 0.22, thick: 0.20 },
+    { amp: 0.60, speed: 0.65, freq: 2.50, phase: 5.5,  color: [125, 180, 255], alpha: 0.14, thick: 0.72 }
   ];
 
-  function smoothPts(pts) {
-    // Chaikin-like mild smoothing for organic curves
-    if (pts.length < 3) return pts;
-    const out = [pts[0]];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      out.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 });
-      out.push({ x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 });
+  function sampleFreq(nx) {
+    if (!analyser || !freqData) return 0.35;
+    const n = freqData.length;
+    const bin = Math.min(n - 1, Math.floor(nx * n * 0.5));
+    const bin2 = Math.min(n - 1, Math.floor((1 - nx) * n * 0.32));
+    return (freqData[bin] * 0.7 + freqData[bin2] * 0.3) / 255;
+  }
+
+  function updateSmoothBins(idle) {
+    if (analyser && freqData && !idle) {
+      analyser.getByteFrequencyData(freqData);
     }
-    out.push(pts[pts.length - 1]);
-    return out;
+    for (let i = 0; i < BIN_N; i++) {
+      const nx = i / (BIN_N - 1);
+      const target = idle
+        ? 0.28 + 0.12 * Math.sin(nx * Math.PI * 2 + performance.now() / 1400)
+        : sampleFreq(nx);
+      smoothBins[i] += (target - smoothBins[i]) * SMOOTH;
+    }
+  }
+
+  function drawBezierRibbon(top, bot) {
+    if (top.length < 2) return;
+    const n = top.length;
+    ctx.beginPath();
+    ctx.moveTo(top[0].x, top[0].y);
+    // smooth cubic segments along top
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = top[Math.max(0, i - 1)];
+      const p1 = top[i];
+      const p2 = top[i + 1];
+      const p3 = top[Math.min(n - 1, i + 2)];
+      // Catmull-Rom → cubic bezier
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+    // bottom edge reverse
+    ctx.lineTo(bot[0].x, bot[0].y);
+    for (let i = 0; i < bot.length - 1; i++) {
+      const p0 = bot[Math.max(0, i - 1)];
+      const p1 = bot[i];
+      const p2 = bot[i + 1];
+      const p3 = bot[Math.min(bot.length - 1, i + 2)];
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+    ctx.closePath();
+  }
+
+  function drawSmoothStroke(pts, width, color) {
+    if (pts.length < 2) return;
+    const n = pts.length;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(n - 1, i + 2)];
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
   }
 
   function drawFluidWave(energy, idle) {
@@ -5589,118 +5657,96 @@ function mountMrAudioPlayer(host, opts) {
     if (w < 2 || h < 2) return;
     ctx.clearRect(0, 0, w, h);
 
+    updateSmoothBins(idle);
+
+    // temporal energy smooth
+    const targetE = Math.max(0.18, Math.min(1.3, energy));
+    smoothEnergy += (targetE - smoothEnergy) * SMOOTH;
+    const e = smoothEnergy;
+
     const t = idle
-      ? (performance.now() / 1000) * 0.55
+      ? (performance.now() / 1000) * 0.48
       : (audio.currentTime || 0);
     const midY = h * 0.5;
-    const steps = Math.max(120, Math.floor(w / 2.2));
-    const e = Math.max(0.15, Math.min(1.35, energy));
-
-    // Precompute frequency envelope across width (smoothed)
-    const bins = new Float32Array(steps + 1);
-    if (analyser && freqData && !idle) {
-      analyser.getByteFrequencyData(freqData);
-      const n = freqData.length;
-      for (let i = 0; i <= steps; i++) {
-        const nx = i / steps;
-        // emphasize lower-mid frequencies, mirror for symmetry feel
-        const bin = Math.min(n - 1, Math.floor(nx * n * 0.48));
-        const bin2 = Math.min(n - 1, Math.floor((1 - nx) * n * 0.35));
-        bins[i] = (freqData[bin] * 0.65 + freqData[bin2] * 0.35) / 255;
-      }
-      // simple blur pass
-      for (let pass = 0; pass < 2; pass++) {
-        const tmp = bins.slice();
-        for (let i = 1; i < steps; i++) {
-          bins[i] = tmp[i - 1] * 0.25 + tmp[i] * 0.5 + tmp[i + 1] * 0.25;
-        }
-      }
-    } else {
-      for (let i = 0; i <= steps; i++) {
-        const nx = i / steps;
-        bins[i] = 0.35 + 0.25 * Math.sin(nx * Math.PI * 2 + t * 1.4);
-      }
-    }
+    const steps = Math.max(100, Math.floor(w / 2.5));
 
     ctx.save();
 
-    // 1) Soft ambient glow blob in the center
-    const glow = ctx.createRadialGradient(w * 0.5, midY, 0, w * 0.5, midY, w * 0.42);
-    glow.addColorStop(0, "rgba(96,165,250," + (0.14 * e).toFixed(3) + ")");
-    glow.addColorStop(0.45, "rgba(59,130,246," + (0.06 * e).toFixed(3) + ")");
-    glow.addColorStop(1, "rgba(59,130,246,0)");
+    // ambient center glow
+    const glow = ctx.createRadialGradient(w * 0.5, midY, 0, w * 0.5, midY, w * 0.45);
+    glow.addColorStop(0, "rgba(96,165,250," + (0.16 * e).toFixed(3) + ")");
+    glow.addColorStop(0.4, "rgba(59,130,246," + (0.07 * e).toFixed(3) + ")");
+    glow.addColorStop(1, "rgba(37,99,235,0)");
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
 
-    // 2) Draw layers back-to-front (thick soft bodies first)
     for (let L = 0; L < LAYERS.length; L++) {
       const layer = LAYERS[L];
       const ptsTop = [];
       const ptsBot = [];
+      const ridge = [];
 
       for (let i = 0; i <= steps; i++) {
         const nx = i / steps;
         const x = nx * w;
 
-        // Strong taper at ends (organic pointed tips)
-        const env = Math.pow(Math.sin(Math.PI * nx), 1.35);
+        // smooth tapered envelope — pointed organic ends
+        const env = Math.pow(Math.sin(Math.PI * nx), 1.45);
 
-        // Multi-harmonic organic motion
+        // multi-harmonic organic motion (slow + detail)
         const phase = t * layer.speed + layer.phase;
         const wave =
-          Math.sin(nx * Math.PI * layer.freq + phase) * 0.52 +
-          Math.sin(nx * Math.PI * (layer.freq * 1.7) + phase * 1.3 + 1.1) * 0.28 +
-          Math.sin(nx * Math.PI * (layer.freq * 0.55) + phase * 0.7) * 0.20 +
-          Math.sin(nx * Math.PI * 9.5 + phase * 2.1 + L) * 0.08;
+          Math.sin(nx * Math.PI * layer.freq + phase) * 0.50 +
+          Math.sin(nx * Math.PI * (layer.freq * 1.65) + phase * 1.25 + 0.9) * 0.27 +
+          Math.sin(nx * Math.PI * (layer.freq * 0.5) + phase * 0.65) * 0.18 +
+          Math.sin(nx * Math.PI * 8.5 + phase * 1.9 + L * 0.4) * 0.05;
 
-        const fm = 0.4 + bins[i] * 1.15;
-        const amp = h * 0.38 * layer.amp * env * fm * e;
+        // interpolated smooth bin
+        const bi = nx * (BIN_N - 1);
+        const b0 = Math.floor(bi);
+        const b1 = Math.min(BIN_N - 1, b0 + 1);
+        const bf = bi - b0;
+        const fm = 0.38 + (smoothBins[b0] * (1 - bf) + smoothBins[b1] * bf) * 1.2;
+
+        const amp = h * 0.36 * layer.amp * env * fm * e;
         const y = midY + wave * amp;
-
-        // thickness varies with energy & position (fatter in center)
-        const halfT = h * 0.085 * layer.thick * env * (0.7 + bins[i] * 0.6) * e;
+        const halfT = h * 0.08 * layer.thick * env * (0.65 + fm * 0.5) * e;
 
         ptsTop.push({ x, y: y - halfT });
         ptsBot.push({ x, y: y + halfT });
+        ridge.push({ x, y });
       }
 
-      const top = smoothPts(ptsTop);
-      const bot = smoothPts(ptsBot).reverse();
-
-      // Filled ribbon body with vertical gradient (light on ridge, soft fade)
-      ctx.beginPath();
-      ctx.moveTo(top[0].x, top[0].y);
-      for (let i = 1; i < top.length; i++) ctx.lineTo(top[i].x, top[i].y);
-      for (let i = 0; i < bot.length; i++) ctx.lineTo(bot[i].x, bot[i].y);
-      ctx.closePath();
+      // reverse bot for closed path
+      const botRev = ptsBot.slice().reverse();
 
       const [r, g, b] = layer.color;
-      const a = layer.alpha * (0.75 + e * 0.35);
-      const bodyGrad = ctx.createLinearGradient(0, midY - h * 0.45, 0, midY + h * 0.45);
-      bodyGrad.addColorStop(0, "rgba(" + r + "," + g + "," + b + "," + (a * 0.15).toFixed(3) + ")");
-      bodyGrad.addColorStop(0.35, "rgba(" + r + "," + g + "," + b + "," + (a * 0.85).toFixed(3) + ")");
+      const a = layer.alpha * (0.78 + e * 0.32);
+
+      // filled smooth ribbon
+      drawBezierRibbon(ptsTop, botRev);
+      const bodyGrad = ctx.createLinearGradient(0, midY - h * 0.42, 0, midY + h * 0.42);
+      bodyGrad.addColorStop(0, "rgba(" + r + "," + g + "," + b + "," + (a * 0.1).toFixed(3) + ")");
+      bodyGrad.addColorStop(0.3, "rgba(" + r + "," + g + "," + b + "," + (a * 0.75).toFixed(3) + ")");
       bodyGrad.addColorStop(0.5, "rgba(" + r + "," + g + "," + b + "," + a.toFixed(3) + ")");
-      bodyGrad.addColorStop(0.65, "rgba(" + r + "," + g + "," + b + "," + (a * 0.85).toFixed(3) + ")");
-      bodyGrad.addColorStop(1, "rgba(" + r + "," + g + "," + b + "," + (a * 0.12).toFixed(3) + ")");
+      bodyGrad.addColorStop(0.7, "rgba(" + r + "," + g + "," + b + "," + (a * 0.75).toFixed(3) + ")");
+      bodyGrad.addColorStop(1, "rgba(" + r + "," + g + "," + b + "," + (a * 0.1).toFixed(3) + ")");
       ctx.fillStyle = bodyGrad;
       ctx.fill();
 
-      // Bright ridge stroke on top edge for glass/liquid highlight
-      ctx.beginPath();
-      ctx.moveTo(top[0].x, top[0].y);
-      for (let i = 1; i < top.length; i++) ctx.lineTo(top[i].x, top[i].y);
-      ctx.strokeStyle = "rgba(" + Math.min(255, r + 40) + "," + Math.min(255, g + 40) + "," + Math.min(255, b + 30) + "," + (0.55 * a).toFixed(3) + ")";
-      ctx.lineWidth = 1.4 + layer.thick * 1.2;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.stroke();
+      // luminous ridge highlight
+      drawSmoothStroke(
+        ridge,
+        1.2 + layer.thick * 1.1,
+        "rgba(" + Math.min(255, r + 50) + "," + Math.min(255, g + 45) + "," + Math.min(255, b + 35) + "," + (0.5 * a).toFixed(3) + ")"
+      );
     }
 
-    // 3) Extra soft outer bloom (lighter composite)
+    // outer screen bloom
     ctx.globalCompositeOperation = "screen";
-    const bloom = ctx.createRadialGradient(w * 0.5, midY, h * 0.05, w * 0.5, midY, w * 0.38);
-    bloom.addColorStop(0, "rgba(180,210,255," + (0.12 * e).toFixed(3) + ")");
-    bloom.addColorStop(0.5, "rgba(100,160,255," + (0.05 * e).toFixed(3) + ")");
+    const bloom = ctx.createRadialGradient(w * 0.5, midY, h * 0.04, w * 0.5, midY, w * 0.4);
+    bloom.addColorStop(0, "rgba(180,215,255," + (0.14 * e).toFixed(3) + ")");
+    bloom.addColorStop(0.55, "rgba(100,165,255," + (0.05 * e).toFixed(3) + ")");
     bloom.addColorStop(1, "rgba(59,130,246,0)");
     ctx.fillStyle = bloom;
     ctx.fillRect(0, 0, w, h);
@@ -5712,21 +5758,19 @@ function mountMrAudioPlayer(host, opts) {
     if (!alive) return;
     raf = requestAnimationFrame(draw);
     if (audio.paused && !dragging) {
-      const pulse = 0.26 + 0.08 * Math.sin(performance.now() / 1100);
+      const pulse = 0.28 + 0.07 * Math.sin(performance.now() / 1200);
       drawFluidWave(pulse, true);
       return;
     }
     let energy = 0.55;
     if (analyser && freqData) {
-      // energy already sampled inside drawFluidWave via bins;
-      // still compute a global boost from overall volume
       analyser.getByteFrequencyData(freqData);
       let sum = 0;
-      const n = Math.min(freqData.length, 40);
+      const n = Math.min(freqData.length, 48);
       for (let i = 0; i < n; i++) sum += freqData[i];
-      energy = 0.32 + (sum / (n * 255)) * 1.25;
+      energy = 0.30 + (sum / (n * 255)) * 1.3;
     } else {
-      energy = 0.48 + 0.28 * Math.abs(Math.sin((audio.currentTime || 0) * 2.2));
+      energy = 0.45 + 0.25 * Math.abs(Math.sin((audio.currentTime || 0) * 2.0));
     }
     drawFluidWave(energy, false);
     if (!dragging && audio.duration) fill.style.width = (audio.currentTime / audio.duration) * 100 + "%";
