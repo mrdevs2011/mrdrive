@@ -300,12 +300,19 @@ function notifyRemoteFolderChanges(prevFolders, nextFolders) {
   const prevById = new Map((prevFolders || []).map((f) => [f.id, f]));
   const nextById = new Map((nextFolders || []).map((f) => [f.id, f]));
 
+  // Optimistic folders ("temp-<ts>") are created locally by createFolder()/ensureFolderExists().
+  // A background poll can land before the real row replaces the temp one; that is NOT a remote change.
+  const isTemp = (f) => String(f.id).startsWith("temp-");
+  const prevTempNames = new Set((prevFolders || []).filter(isTemp).map((f) => f.name.toLowerCase()));
+
   for (const f of nextFolders || []) {
     if (prevById.has(f.id)) continue;
+    if (prevTempNames.has(String(f.name).toLowerCase())) continue; // my own just-created folder
     showToast(`Claude papka qo'shdi: ${f.name}`);
   }
   for (const f of prevFolders || []) {
     if (nextById.has(f.id)) continue;
+    if (isTemp(f)) continue; // local optimistic folder, never a remote delete
     if (localDeleteFolderIds.has(String(f.id))) continue;
     showToast(`Claude papkani o'chirdi: ${f.name}`, "warning");
     remoteDeleted.push(f);
