@@ -921,7 +921,7 @@ function setupPublicPdfEdit(editBtn, pages) {
 
   pages.forEach((p) => {
     const ctx = p.drawCanvas.getContext("2d");
-    ctx.strokeStyle = "#ef4444";
+    ctx.strokeStyle = "#2563eb";
     ctx.lineWidth = Math.max(3, p.width / 250);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -1032,7 +1032,7 @@ function setupPublicImageEdit(editBtn, previewWrap, imgEl) {
     canvas.height = imgEl.naturalHeight;
 
     ctx = canvas.getContext("2d");
-    ctx.strokeStyle = "#ef4444";
+    ctx.strokeStyle = "#2563eb";
     ctx.lineWidth = Math.max(3, imgEl.naturalWidth / 250);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -3258,7 +3258,7 @@ function buildDragGhost(ids, frontId) {
     ctx.font = "700 11px -apple-system, system-ui, sans-serif";
     const tw = Math.max(17, ctx.measureText(label).width + 8);
     const th = 17;
-    ctx.fillStyle = "#ef4444";
+    ctx.fillStyle = "#2563eb";
     drawRoundedRect(ctx, bx, by, tw, th, 9);
     ctx.fill();
     ctx.fillStyle = "#fff";
@@ -4616,13 +4616,13 @@ const ANNOT_TOOLS = [
   }
 ];
 
-const ANNOT_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#000000", "#ffffff"];
+const ANNOT_COLORS = ["#2563eb", "#3b82f6", "#0f172a", "#64748b", "#94a3b8", "#6366f1", "#000000", "#ffffff"];
 const ANNOT_SIZES = [2, 4, 8, 14];
 
 let annotState = {
   open: false,
   tool: "pen",
-  color: "#ef4444",
+  color: "#2563eb",
   size: 4,
   file: null,
   type: null, // "image" | "pdf" | "code"
@@ -4746,7 +4746,7 @@ async function openAnnotationViewer(file, kind, opts) {
   annotState.pages = [];
   annotState.scale = 1;
   annotState.tool = "pen";
-  annotState.color = "#ef4444";
+  annotState.color = "#2563eb";
   annotState.size = 4;
   annotState.editMode = false;
   updateAnnotNavButtons();
@@ -4842,7 +4842,7 @@ async function openAnnotationViewer(file, kind, opts) {
     }
   } catch (err) {
     console.error(err);
-    loader.innerHTML = `<span style="color:#f87171">Fayl yuklanmadi</span>`;
+    loader.innerHTML = `<span style="color:#64748b">Fayl yuklanmadi</span>`;
   }
 
   // Wire top buttons
@@ -4864,7 +4864,7 @@ function enterAnnotEditMode(toolbar, editBtn) {
   if (annotState.editMode) return;
   annotState.editMode = true;
   annotState.tool = "pen";
-  annotState.color = "#ef4444";
+  annotState.color = "#2563eb";
   annotState.size = 4;
   // Tools bar stays hidden — only freehand pen
   if (toolbar) toolbar.style.display = "none";
@@ -5386,7 +5386,7 @@ async function loadImageForAnnot(url, scroll, loader) {
 
 async function loadPdfForAnnot(url, scroll, loader) {
   if (!window.pdfjsLib) {
-    loader.innerHTML = `<span style="color:#f87171">PDF.js failed to load</span>`;
+    loader.innerHTML = `<span style="color:#64748b">PDF.js failed to load</span>`;
     return;
   }
   const loadingTask = pdfjsLib.getDocument(url);
