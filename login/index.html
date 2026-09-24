@@ -10,21 +10,25 @@
 <body>
   <div id="boot-loader">
     <div class="splash-scene">
+      <!-- Chapdan uchib kelayotgan fayllar -->
       <div class="splash-files">
         <div class="splash-file"><span class="splash-file-dot dot-blue"></span>report.pdf</div>
         <div class="splash-file"><span class="splash-file-dot dot-green"></span>photo.jpg</div>
         <div class="splash-file"><span class="splash-file-dot dot-amber"></span>notes.txt</div>
         <div class="splash-file"><span class="splash-file-dot dot-pink"></span>video.mp4</div>
       </div>
-      <div class="splash-trail"></div>
+      <!-- Markazdagi MRdrive logosi -->
       <div class="splash-logo">
         <svg width="48" height="48" viewBox="0 0 40 40" fill="none">
           <rect width="40" height="40" rx="10" fill="#18181b"/>
           <path d="M10 26V14L20 22L30 14V26" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
       </div>
+      <div class="splash-word">MRdrive</div>
+      <div class="splash-progress"><i></i></div>
     </div>
   </div>
+  <script src="/splash.js"></script>
 
   <div id="auth-screen" class="screen" style="display:none;">
     <div class="auth-box">
@@ -158,9 +162,26 @@
       location.replace("/");
     }
 
+    // Splash (2s) davomida orqa fonda keyingi sahifani (app) oldindan yuklab qo'yamiz —
+    // login'dan keyin app darhol ochiladi.
+    function prefetchApp() {
+      ["/", "/app.js", "/scrollbar.js", "/style.css",
+       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+       "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+       "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js",
+       "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js",
+       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"
+      ].forEach((href) => {
+        const l = document.createElement("link");
+        l.rel = "prefetch";
+        l.href = href;
+        document.head.appendChild(l);
+      });
+      ["image", "zip", "folder", "video", "file"].forEach((n) => { new Image().src = `/assets/${n}-icon.png`; });
+    }
+
     (async function init() {
       if (typeof SUPABASE_URL === "undefined" || !SUPABASE_URL || !window.supabase) {
-        bootLoader.style.display = "none";
         authScreen.style.display = "flex";
         authStatus.textContent = "Server sozlamalari yuklanmadi.";
         return;
@@ -174,17 +195,20 @@
         return;
       }
 
-      bootLoader.style.display = "none";
+      // Forma splash ORQASIDA tayyor turadi; splash 2s da o'zi yo'qoladi
       authScreen.style.display = "flex";
+      prefetchApp();
 
       document.getElementById("to-signup").addEventListener("click", showSignup);
       document.getElementById("to-login").addEventListener("click", showLogin);
       document.getElementById("login-btn").addEventListener("click", doLogin);
       document.getElementById("signup-btn").addEventListener("click", doSignup);
       document.getElementById("login-password").addEventListener("keydown", (e) => {
+        if (e.repeat) return; // ushlab turish takrorlamasin
         if (e.key === "Enter") doLogin();
       });
       document.getElementById("signup-password").addEventListener("keydown", (e) => {
+        if (e.repeat) return;
         if (e.key === "Enter") doSignup();
       });
     })();

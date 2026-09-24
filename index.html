@@ -16,24 +16,25 @@
   <!-- INITIAL LOADER -->
   <div id="boot-loader">
     <div class="splash-scene">
-      <!-- Chap tomondagi uchuvchi fayllar -->
+      <!-- Chapdan uchib kelayotgan fayllar -->
       <div class="splash-files">
         <div class="splash-file"><span class="splash-file-dot dot-blue"></span>report.pdf</div>
         <div class="splash-file"><span class="splash-file-dot dot-green"></span>photo.jpg</div>
         <div class="splash-file"><span class="splash-file-dot dot-amber"></span>notes.txt</div>
         <div class="splash-file"><span class="splash-file-dot dot-pink"></span>video.mp4</div>
       </div>
-      <!-- Trail -->
-      <div class="splash-trail"></div>
-      <!-- O'ng tomondagi MRdrive logosi -->
+      <!-- Markazdagi MRdrive logosi -->
       <div class="splash-logo">
         <svg width="48" height="48" viewBox="0 0 40 40" fill="none">
           <rect width="40" height="40" rx="10" fill="#18181b"/>
           <path d="M10 26V14L20 22L30 14V26" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
       </div>
+      <div class="splash-word">MRdrive</div>
+      <div class="splash-progress"><i></i></div>
     </div>
   </div>
+  <script src="/splash.js"></script>
 
   <!-- APP SCREEN -->
   <div id="app" class="screen" style="display:none;">
@@ -88,13 +89,6 @@
               Tezkor tugmalar
             </button>
             <div class="settings-divider"></div>
-            <button type="button" class="settings-item settings-logout" id="settings-logout-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-              Chiqish
-            </button>
-            <div class="settings-divider"></div>
             <div class="usage-box" id="usage-box">
               <div class="usage-head">
                 <span class="usage-title">Xotira</span>
@@ -113,6 +107,13 @@
               </div>
               <div class="usage-note" id="usage-note" hidden></div>
             </div>
+            <div class="settings-divider"></div>
+            <button type="button" class="settings-item settings-logout" id="settings-logout-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Chiqish
+            </button>
           </div>
         </div>
       </div>

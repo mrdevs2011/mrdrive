@@ -161,3 +161,9 @@ The existing CSS already handles beautiful drag-over states:
 ✅ Backward compatible - folder picker still available
 ✅ No breaking changes to existing functionality
 ✅ Better visual feedback with existing CSS styling
+
+## Splash + keyboard (2026-09-24)
+- Splash endi aniq **2 soniya** (`splash.js`): fayllar ketma-ket logoga uchib kiradi, logo "yutadi", progress 0→100%, oxirgi 250ms da fade-out.
+- Splash orqasida app render bo'ladi: fayllar/papkalar, rasm thumbnaillari (decode bilan), drag URL'lar, ikonlar, PDF worker oldindan yuklanadi. Login sahifasida keyingi app resurslari `prefetch` qilinadi.
+- Tugmani ushlab turish endi foydasiz: `app.js` boshidagi capture listener barcha auto-repeat `keydown`larni yutadi — har action uchun tugma alohida bosiladi, 1 marta ishlaydi. Yozish maydonlarida (qidiruv/prompt) takror yozish saqlangan.
+- Chiqish (logout) tugmasi endi Xotira (storage) ko'rsatkichi ostida.

@@ -1,3 +1,21 @@
+// ==========================================
+// TUGMANI USHLAB TURISH = FOYDASIZ
+// Har bir shortcut/action uchun tugma alohida bosiladi. Ushlab turilsa
+// (OS auto-repeat) takroriy keydown'lar butunlay yutiladi — action faqat 1 marta
+// ishlaydi. Yozish maydonlarida (qidiruv, prompt) takror yozish saqlanadi.
+// Bu listener eng birinchi ro'yxatdan o'tadi (capture), shuning uchun boshqa
+// hamma keydown handler'lardan (viewer, modal, settings) oldin ishlaydi.
+// ==========================================
+window.addEventListener("keydown", (e) => {
+  if (!e.repeat) return;
+  if (e.key === "Tab") return;
+  if (kbIsTyping(e.target)) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}, true);
+
+const splashActive = () => !!(window.MRSplash && !window.MRSplash.done);
+
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const appScreen = document.getElementById("app");
@@ -157,6 +175,8 @@ function preloadAllThumbs(files) {
     if (existing && existing.src === url) return; // already warmed for this URL
     const img = new Image();
     img.src = url;
+    // Bytes + decode — preview ochilganda hech qanday kechikish bo'lmasin
+    if (img.decode) img.decode().catch(() => {});
     warmedImageCache.set(key, img);
   });
 }
@@ -482,15 +502,36 @@ function setupRealtime(userId) {
 const urlParams = new URLSearchParams(window.location.search);
 const shareToken = urlParams.get("share");
 
+/** Splash (2s) davomida orqa fonda yuklab qo'yiladigan statik narsalar:
+ * ikonlar, Claude logo, PDF worker. Fayl ro'yxati va rasm thumbnaillari
+ * loadFiles() ichida yuklanadi (prefetchThumbUrls / prefetchDragUrls). */
+function preloadBootAssets() {
+  ["image", "zip", "folder", "video", "file"].forEach((n) => {
+    const img = new Image();
+    img.src = `/assets/${n}-icon.png`;
+    if (img.decode) img.decode().catch(() => {});
+  });
+  const claude = new Image();
+  claude.src = "/claude-icon.png";
+  // PDF viewer worker — birinchi PDF ochilganda kutib turmasin
+  try {
+    fetch("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js", { mode: "no-cors" }).catch(() => {});
+  } catch (_) { /* best-effort */ }
+}
+
 if (shareToken) {
-  bootLoader.style.display = "none";
+  // Ochiq havola: splash kerak emas
+  if (window.MRSplash) window.MRSplash.skip(); else bootLoader.style.display = "none";
   if (appScreen) appScreen.style.display = "none";
   showPublicDownloadModal(shareToken);
 } else {
   sb.auth.getSession().then(({ data: { session } }) => {
     if (session) {
-      bootLoader.style.display = "none";
+      // App splash ORQASIDA render bo'ladi (splash opaque, ustida turadi):
+      // fayllar, papkalar, thumbnaillar, ikonlar — hammasi 2 soniya ichida
+      // yuklanib, splash tugaganda tayyor holda ochiladi.
       if (appScreen) appScreen.style.display = "block";
+      preloadBootAssets();
       const parsed = parseAppPath(window.location.pathname);
       currentFolder = parsed.folder;
       // Don't rewrite URL on boot if it already has a file path — loadFiles
@@ -1285,7 +1326,9 @@ async function refreshStorageUsage() {
 })();
 
 sb.auth.onAuthStateChange((event, session) => {
-  if (bootLoader.style.display !== "none") return;
+  // Splash paytida boot oqimi hamma narsani o'zi yuklaydi — takror yuklamaymiz
+  // (lekin sign-out bo'lsa baribir login'ga o'tamiz).
+  if (splashActive() && session) return;
   // Public share link — login majburiy emas
   if (shareToken) return;
   if (session) {
@@ -5121,7 +5164,7 @@ function toggleAnnotFullscreen() {
 let kbBusy = false;
 
 function kbAppActive() {
-  return !shareToken && appScreen && appScreen.style.display !== "none";
+  return !shareToken && !splashActive() && appScreen && appScreen.style.display !== "none";
 }
 
 function kbIsTyping(t) {
