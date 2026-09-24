@@ -1528,8 +1528,8 @@ async function loadFiles(silent) {
   Array.from(selectedFileIds).forEach((id) => { if (!liveIds.has(id)) selectedFileIds.delete(id); });
   renderToolbar();
   renderFiles();
-  prefetchDragUrls(newFiles).catch(() => {}); // best-effort, drag-out just won't work if this fails
-  prefetchThumbUrls(newFiles).catch(() => {}); // image square thumbs for list + drag
+  prefetchDragUrls(newFiles).catch((e) => console.warn("prefetchDragUrls failed:", e)); // best-effort, drag-out just won't work if this fails
+  prefetchThumbUrls(newFiles).catch((e) => console.warn("prefetchThumbUrls failed:", e)); // image square thumbs for list + drag, preload
 }
 
 function renderToolbar() {
