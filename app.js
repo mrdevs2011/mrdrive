@@ -1429,7 +1429,14 @@ function createProgressItem(filename) {
   status.className = "upload-item-status";
   status.textContent = "0%";
 
-  top.append(name, status);
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "upload-item-cancel";
+  cancelBtn.title = "Bekor qilish";
+  cancelBtn.setAttribute("aria-label", "Bekor qilish");
+  cancelBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+
+  top.append(name, status, cancelBtn);
 
   const track = document.createElement("div");
   track.className = "upload-bar";
@@ -1440,24 +1447,56 @@ function createProgressItem(filename) {
   item.append(top, track);
   uploadProgressEl.appendChild(item);
 
+  let cancelled = false;
+  let abortFn = null;
+  const onCancelFns = [];
+
+  function hideCancel() {
+    cancelBtn.style.display = "none";
+  }
+
+  cancelBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (cancelled) return;
+    cancelled = true;
+    hideCancel();
+    if (typeof abortFn === "function") {
+      try { abortFn(); } catch (_) {}
+    }
+    onCancelFns.forEach((fn) => { try { fn(); } catch (_) {} });
+    item.classList.remove("queued", "saving");
+    item.classList.add("cancelled");
+    fill.style.width = fill.style.width || "0%";
+    status.textContent = "Bekor qilindi";
+    setTimeout(() => item.remove(), 900);
+  });
+
   return {
+    isCancelled() { return cancelled; },
+    setAbort(fn) { abortFn = fn; },
+    onCancel(fn) { onCancelFns.push(fn); },
     setQueued() {
+      if (cancelled) return;
       fill.style.width = "0%";
       status.textContent = "Kutilmoqda…";
       item.classList.add("queued");
     },
     setPercent(p) {
+      if (cancelled) return;
       item.classList.remove("queued");
       const v = Math.max(0, Math.min(100, Math.round(p)));
       fill.style.width = v + "%";
       status.textContent = v + "%";
     },
     setSaving() {
+      if (cancelled) return;
       fill.style.width = "100%";
       status.textContent = "Saqlanmoqda…";
       item.classList.add("saving");
     },
     setDone() {
+      if (cancelled) return;
+      hideCancel();
       item.classList.remove("saving");
       item.classList.add("done");
       fill.style.width = "100%";
@@ -1465,6 +1504,8 @@ function createProgressItem(filename) {
       setTimeout(() => item.remove(), 1200);
     },
     setError(message) {
+      if (cancelled) return;
+      hideCancel();
       item.classList.remove("saving");
       item.classList.add("error");
       fill.style.width = "100%";
@@ -1481,8 +1522,9 @@ function createProgressItem(filename) {
 // ourselves with XMLHttpRequest (xhr.upload.onprogress = real bytes sent).
 // Same endpoint / headers / body format that supabase-js uses internally.
 function uploadToStorage(path, file, accessToken, onProgress, upsert) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
+  let xhr = null;
+  const promise = new Promise((resolve, reject) => {
+    xhr = new XMLHttpRequest();
     xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`);
     xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
     xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
@@ -1503,13 +1545,21 @@ function uploadToStorage(path, file, accessToken, onProgress, upsert) {
       reject(err);
     };
     xhr.onerror = () => { const e = new Error("Network error"); e.retryable = true; reject(e); };
-    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.onabort = () => {
+      const e = new Error("Upload cancelled");
+      e.cancelled = true;
+      reject(e);
+    };
 
     const form = new FormData();
     form.append("cacheControl", "3600");
     form.append("", file);
     xhr.send(form);
   });
+  return {
+    promise,
+    abort() { if (xhr) try { xhr.abort(); } catch (_) {} }
+  };
 }
 
 // --- Upload queue ----------------------------------------------------------
@@ -1533,8 +1583,9 @@ function scheduleLoadFiles() {
 function pumpUploadQueue() {
   while (activeUploads < UPLOAD_CONCURRENCY && uploadQueue.length) {
     const job = uploadQueue.shift();
+    if (job.cancelled || (job.ui && job.ui.isCancelled())) continue;
     activeUploads++;
-    job().finally(() => {
+    job.run().finally(() => {
       activeUploads--;
       pumpUploadQueue();
     });
@@ -1570,10 +1621,30 @@ function uploadFile(file, folder) {
   ui.setQueued();
 
   return new Promise((resolve) => {
-    uploadQueue.push(async () => {
-      try { await runUpload(file, fileId, targetFolder, ui); }
-      finally { resolve(); }
+    const job = {
+      cancelled: false,
+      ui,
+      async run() {
+        try {
+          if (job.cancelled || ui.isCancelled()) return;
+          await runUpload(file, fileId, targetFolder, ui);
+        } finally {
+          resolve();
+        }
+      }
+    };
+    ui.onCancel(() => {
+      job.cancelled = true;
+      // Drop from queue if still waiting
+      const idx = uploadQueue.indexOf(job);
+      if (idx >= 0) uploadQueue.splice(idx, 1);
+      uploadingFileIds.delete(fileId);
+      // If nothing left running/queued, settle batch stats quietly
+      if (!activeUploads && !uploadQueue.length) {
+        // don't count cancelled as fail
+      }
     });
+    uploadQueue.push(job);
     pumpUploadQueue();
   });
 }
@@ -1583,6 +1654,8 @@ async function runUpload(file, fileId, targetFolder, ui) {
   let path = null;
 
   try {
+    if (ui.isCancelled()) return;
+
     const { data: { session } } = await sb.auth.getSession();
     if (!session) throw new Error("Not logged in");
     const user = session.user;
@@ -1594,17 +1667,28 @@ async function runUpload(file, fileId, targetFolder, ui) {
 
     ui.setPercent(0);
     for (let attempt = 1; ; attempt++) {
+      if (ui.isCancelled()) return;
       try {
-        await uploadToStorage(path, file, session.access_token, (ratio) => {
+        const up = uploadToStorage(path, file, session.access_token, (ratio) => {
+          if (ui.isCancelled()) return;
           if (ratio >= 1) ui.setSaving();   // bytes sent, server still working
           else ui.setPercent(ratio * 100);
         }, attempt > 1);
+        ui.setAbort(() => up.abort());
+        await up.promise;
         break;
       } catch (err) {
+        if (err && err.cancelled) return; // user cancelled — quiet exit
         if (!err.retryable || attempt >= UPLOAD_MAX_ATTEMPTS) throw err;
+        if (ui.isCancelled()) return;
         ui.setPercent(0);
         await sleep(600 * attempt);
       }
+    }
+    if (ui.isCancelled()) {
+      // Bytes may have landed; remove orphan object
+      if (path) await sb.storage.from(BUCKET).remove([path]).catch(() => {});
+      return;
     }
     ui.setSaving();
 
@@ -1623,12 +1707,21 @@ async function runUpload(file, fileId, targetFolder, ui) {
       throw new Error(`DB error: ${dbError.message}`);
     }
 
+    if (ui.isCancelled()) {
+      // Rare race: cancel during DB insert — remove row + object
+      await sb.from(TABLE).delete().eq("storage_path", path).catch(() => {});
+      await sb.storage.from(BUCKET).remove([path]).catch(() => {});
+      return;
+    }
+
     markLocalUpload(file.name, file.size);
     ui.setDone();
     keepBlocked = true;
     batchStats.ok++;
     scheduleLoadFiles();
   } catch (err) {
+    if (err && err.cancelled) return;
+    if (ui.isCancelled()) return;
     console.error(`Upload error (${file.name}):`, err);
     batchStats.fail++;
     ui.setError(err.message);

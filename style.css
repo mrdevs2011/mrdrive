@@ -708,6 +708,40 @@ body.is-dragging-file .folder-tab-wrap {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+.upload-item-cancel {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: -4px -6px -4px 0;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.upload-item-cancel:hover {
+  background: var(--danger-soft, #fef2f2);
+  color: var(--danger, #dc2626);
+}
+.upload-item-cancel:active {
+  transform: scale(0.92);
+}
+.upload-item.done .upload-item-cancel,
+.upload-item.error .upload-item-cancel,
+.upload-item.cancelled .upload-item-cancel {
+  display: none;
+}
+.upload-item.cancelled .upload-item-status {
+  color: var(--text-muted);
+}
+.upload-item.cancelled .upload-bar-fill {
+  background: var(--border-strong, #d4d4d8);
+}
 .upload-bar {
   height: 5px;
   border-radius: 3px;
