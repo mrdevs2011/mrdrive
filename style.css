@@ -2109,7 +2109,8 @@ body.is-dragging-file .folder-tab-wrap {
 }
 /* Lighter loading overlay on light workspace */
 .annot-viewer.kind-image .annot-loading,
-.annot-viewer.kind-video .annot-loading {
+.annot-viewer.kind-video .annot-loading,
+.annot-viewer.kind-audio .annot-loading {
   background: rgba(250, 250, 250, 0.75);
   color: var(--text-muted);
 }
