@@ -5556,10 +5556,9 @@ function mountMrAudioPlayer(host, opts) {
   const SMOOTH = 0.06;
 
   function envelope(nx) {
-    // diamond skeleton: sharp pointed ends, full body in center
-    // edges keep a small floor so they still react, but shape is restored
+    // true zero at ends so tips never clip against canvas edge
     const s = Math.sin(Math.PI * nx);
-    return 0.08 + 0.92 * Math.pow(s, 1.55);
+    return Math.pow(s, 1.45);
   }
 
   function sampleFreq(nx) {
@@ -5675,9 +5674,11 @@ function mountMrAudioPlayer(host, opts) {
     // precompute x + envelope + freq once per frame
     const envs = new Float32Array(n + 1);
     const fms = new Float32Array(n + 1);
+    const pad = w * 0.04; // keep tips inside canvas — no hard clip
+    const drawW = w - pad * 2;
     for (let i = 0; i <= n; i++) {
       const nx = i / n;
-      xs[i] = nx * w;
+      xs[i] = pad + nx * drawW;
       envs[i] = envelope(nx);
       fms[i] = 0.25 + binAt(nx) * 1.55;
     }
