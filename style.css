@@ -77,7 +77,7 @@ body { background: var(--bg); color: var(--text); }
     transparent 0%,
     color-mix(in srgb, var(--accent) 55%, transparent) 22%,
     transparent 45%,
-    color-mix(in srgb, #ec4899 45%, transparent) 72%,
+    color-mix(in srgb, var(--text) 22%, transparent) 72%,
     transparent 100%);
   -webkit-mask: radial-gradient(circle, transparent 36%, #000 40%, #000 60%, transparent 66%);
           mask: radial-gradient(circle, transparent 36%, #000 40%, #000 60%, transparent 66%);
@@ -220,7 +220,7 @@ body { background: var(--bg); color: var(--text); }
   z-index: 1;
   animation: spRing 3s both;
 }
-.sp-ring.r2 { border-color: #ec4899; animation-delay: 0.09s; }
+.sp-ring.r2 { border-color: var(--border-strong); animation-delay: 0.09s; }
 @keyframes spRing {
   0%, 74.5% { opacity: 0; transform: scale(0.8); }
   75.5%     { opacity: 0.8; transform: scale(0.9); }

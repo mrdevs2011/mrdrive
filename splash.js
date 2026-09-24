@@ -12,36 +12,26 @@
   var ready = new Promise(function (r) { resolveReady = r; });
 
   // ---- Sahna ----
-  function thumb(grad, inner) {
-    return '<div class="sp-thumb sp-body" style="background:' + grad + '">' + inner + '</div>';
-  }
-  var SVG_PHOTO = '<svg width="30" height="30" viewBox="0 0 30 30"><circle cx="22" cy="9" r="3.2" fill="#fff" opacity=".9"/>' +
-    '<path d="M2 26l8-10 5 6 4-4 9 8z" fill="#fff" opacity=".85"/></svg>';
-  var SVG_PLAY = '<svg width="26" height="26" viewBox="0 0 26 26"><path d="M8 5l14 8-14 8z" fill="#fff"/></svg>';
-  var SVG_NOTE = '<svg width="26" height="26" viewBox="0 0 26 26"><path d="M10 4v13.2A3.5 3.5 0 1 0 12 20V9l9-2v7.2A3.5 3.5 0 1 0 23 17V3z" fill="#fff"/></svg>';
-  var SVG_DOC = '<svg width="24" height="24" viewBox="0 0 24 24"><path d="M5 4h9l5 5v11H5z" fill="#fff" opacity=".92"/>' +
-    '<path d="M8 12h8M8 15h8M8 18h5" stroke="#8b5cf6" stroke-width="1.6" stroke-linecap="round"/></svg>';
-  function icon(n) { return '<img class="sp-icon sp-body" src="/assets/' + n + '-icon.png" alt="">'; }
-  function pill(dot, t) { return '<div class="sp-pill sp-body"><i class="' + dot + '"></i>' + t + '</div>'; }
+  function icon(n, px) { return '<img class="sp-icon sp-body" style="width:' + px + 'px;height:' + px + 'px" src="/assets/' + n + '-icon.png" alt="">'; }
 
   // r = orbita radiusi, a = boshlang'ich burchak, dir = aylanish yo'nalishi, d = kechikish (s)
   var ITEMS = [
-    { h: icon("image"),  r: 150, a: 10,  dir: 1,  d: 0.00 },
-    { h: pill("dot-blue", "report.pdf"), r: 178, a: 42, dir: -1, d: 0.05 },
-    { h: thumb("linear-gradient(135deg,#f9a8d4,#fb923c)", SVG_PHOTO), r: 128, a: 75, dir: 1, d: 0.10 },
-    { h: icon("video"),  r: 168, a: 108, dir: -1, d: 0.02 },
-    { h: pill("dot-green", "photo.jpg"), r: 140, a: 140, dir: 1, d: 0.12 },
-    { h: thumb("linear-gradient(135deg,#60a5fa,#8b5cf6)", SVG_PLAY), r: 172, a: 170, dir: -1, d: 0.07 },
-    { h: icon("folder"), r: 122, a: 200, dir: 1,  d: 0.15 },
-    { h: pill("dot-amber", "notes.txt"), r: 176, a: 232, dir: -1, d: 0.03 },
-    { h: thumb("linear-gradient(135deg,#34d399,#0ea5e9)", SVG_PHOTO), r: 146, a: 262, dir: 1, d: 0.09 },
-    { h: icon("zip"),    r: 132, a: 292, dir: -1, d: 0.14 },
-    { h: pill("dot-pink", "video.mp4"), r: 168, a: 322, dir: 1, d: 0.06 },
-    { h: thumb("linear-gradient(135deg,#f472b6,#a855f7)", SVG_NOTE), r: 118, a: 350, dir: -1, d: 0.11 },
-    { h: icon("file"),   r: 158, a: 56,  dir: -1, d: 0.16 },
-    { h: thumb("linear-gradient(135deg,#fbbf24,#ef4444)", SVG_DOC), r: 108, a: 160, dir: 1, d: 0.13 }
+    { h: icon("image", 46), r: 150, a: 10, dir: 1, d: 0.00 },
+    { h: icon("video", 42), r: 178, a: 42, dir: -1, d: 0.05 },
+    { h: icon("zip", 48), r: 128, a: 75, dir: 1, d: 0.10 },
+    { h: icon("file", 44), r: 168, a: 108, dir: -1, d: 0.02 },
+    { h: icon("video", 40), r: 140, a: 140, dir: 1, d: 0.12 },
+    { h: icon("file", 46), r: 172, a: 170, dir: -1, d: 0.07 },
+    { h: icon("zip", 42), r: 122, a: 200, dir: 1, d: 0.15 },
+    { h: icon("image", 48), r: 176, a: 232, dir: -1, d: 0.03 },
+    { h: icon("file", 44), r: 146, a: 262, dir: 1, d: 0.09 },
+    { h: icon("video", 40), r: 132, a: 292, dir: -1, d: 0.14 },
+    { h: icon("image", 46), r: 168, a: 322, dir: 1, d: 0.06 },
+    { h: icon("zip", 42), r: 118, a: 350, dir: -1, d: 0.11 },
+    { h: icon("file", 44), r: 158, a: 56, dir: -1, d: 0.16 },
+    { h: icon("video", 40), r: 108, a: 160, dir: 1, d: 0.13 }
   ];
-  var SPARK_COLORS = ["#3b82f6", "#ec4899", "#f59e0b", "#22c55e", "#8b5cf6"];
+  var SPARK_COLORS = ["#3b82f6", "#18181b", "#3b82f6", "#a1a1aa"]; // MRdrive: ko'k accent + neytral
 
   function build() {
     if (!scene) return;
