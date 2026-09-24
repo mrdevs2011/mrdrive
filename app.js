@@ -1097,6 +1097,22 @@ function setupPublicControlsFade(modalBox, previewWrap, autoHide) {
 // AUTH
 // ==========================================
 
+// "Delete without asking" — saved in the browser (localStorage), shared by all
+// tabs; read fresh every time so a change in Settings applies immediately.
+const SKIP_DELETE_KEY = "mrdrive_skip_delete_confirm";
+let skipDeleteMemory = false; // fallback if localStorage is blocked
+function isSkipDeleteConfirm() {
+  try {
+    const v = localStorage.getItem(SKIP_DELETE_KEY);
+    if (v !== null) return v === "1";
+  } catch (_) {}
+  return skipDeleteMemory;
+}
+function setSkipDeleteConfirm(on) {
+  skipDeleteMemory = !!on;
+  try { localStorage.setItem(SKIP_DELETE_KEY, on ? "1" : "0"); } catch (_) {}
+}
+
 async function logout() {
   await sb.auth.signOut();
   location.replace("/login/");
@@ -1111,7 +1127,9 @@ async function logout() {
   const accountPanel = document.getElementById("settings-account-panel");
   const accountNameEl = document.getElementById("account-name");
   const accountUsernameEl = document.getElementById("account-username");
+  const skipDeleteCb = document.getElementById("settings-skip-delete");
   if (!gearBtn || !modal) return;
+  skipDeleteCb?.addEventListener("change", () => setSkipDeleteConfirm(skipDeleteCb.checked));
 
   function closeSettings() {
     modal.hidden = true;
@@ -1119,6 +1137,7 @@ async function logout() {
     if (accountPanel) accountPanel.hidden = true;
   }
   function openSettings() {
+    if (skipDeleteCb) skipDeleteCb.checked = isSkipDeleteConfirm();
     modal.hidden = false;
     gearBtn.classList.add("open");
   }
@@ -2361,7 +2380,8 @@ async function explainDeleteFailure(id) {
    ============================================================ */
 const ANIM_DURATION  = 3000;   // sand falls fast, doesn't linger
 const SWEEP_DURATION = 1300;   // wave of grains breaking loose
-const COLLAPSE_DELAY = 1100;
+const COLLAPSE_DELAY = 1500;
+const FADE_IN_MS     = 450;    // canvas crossfades over the live card, grains stay still meanwhile
 const TILE_SIZE      = 1.0;    // finer grain = reads as sand, not confetti
 const DRIFT_X        = 5;      // gentle sideways scatter as grains fall
 const PUFF_Y         = 0;      // tiny initial lift before gravity takes over
@@ -2634,7 +2654,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
         for (let i = 0; i < tiles.length; i++) {
           const t = tiles[i];
           const ts = t.tile || TILE_SIZE;
-          const local = elapsed - t.delay;
+          const local = elapsed - FADE_IN_MS - t.delay;
 
           if (local < 0) {
             octx.globalAlpha = 1;
@@ -2676,9 +2696,14 @@ async function playDeleteDissolve(card, clickX, clickY) {
         return anyAlive;
       }
 
-      // First frame drawn BEFORE hiding the real card (no flash)
+      // Crossfade: the grain canvas fades IN over the still-visible card, so there is
+      // no instant swap ("tiq"). Grains only start moving after FADE_IN_MS.
       paint(0);
-      card.style.visibility = "hidden";
+      overlay.style.opacity = "0";
+      overlay.style.transition = "opacity " + FADE_IN_MS + "ms ease-in-out";
+      void overlay.offsetHeight; // commit opacity:0 before transitioning
+      overlay.style.opacity = "1";
+      setTimeout(() => { card.style.visibility = "hidden"; }, FADE_IN_MS + 20);
 
       // Particles run independently (do not block delete/API)
       function frame(now) {
@@ -3049,12 +3074,9 @@ async function unpublishFile(fileId) {
 
 // In-app confirm dialog. Native confirm() can be suppressed by the browser
 // ("prevent additional dialogs"), in which case it silently returns false.
-// "Delete without asking." lives ONLY in RAM: a page reload resets it to false.
-let skipDeleteConfirm = false;
-
 function showConfirm(message, okLabel = "OK", opts = {}) {
   const skippable = !!opts.skippable;
-  if (skippable && skipDeleteConfirm) return Promise.resolve(true);
+  if (skippable && isSkipDeleteConfirm()) return Promise.resolve(true);
   return new Promise((resolve) => {
     const existing = document.getElementById("confirm-modal");
     if (existing) existing.remove();
@@ -3088,7 +3110,7 @@ function showConfirm(message, okLabel = "OK", opts = {}) {
     modal.querySelector(".confirm-cancel").onclick = () => done(false);
     modal.querySelector(".confirm-ok").onclick = () => {
       const cb = modal.querySelector(".confirm-skip-cb");
-      if (skippable && cb && cb.checked) skipDeleteConfirm = true;
+      if (skippable && cb && cb.checked) setSkipDeleteConfirm(true);
       done(true);
     };
     modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
