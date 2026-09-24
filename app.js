@@ -1799,10 +1799,11 @@ async function loadFiles(silent) {
 
   const dissolvePromises = [];
   if (remoteDeleted.length && fileListEl) {
-    for (const f of remoteDeleted) {
-      const card = fileListEl.querySelector(`.file-card[data-file-id="${f.id}"]`);
-      if (card) dissolvePromises.push(playDeleteDissolve(card));
-    }
+    const remoteCards = remoteDeleted
+      .map((f) => fileListEl.querySelector(`.file-card[data-file-id="${f.id}"]`))
+      .filter(Boolean);
+    const remoteGroup = dissolveGroupInfo(remoteCards);
+    for (const card of remoteCards) dissolvePromises.push(playDeleteDissolve(card, undefined, undefined, remoteGroup));
   }
   if (remoteFoldersDeleted.length) {
     const toolbar = document.getElementById("toolbar");
@@ -3091,7 +3092,23 @@ function __dissolveDomToCanvas(el, dprOverride) {
 const MAX_GRAINS = 70000;
 
 /** Typed-array grains: one grain per (G x G) device pixels, colour = packed RGBA of that pixel. */
-function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY) {
+/** Info for a multi-card delete: ONE wave sweeping from the top-most card down through all of them. */
+function dissolveGroupInfo(cards) {
+  const list = (cards || []).filter((c) => c && c.isConnected);
+  if (list.length < 2) return null;
+  let top = Infinity, bottom = -Infinity;
+  for (const c of list) {
+    const r = c.getBoundingClientRect();
+    if (r.top < top) top = r.top;
+    if (r.bottom > bottom) bottom = r.bottom;
+  }
+  const span = Math.max(1, bottom - top);
+  // Wave speed stays similar for long lists (longer span -> longer sweep), capped.
+  const sweep = Math.min(3500, Math.max(SWEEP_DURATION, span * 3));
+  return { top, span, sweep };
+}
+
+function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY, groupCtx) {
   const W = snapCanvas.width, H = snapCanvas.height;
   const ctx = snapCanvas.getContext("2d", { willReadFrequently: true });
   const px32 = new Uint32Array(ctx.getImageData(0, 0, W, H).data.buffer);
@@ -3114,11 +3131,17 @@ function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY) {
       // Wide, natural spread: bell-shaped random sideways speed + a push away
       // from the epicenter, so the cloud opens up like a puff of dust.
       const away = (cx - epX) / (cssW || 1);              // -1 … 1
-      vx[n] = (Math.random() + Math.random() - 1) * 1.6 + away * 1.2;
+      vx[n] = groupCtx
+        ? (Math.random() + Math.random() - 1) * 0.5           // group: near-vertical streaks
+        : (Math.random() + Math.random() - 1) * 1.6 + away * 1.2;
       lift[n] = 0.4 + Math.random() * 1.3;
       ph[n] = Math.random() * 6.2832;
       g[n] = 0.8 + Math.random() * 0.5;                       // each grain falls a bit differently
-      delay[n] = ((cy / cssH) * 0.7 + (dist / maxDist) * 0.3) * SWEEP_DURATION + Math.random() * 380;
+      delay[n] = groupCtx
+        // One continuous wave: delay depends on the absolute height inside the
+        // whole selection, so it runs top -> bottom across ALL cards as one.
+        ? ((groupCtx.offsetY + cy) / groupCtx.span) * groupCtx.sweep + Math.random() * 200
+        : ((cy / cssH) * 0.7 + (dist / maxDist) * 0.3) * SWEEP_DURATION + Math.random() * 380;
       col[n] = c;
       n++;
     }
@@ -3210,7 +3233,7 @@ function __dissolveFloatFallback(card) {
  * Full disintegrate — demo.html physics.
  * Always produces a visible effect; never snaps the card away.
  */
-async function playDeleteDissolve(card, clickX, clickY) {
+async function playDeleteDissolve(card, clickX, clickY, group) {
   if (!card || !card.isConnected) return;
 
   const startRect = card.getBoundingClientRect();
@@ -3239,7 +3262,10 @@ async function playDeleteDissolve(card, clickX, clickY) {
     const hasClick = typeof clickX === "number" && typeof clickY === "number";
     const epX = hasClick ? Math.min(Math.max(clickX - rect.left, 0), width) : width * 0.5;
     const epY = hasClick ? Math.min(Math.max(clickY - rect.top, 0), height) : height * 0.3;
-    const grains = __dissolveBuildGrains(snapshotCanvas, width, height, dpr, epX, epY);
+    const groupCtx = group
+      ? { offsetY: startRect.top - group.top, span: group.span, sweep: group.sweep }
+      : null;
+    const grains = __dissolveBuildGrains(snapshotCanvas, width, height, dpr, epX, epY, groupCtx);
 
     if (!grains.n) {
       await __dissolveFloatFallback(card);
@@ -3301,7 +3327,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
             // sway makes each grain wander instead of travelling in a straight line.
             const inv = 1 - life;
             const driftEase = 1 - inv * inv * inv;
-            const sway = Math.sin(local * 0.0016 + gph[i]) * 7 * dpr * Math.min(1, life * 5);
+            const sway = Math.sin(local * 0.0016 + gph[i]) * (groupCtx ? 2 : 7) * dpr * Math.min(1, life * 5);
             px = gx[i] + gvx[i] * driftDev * driftEase + sway;
             // Tiny soft "lift" right as the grain breaks loose (decays in ~150ms),
             // then gravity takes over — reads as a gentle breath, not a hard drop.
@@ -3377,7 +3403,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
       requestAnimationFrame(frame);
 
       // Collapse the list row after COLLAPSE_DELAY while grains still fall
-      await new Promise((r) => setTimeout(r, COLLAPSE_DELAY));
+      await new Promise((r) => setTimeout(r, COLLAPSE_DELAY + (group ? Math.max(0, group.sweep - SWEEP_DURATION) : 0)));
     }
   } else {
     await __dissolveFloatFallback(card);
@@ -3624,7 +3650,8 @@ async function deleteSelectedFiles(ids, clickX, clickY, opts) {
     .map((id) => fileListEl && fileListEl.querySelector(`.file-card[data-file-id="${id}"]`))
     .filter(Boolean);
   if (cards.length) {
-    await Promise.all(cards.map((c) => playDeleteDissolve(c, clickX, clickY)));
+    const group = dissolveGroupInfo(cards); // one shared top->bottom wave for all selected files
+    await Promise.all(cards.map((c) => playDeleteDissolve(c, clickX, clickY, group)));
   }
 
   list.forEach((id) => markLocalDelete(id));
@@ -4232,6 +4259,7 @@ function getFilteredFiles() {
 }
 
 async function openAnnotationViewer(file, kind, opts) {
+  if (pendingCloseFinish) pendingCloseFinish();
   const viewer = document.getElementById("annot-viewer");
   const scroll = document.getElementById("annot-scroll");
   const filenameEl = document.getElementById("annot-filename");
@@ -4404,7 +4432,7 @@ function annotHasUnsavedEdits() {
 // the user's choice. Used by the X button and the Escape key.
 async function requestCloseAnnotationViewer() {
   if (!annotHasUnsavedEdits()) {
-    closeAnnotationViewer();
+    closeAnnotationViewer({ animate: true });
     return;
   }
   const choice = await showSaveBeforeCloseConfirm();
@@ -4413,7 +4441,7 @@ async function requestCloseAnnotationViewer() {
     await saveAnnotated(); // saveAnnotated() closes the viewer itself once the download succeeds
     return;
   }
-  closeAnnotationViewer(); // discard
+  closeAnnotationViewer({ animate: true }); // discard
 }
 
 // 3-way "Save / Discard / Cancel" dialog shown before closing an image/PDF
@@ -4457,18 +4485,98 @@ function showSaveBeforeCloseConfirm() {
   });
 }
 
+// Finishes a (possibly animated) close: really hides the viewer and resets
+// its classes so the next open starts clean.
+let pendingCloseFinish = null;
+
+function hideAnnotViewerNow() {
+  const viewer = document.getElementById("annot-viewer");
+  viewer.style.display = "none";
+  viewer.style.opacity = "";
+  viewer.style.transition = "";
+  viewer.style.pointerEvents = "";
+  viewer.setAttribute("aria-hidden", "true");
+  viewer.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
+  const workspaceEl = document.getElementById("annot-workspace");
+  if (workspaceEl) workspaceEl.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
+}
+
+// Close transition (mirror of the open zoom): the viewer image shrinks
+// smoothly back into its thumbnail in the file list while the viewer fades
+// out. Returns false when it can't animate (no thumb on screen, etc.) so the
+// caller falls back to the plain instant close.
+function playImageCloseZoom(file, viewer) {
+  const pageState = annotState.pages && annotState.pages[0];
+  const pageEl = pageState && pageState.el;
+  const srcImg = pageEl && pageEl.querySelector("img");
+  const thumb = fileListEl && fileListEl.querySelector(
+    `.file-card[data-file-id="${file.id}"] img.file-thumb`
+  );
+  if (!pageEl || !srcImg || !thumb) return false;
+
+  const from = pageEl.getBoundingClientRect();
+  const to = thumb.getBoundingClientRect();
+  if (!from.width || !from.height || !to.width || !to.height) return false;
+  if (to.bottom < 0 || to.top > window.innerHeight || to.right < 0 || to.left > window.innerWidth) return false;
+
+  const clone = document.createElement("img");
+  clone.src = srcImg.currentSrc || srcImg.src;
+  clone.className = "thumb-zoom-clone";
+  clone.style.cssText =
+    "position:fixed;margin:0;padding:0;border:0;background:transparent;" +
+    "object-fit:contain;overflow:hidden;pointer-events:none;z-index:2100;" +
+    "border-radius:12px;opacity:1;" +
+    `left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;`;
+  document.body.appendChild(clone);
+
+  // The real viewer image is replaced by the clone; the rest of the viewer
+  // (background, top bar) just fades out underneath it.
+  pageEl.style.visibility = "hidden";
+  const DURATION = 480; // ms
+  const ease = "cubic-bezier(.4,0,.2,1)";
+  clone.style.transition =
+    `left ${DURATION}ms ${ease}, top ${DURATION}ms ${ease}, ` +
+    `width ${DURATION}ms ${ease}, height ${DURATION}ms ${ease}, ` +
+    `border-radius ${DURATION}ms ${ease}, opacity 140ms ease ${DURATION - 140}ms`;
+  viewer.style.transition = "opacity 340ms ease";
+  viewer.style.pointerEvents = "none";
+  void clone.offsetWidth; // start transitions from the current box
+  viewer.style.opacity = "0";
+  clone.style.left = to.left + "px";
+  clone.style.top = to.top + "px";
+  clone.style.width = to.width + "px";
+  clone.style.height = to.height + "px";
+  clone.style.borderRadius = "8px";
+  clone.style.opacity = "0";
+
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    clone.remove();
+    pageEl.style.visibility = "";
+    if (pendingCloseFinish === finish) pendingCloseFinish = null;
+    if (!annotState.open) hideAnnotViewerNow();
+  };
+  const timer = setTimeout(finish, DURATION + 60);
+  pendingCloseFinish = finish;
+  return true;
+}
+
 function closeAnnotationViewer(opts) {
   const viewer = document.getElementById("annot-viewer");
   const videoEl = viewer.querySelector("#annot-scroll video");
   if (videoEl) { videoEl.pause(); videoEl.removeAttribute("src"); videoEl.load(); }
-  viewer.style.display = "none";
   viewer.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
-  // Clear kind classes so next open starts clean
-  viewer.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
-  const workspaceEl = document.getElementById("annot-workspace");
-  if (workspaceEl) workspaceEl.classList.remove("kind-image", "kind-video", "kind-pdf", "kind-code");
   const closedFile = annotState.file;
+
+  // Smooth shrink back into the thumbnail (image previews, user-initiated close)
+  const animated = !!(opts && opts.animate && annotState.type === "image" && closedFile
+    && playImageCloseZoom(closedFile, viewer));
+  if (!animated) hideAnnotViewerNow();
+
   annotState.open = false;
   annotState.file = null;
   annotState.pages = [];
