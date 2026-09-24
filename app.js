@@ -1744,22 +1744,29 @@ function handleFiles(fileListObj) {
   // receive the array index as its 2nd argument (= "folder").
   const files = Array.from(fileListObj || []);
   const folder = currentFolder || null;
-  files.forEach((f) => {
-    // Folder-picker (webkitdirectory) fills webkitRelativePath: "Dir/sub/a.png"
-    const rel = f.webkitRelativePath || "";
+
+  // webkitdirectory / folder picker: group by top-level folder → one ZIP each
+  const byRoot = new Map(); // rootName -> [{ path, file }]
+  const plain = [];
+  for (const f of files) {
+    const rel = (f.webkitRelativePath || "").replace(/^\/+/, "");
     if (rel && rel.includes("/")) {
       const parts = rel.split("/");
-      const dir = parts.slice(0, -1).join("/");
-      const base = parts[parts.length - 1] || f.name;
-      const named = base !== f.name ? new File([f], base, { type: f.type, lastModified: f.lastModified }) : f;
-      ensureFolderExists(dir).then((folderName) => uploadFile(named, folderName));
+      const root = parts[0];
+      const inner = parts.slice(1).join("/") || f.name;
+      if (!byRoot.has(root)) byRoot.set(root, []);
+      byRoot.get(root).push({ path: inner, file: f });
     } else {
-      uploadFile(f, folder);
+      plain.push(f);
     }
+  }
+  plain.forEach((f) => uploadFile(f, folder));
+  byRoot.forEach((entries, rootName) => {
+    zipAndUploadFolder(rootName, entries, folder);
   });
 }
 
-// ---- Real OS folder drag-and-drop (Chrome/Edge/Firefox via webkitGetAsEntry) ----
+// ---- Folder drop → single ZIP (not expanded into MRdrive folders) ----
 function readAllDirectoryEntries(reader) {
   return new Promise((resolve, reject) => {
     const all = [];
@@ -1778,93 +1785,103 @@ function entryToFile(fileEntry) {
   return new Promise((resolve, reject) => fileEntry.file(resolve, reject));
 }
 
-/** Walk a FileSystemEntry tree; push { file, relativePath } for every file. */
-async function walkFsEntry(entry, pathPrefix, out) {
-  if (!entry) return;
-  if (entry.isFile) {
-    const file = await entryToFile(entry);
-    const relativePath = pathPrefix ? (pathPrefix + "/" + file.name) : file.name;
-    out.push({ file, relativePath });
-    return;
-  }
-  if (entry.isDirectory) {
-    const nextPrefix = pathPrefix ? (pathPrefix + "/" + entry.name) : entry.name;
-    const reader = entry.createReader();
-    const children = await readAllDirectoryEntries(reader);
-    for (const child of children) {
-      await walkFsEntry(child, nextPrefix, out);
-    }
-  }
-}
-
-/** Collect files from a drop, including nested directory contents. */
-async function collectFromDataTransfer(dt) {
+/** All files inside a directory entry, paths relative to that directory root. */
+async function collectDirContents(dirEntry) {
   const out = [];
-  const items = dt && dt.items;
-  let usedEntries = false;
-  if (items && items.length) {
-    const entries = [];
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-      if (entry) {
-        usedEntries = true;
-        entries.push(entry);
+  async function walkDir(dirEnt, relDir) {
+    const children = await readAllDirectoryEntries(dirEnt.createReader());
+    for (const child of children) {
+      if (child.isFile) {
+        const file = await entryToFile(child);
+        const path = relDir ? (relDir + "/" + file.name) : file.name;
+        out.push({ path, file });
+      } else if (child.isDirectory) {
+        const next = relDir ? (relDir + "/" + child.name) : child.name;
+        await walkDir(child, next);
       }
     }
-    if (usedEntries) {
-      for (const entry of entries) {
-        await walkFsEntry(entry, "", out);
-      }
-      return out;
-    }
   }
-  // Fallback: plain file list (no real folder support)
-  for (const f of Array.from((dt && dt.files) || [])) {
-    out.push({ file: f, relativePath: f.webkitRelativePath || f.name });
-  }
+  await walkDir(dirEntry, "");
   return out;
 }
 
-async function handleDropItems(dataTransfer) {
-  let collected;
-  try {
-    collected = await collectFromDataTransfer(dataTransfer);
-  } catch (err) {
-    console.error("Folder drop failed:", err);
-    showToast("Papkani o'qib bo'lmadi", "error", err && err.message);
-    return;
+async function zipFilesAsArchive(zipName, entries) {
+  if (!window.JSZip) throw new Error("JSZip yuklanmagan");
+  const zip = new JSZip();
+  for (const { path, file } of entries) {
+    // Skip junk / VCS noise inside zips when possible (still include if user wants? skip .git)
+    if (/(^|\/)\.git(\/|$)/i.test(path)) continue;
+    if (/(^|\/)node_modules(\/|$)/i.test(path)) continue;
+    zip.file(path, file);
   }
-  if (!collected.length) {
-    showToast("Yuklash uchun fayl topilmadi", "warning");
-    return;
-  }
+  const names = Object.keys(zip.files).filter((n) => !zip.files[n].dir);
+  if (!names.length) throw new Error("ZIP ichida fayl yo'q (.git / node_modules o'tkazib yuborildi)");
+  const blob = await zip.generateAsync({
+    type: "blob",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 }
+  });
+  const name = /\.zip$/i.test(zipName) ? zipName : (zipName + ".zip");
+  return new File([blob], name, { type: "application/zip", lastModified: Date.now() });
+}
 
-  // Create needed folders first (unique relative dirs), then upload.
-  const folderNames = new Set();
-  for (const { relativePath } of collected) {
-    const parts = String(relativePath).replace(/^\/+/, "").split("/");
-    if (parts.length > 1) {
-      folderNames.add(parts.slice(0, -1).join("/"));
+async function zipAndUploadFolder(folderName, entries, targetFolder) {
+  try {
+    const zipFile = await zipFilesAsArchive(folderName + ".zip", entries);
+    uploadFile(zipFile, targetFolder || null);
+  } catch (err) {
+    console.error("Folder zip failed:", err);
+    showToast("Papkani ZIP qilib bo'lmadi", "error", (err && err.message) || folderName);
+  }
+}
+
+async function handleDropItems(dataTransfer) {
+  const targetFolder = currentFolder || null;
+  const items = dataTransfer && dataTransfer.items;
+
+  // Prefer FileSystemEntry so we can tell files from real directories
+  if (items && items.length) {
+    let anyEntry = false;
+    const jobs = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+      if (!entry) {
+        const f = item.getAsFile && item.getAsFile();
+        if (f) jobs.push(Promise.resolve().then(() => uploadFile(f, targetFolder)));
+        continue;
+      }
+      anyEntry = true;
+      if (entry.isFile) {
+        jobs.push(
+          entryToFile(entry).then((file) => uploadFile(file, targetFolder))
+        );
+      } else if (entry.isDirectory) {
+        jobs.push(
+          (async () => {
+            const contents = await collectDirContents(entry);
+            if (!contents.length) {
+              showToast("Bo'sh papka", "warning", entry.name);
+              return;
+            }
+            await zipAndUploadFolder(entry.name, contents, targetFolder);
+          })()
+        );
+      }
+    }
+    if (anyEntry || jobs.length) {
+      try {
+        await Promise.all(jobs);
+      } catch (err) {
+        console.error("Drop failed:", err);
+        showToast("Yuklashda xato", "error", err && err.message);
+      }
+      return;
     }
   }
-  const folderMap = new Map(); // relDir -> ensured name
-  for (const dir of folderNames) {
-    folderMap.set(dir, await ensureFolderExists(dir));
-  }
 
-  const baseFolder = currentFolder || null;
-  for (const { file, relativePath } of collected) {
-    const parts = String(relativePath).replace(/^\/+/, "").split("/");
-    const baseName = parts[parts.length - 1] || file.name;
-    const relDir = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
-    const targetFolder = relDir ? (folderMap.get(relDir) || relDir) : baseFolder;
-    const named =
-      baseName !== file.name
-        ? new File([file], baseName, { type: file.type, lastModified: file.lastModified })
-        : file;
-    uploadFile(named, targetFolder);
-  }
+  // Fallback: plain FileList
+  handleFiles(dataTransfer.files);
 }
 
 fileInput.addEventListener("change", (e) => {
