@@ -2044,21 +2044,28 @@ let touchHoldActive = false;
 
     timer = setTimeout(() => {
       const id = String(c.dataset.fileId);
-      let ids;
-      if (selectedFileIds.has(id) && selectedFileIds.size > 1) {
-        ids = Array.from(selectedFileIds);
-      } else {
-        selectedFileIds = new Set([id]);
-        updateSelectionClasses();
-        ids = [id];
-      }
       fired = true;
       clear();
       if (navigator.vibrate) { try { navigator.vibrate(30); } catch (_) {} }
-      showFileContextMenu(startX, startY, ids);
-      if (!sessionStorage.getItem("mrdrive_sel_hint")) {
+
+      if (selectedFileIds.size >= 2 && selectedFileIds.has(id)) {
+        // 2+ files selected and this is one of them → open the menu
+        showFileContextMenu(startX, startY, Array.from(selectedFileIds));
+        return;
+      }
+      // Otherwise: hold = select this file and enter selection mode
+      // (tap more files to add them, then hold on one of them for the menu).
+      if (selectedFileIds.size === 0 || !selectedFileIds.has(id)) {
+        if (!selectedFileIds.size || !lastInputTouch) selectedFileIds = new Set([id]);
+        else selectedFileIds.add(id);
+      }
+      lastClickedFileId = id;
+      updateSelectionClasses();
+      let hinted = false;
+      try { hinted = !!sessionStorage.getItem("mrdrive_sel_hint"); } catch (_) {}
+      if (!hinted) {
         try { sessionStorage.setItem("mrdrive_sel_hint", "1"); } catch (_) {}
-        showToast("Selection mode", "success", "Tap files to add or remove them. Tap empty space to cancel.");
+        showToast("Selection mode", "success", "Tap more files, then hold on one of them to open the menu. Tap empty space to cancel.");
       }
     }, LONG_PRESS_MS);
   }, { passive: true });
@@ -2930,7 +2937,7 @@ function hideFileContextMenu() {
 function showFileContextMenu(clientX, clientY, ids) {
   hideFileContextMenu();
   const n = ids.length;
-  if (!n) return;
+  if (n < 2) return; // menu is only for 2+ selected files
 
   const menu = document.createElement("div");
   menu.id = "file-context-menu";
@@ -3133,24 +3140,16 @@ async function deleteSelectedFiles(ids, clickX, clickY) {
 fileListEl.addEventListener("contextmenu", (e) => {
   const card = e.target.closest && e.target.closest(".file-card");
   if (!card || !card.dataset.fileId) return;
-  e.preventDefault();
   // On touch screens the browser fires this after ~0.5s of holding; our own
-  // 3-second long-press (below) opens the menu instead.
-  if (touchHoldActive || e.pointerType === "touch") return;
+  // 3-second long-press (below) handles touch instead.
+  if (touchHoldActive || e.pointerType === "touch") { e.preventDefault(); return; }
 
+  // The menu is for MULTIPLE files only: right-click on one of 2+ selected files.
+  // Anything else keeps the browser's normal behaviour.
   const id = String(card.dataset.fileId);
-  let ids;
-  if (selectedFileIds.has(id) && selectedFileIds.size > 1) {
-    ids = Array.from(selectedFileIds);
-  } else if (selectedFileIds.has(id) && selectedFileIds.size === 1) {
-    ids = [id];
-  } else {
-    // Right-click unselected card → select only it
-    selectedFileIds = new Set([id]);
-    updateSelectionClasses();
-    ids = [id];
-  }
-  showFileContextMenu(e.clientX, e.clientY, ids);
+  if (selectedFileIds.size < 2 || !selectedFileIds.has(id)) return;
+  e.preventDefault();
+  showFileContextMenu(e.clientX, e.clientY, Array.from(selectedFileIds));
 });
 
 // ==========================================
