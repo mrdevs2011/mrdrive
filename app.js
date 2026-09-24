@@ -229,6 +229,7 @@ let currentSearch = "";
 let currentFolder = null;
 let selectedFileIds = new Set(); // ids currently selected via click/marquee
 let lastClickedFileId = null; // for shift-click range select
+let kbCursorId = null; // card the arrow keys are standing on (keyboard shortcuts)
 
 // Claude / remote activity: don't toast our own uploads/deletes as "Claude"
 const localUploadKeys = new Set(); // "filename:::size"
@@ -2134,9 +2135,9 @@ function renderFiles() {
 
   if (!filtered.length) {
     if (allFiles.length === 0) {
-      fileListEl.innerHTML = `<p class="empty">No files yet.</p>`;
+      fileListEl.innerHTML = `<p class="empty">Hali fayllar yo'q.</p>`;
     } else {
-      fileListEl.innerHTML = `<p class="empty">Nothing found.</p>`;
+      fileListEl.innerHTML = `<p class="empty">Hech narsa topilmadi.</p>`;
     }
     return;
   }
@@ -2210,12 +2211,60 @@ function updateSelectionClasses() {
   updateSelectionBar();
 }
 
-// The floating bottom "download" button was removed: downloading selected files
-// now lives in the right-click (context) menu. Kept as a stub so old calls still work
-// and any leftover button from an older version is cleaned up.
+// Selection bar: on touch screens (no keyboard) it carries the same actions the
+// keyboard shortcuts give on a computer. CSS shows it only for `pointer: coarse`,
+// so desktop keeps the clean right-click menu + shortcuts.
+const SEL_BAR_ICON_ALL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>`;
+const SEL_BAR_ICON_CLOSE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6L18 18M18 6L6 18"/></svg>`;
+
 function updateSelectionBar() {
-  const bar = document.getElementById("selection-bar");
-  if (bar) bar.remove();
+  const n = selectedFileIds.size;
+  let bar = document.getElementById("selection-bar");
+  if (!n) {
+    if (bar) bar.hidden = true;
+    document.body.classList.remove("has-sel-bar");
+    return;
+  }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "selection-bar";
+    bar.className = "selection-bar";
+    bar.innerHTML = `
+      <div class="sel-head">
+        <button type="button" class="sel-close" data-act="clear" aria-label="Bekor qilish">${SEL_BAR_ICON_CLOSE}</button>
+        <span class="sel-count"></span>
+      </div>
+      <div class="sel-actions">
+        <button type="button" data-act="all">${SEL_BAR_ICON_ALL}<span>Hammasi</span></button>
+        <button type="button" data-act="download">${ICON_DOWNLOAD}<span>Yuklash</span></button>
+        <button type="button" data-act="move">${ICON_FOLDER}<span>Ko'chirish</span></button>
+        <button type="button" data-act="link">${ICON_LINK}<span>Havola</span></button>
+        <button type="button" data-act="delete" class="sel-danger">${ICON_DELETE}<span>O'chirish</span></button>
+      </div>`;
+    bar.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-act]");
+      if (!b) return;
+      e.stopPropagation();
+      const ids = Array.from(selectedFileIds);
+      switch (b.dataset.act) {
+        case "clear": kbClear(); break;
+        case "all": kbSelectAll(true); break;
+        case "download": kbDownload(); break;
+        case "move": if (ids.length) showFolderPicker(ids); break;
+        case "link": kbLink(); break;
+        case "delete": {
+          const r = b.getBoundingClientRect();
+          kbDelete({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+          break;
+        }
+      }
+    });
+    document.body.appendChild(bar);
+  }
+  bar.hidden = false;
+  bar.querySelector(".sel-count").textContent = `${n} ta tanlandi`;
+  bar.querySelector('[data-act="link"]').hidden = n !== 1;
+  document.body.classList.add("has-sel-bar");
 }
 
 // Clicking anywhere except a file card / the download button drops the selection
@@ -2426,9 +2475,9 @@ fileListEl.addEventListener("click", (e) => {
 });
 
 // ==========================================
-// LONG-PRESS (touch) — hold a card for 3 seconds to open the context menu
+// LONG-PRESS (touch) — hold a card to enter selection mode / open the context menu
 // ==========================================
-const LONG_PRESS_MS = 3000;
+const LONG_PRESS_MS = 500;
 const LONG_PRESS_MOVE_TOLERANCE = 12; // px: bigger movement = scrolling, cancel
 let touchHoldActive = false;
 (function initLongPress() {
@@ -2460,7 +2509,7 @@ let touchHoldActive = false;
     startX = t.clientX; startY = t.clientY;
 
     // small visual cue after a moment (so quick taps don't flash)
-    hint = setTimeout(() => { if (card) card.classList.add("long-pressing"); }, 450);
+    hint = setTimeout(() => { if (card) card.classList.add("long-pressing"); }, 120);
 
     timer = setTimeout(() => {
       const id = String(c.dataset.fileId);
@@ -2541,7 +2590,7 @@ document.addEventListener("mousedown", (e) => {
 
   const hint = document.createElement("div");
   hint.className = "marquee-hint";
-  hint.innerHTML = `Hold <kbd>Ctrl</kbd> to add to the current selection`;
+  hint.innerHTML = `Ko'proq tanlash uchun <kbd>Ctrl</kbd> ni ushlab turing`;
   document.body.appendChild(hint);
 
   marquee = {
@@ -3517,7 +3566,7 @@ function showFolderPicker(fileIds) {
   document.body.appendChild(modal);
 }
 
-async function deleteSelectedFiles(ids, clickX, clickY) {
+async function deleteSelectedFiles(ids, clickX, clickY, opts) {
   const list = (ids || []).map(String).filter(Boolean);
   if (!list.length) return;
 
@@ -3525,7 +3574,7 @@ async function deleteSelectedFiles(ids, clickX, clickY) {
     list.length === 1
       ? "Ushbu faylni o'chirishni xohlaysizmi?"
       : `Delete these ${list.length} files?`;
-  if (!(await showConfirm(msg, "O'chirish", { skippable: true }))) return;
+  if (!(await showConfirm(msg, "O'chirish", { skippable: true, focusOk: !!(opts && opts.viaKeyboard) }))) return;
 
   // Dissolve all visible selected cards in parallel
   const cards = list
@@ -3768,7 +3817,7 @@ function showConfirm(message, okLabel = "OK", opts = {}) {
     modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
       if (e.target.classList.contains("modal-backdrop")) done(false);
     });
-    modal.querySelector(".confirm-cancel").focus();
+    modal.querySelector(opts.focusOk ? ".confirm-ok" : ".confirm-cancel").focus();
   });
 }
 
@@ -4120,6 +4169,7 @@ renderFiles = function () {
     const f = filtered[i];
     if (!f) return;
     card.dataset.fileId = String(f.id);
+    if (kbCursorId === String(f.id)) card.classList.add("kb-focus");
     if (openIds.has(String(f.id))) card.classList.add("actions-open");
     // Green flash for files just added remotely (e.g. Claude MCP)
     if (highlightFileIds.has(String(f.id))) {
@@ -4168,6 +4218,7 @@ async function openAnnotationViewer(file, kind, opts) {
   annotState.color = "#ef4444";
   annotState.size = 4;
   annotState.editMode = false;
+  updateAnnotNavButtons();
 
   filenameEl.textContent = file.filename;
   scroll.innerHTML = "";
@@ -5061,3 +5112,445 @@ function toggleAnnotFullscreen() {
 // destroys :hover on file cards (actions flicker open/closed).
 // View buttons are already injected by the patched renderFiles() whenever
 // a real data change triggers a render.
+
+// ==========================================
+// KEYBOARD SHORTCUTS (computer) — the touch equivalents are the selection bar
+// (updateSelectionBar), the viewer's prev/next buttons and the 0.5 s hold.
+// Press ? to see the full list.
+// ==========================================
+let kbBusy = false;
+
+function kbAppActive() {
+  return !shareToken && appScreen && appScreen.style.display !== "none";
+}
+
+function kbIsTyping(t) {
+  if (!t || !t.tagName) return false;
+  if (t.isContentEditable) return true;
+  const tag = t.tagName;
+  if (tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (tag === "INPUT") return !/^(checkbox|radio|button|submit|reset|file)$/i.test(t.type);
+  return false;
+}
+
+function kbIsInteractive(t) {
+  return !!(t && t.closest && t.closest("button, a, summary, [role='button']"));
+}
+
+function kbOrder() {
+  return Array.from(fileListEl.querySelectorAll(".file-card")).map((c) => c.dataset.fileId).filter(Boolean);
+}
+
+function paintKbCursor() {
+  fileListEl.querySelectorAll(".file-card").forEach((c) => {
+    c.classList.toggle("kb-focus", c.dataset.fileId === kbCursorId);
+  });
+}
+
+function kbSetCursor(id, noScroll) {
+  kbCursorId = id == null ? null : String(id);
+  paintKbCursor();
+  if (kbCursorId && !noScroll) {
+    const c = fileListEl.querySelector(`.file-card[data-file-id="${kbCursorId}"]`);
+    if (c) c.scrollIntoView({ block: "nearest" });
+  }
+}
+
+// target: +1 / -1 / "first" / "last". extend = Shift (grow the range),
+// cursorOnly = Alt (move the highlight without touching the selection).
+function kbMove(target, extend, cursorOnly) {
+  const order = kbOrder();
+  if (!order.length) return;
+  let i = kbCursorId ? order.indexOf(kbCursorId) : -1;
+  if (i === -1 && lastClickedFileId != null) i = order.indexOf(String(lastClickedFileId));
+  let next;
+  if (target === "first") next = 0;
+  else if (target === "last") next = order.length - 1;
+  else if (i === -1) next = target > 0 ? 0 : order.length - 1;
+  else next = Math.max(0, Math.min(order.length - 1, i + target));
+  const id = order[next];
+
+  if (cursorOnly) { kbSetCursor(id); return; }
+  if (extend) {
+    const anchor = lastClickedFileId != null && order.includes(String(lastClickedFileId))
+      ? String(lastClickedFileId)
+      : (i !== -1 ? order[i] : id);
+    lastClickedFileId = anchor;
+    selectedFileIds = new Set();
+    selectRange(anchor, id);
+  } else {
+    selectedFileIds = new Set([id]);
+    lastClickedFileId = id;
+  }
+  kbSetCursor(id);
+  updateSelectionClasses();
+}
+
+function kbToggleCursor() {
+  const order = kbOrder();
+  if (!order.length) return;
+  let id = kbCursorId && order.includes(kbCursorId) ? kbCursorId : null;
+  if (!id && lastClickedFileId != null && order.includes(String(lastClickedFileId))) id = String(lastClickedFileId);
+  if (!id) id = order[0];
+  if (selectedFileIds.has(id)) selectedFileIds.delete(id); else selectedFileIds.add(id);
+  lastClickedFileId = id;
+  kbSetCursor(id);
+  updateSelectionClasses();
+}
+
+// What D / M / L act on: the selection, or the highlighted file if nothing is selected.
+function kbTargets() {
+  if (selectedFileIds.size) return Array.from(selectedFileIds);
+  return kbCursorId ? [kbCursorId] : [];
+}
+
+function kbSelectAll(toggle) {
+  const ids = getFilteredFiles().map((f) => String(f.id));
+  if (!ids.length) return;
+  if (toggle && ids.every((id) => selectedFileIds.has(id))) {
+    selectedFileIds = new Set();
+  } else {
+    selectedFileIds = new Set(ids);
+    showToast(`${ids.length} ta fayl tanlandi`);
+  }
+  updateSelectionClasses();
+}
+
+function kbInvert() {
+  const ids = getFilteredFiles().map((f) => String(f.id));
+  selectedFileIds = new Set(ids.filter((id) => !selectedFileIds.has(id)));
+  updateSelectionClasses();
+}
+
+function kbClear() {
+  selectedFileIds = new Set();
+  kbSetCursor(null, true);
+  updateSelectionClasses();
+}
+
+// Delete key / bar button. Only the SELECTION is deleted (never a mere highlight).
+function kbDelete(opts) {
+  const ids = Array.from(selectedFileIds);
+  if (!ids.length || kbBusy) return;
+  kbBusy = true;
+  let x = opts && opts.x, y = opts && opts.y;
+  if (x == null) {
+    const card = fileListEl.querySelector(`.file-card[data-file-id="${ids[0]}"]`);
+    if (card) { const r = card.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height / 2; }
+  }
+  deleteSelectedFiles(ids, x, y, { viaKeyboard: !!(opts && opts.viaKeyboard) })
+    .catch((err) => showAlert("Xato: " + (err && err.message || err)))
+    .finally(() => { kbBusy = false; });
+}
+
+async function kbDownload() {
+  const ids = kbTargets();
+  if (!ids.length) { showToast("Avval fayl tanlang", "warning"); return; }
+  showToast(ids.length === 1 ? "Yuklab olinmoqda…" : `${ids.length} ta fayl tayyorlanmoqda…`);
+  await downloadSelectedZip(ids);
+}
+
+function kbMoveToFolder() {
+  const ids = kbTargets();
+  if (!ids.length) { showToast("Avval fayl tanlang", "warning"); return; }
+  showFolderPicker(ids);
+}
+
+function kbLink() {
+  const ids = kbTargets();
+  const f = ids.length === 1 ? allFiles.find((x) => String(x.id) === String(ids[0])) : null;
+  if (!f) { showToast("Havola uchun bitta fayl tanlang", "warning"); return; }
+  const live = f.is_public && f.public_token && !(f.expires_at && new Date(f.expires_at) < new Date());
+  if (live) copyPublicLink(f.id); else createPublicLink(f.id);
+}
+
+function kbOpen() {
+  let id = kbCursorId;
+  if (!id && selectedFileIds.size === 1) id = Array.from(selectedFileIds)[0];
+  const f = id && allFiles.find((x) => String(x.id) === String(id));
+  if (!f) return;
+  const kind = isViewable(f.filename);
+  if (kind) openAnnotationViewer(f, kind);
+  else downloadFile(f.id, f.storage_path, f.filename);
+}
+
+function kbFolder(n) {
+  if (n === 0) { setFolder(null); return; }
+  const f = allFolders[n - 1];
+  if (f) setFolder(f.name);
+}
+
+function kbFocusSearch() {
+  const s = document.getElementById("search-input");
+  if (s) { s.focus(); s.select(); }
+}
+
+// ---- file list keys ----
+function kbListKey(e, mod, typing) {
+  const k = e.key;
+
+  if (typing) {
+    if (!(e.target && e.target.id === "search-input")) return;
+    if (k === "Escape") {
+      e.preventDefault();
+      if (e.target.value) { e.target.value = ""; currentSearch = ""; renderFiles(); }
+      else e.target.blur();
+    } else if (k === "ArrowDown" || k === "Enter") {
+      e.preventDefault();
+      e.target.blur();
+      kbMove("first", false, true);
+    }
+    return;
+  }
+
+  if (mod) {
+    if (e.altKey) return;
+    const c = k.toLowerCase();
+    if (c === "a") { if (getFilteredFiles().length) { e.preventDefault(); kbSelectAll(false); } }
+    else if (c === "k") { e.preventDefault(); kbFocusSearch(); }
+    else if (k === "Backspace" && selectedFileIds.size) { e.preventDefault(); if (!e.repeat) kbDelete({ viaKeyboard: true }); }
+    return;
+  }
+
+  if (k === "Delete") {
+    if (!selectedFileIds.size) return;
+    e.preventDefault();
+    if (!e.repeat) kbDelete({ viaKeyboard: true });
+    return;
+  }
+
+  if (k === "ArrowDown" || k === "ArrowUp") {
+    e.preventDefault();
+    kbMove(k === "ArrowDown" ? 1 : -1, e.shiftKey, e.altKey);
+    return;
+  }
+  if (k === "Home" || k === "End") {
+    e.preventDefault();
+    kbMove(k === "Home" ? "first" : "last", e.shiftKey, e.altKey);
+    return;
+  }
+  if (e.altKey) return;
+
+  if (k === "Escape") {
+    const settings = document.getElementById("settings-modal");
+    if (settings && !settings.hidden) return;
+    if (selectedFileIds.size || kbCursorId) kbClear();
+    return;
+  }
+  if (k === " " || k === "Spacebar") {
+    if (kbIsInteractive(e.target)) return;
+    e.preventDefault();
+    kbToggleCursor();
+    return;
+  }
+  if (k === "Enter") {
+    if (kbIsInteractive(e.target)) return;
+    if (kbCursorId || selectedFileIds.size === 1) { e.preventDefault(); kbOpen(); }
+    return;
+  }
+
+  const c = k.length === 1 ? k.toLowerCase() : k;
+  if (/^[0-9]$/.test(c)) { kbFolder(Number(c)); return; }
+  switch (c) {
+    case "d": kbDownload(); break;
+    case "m": kbMoveToFolder(); break;
+    case "l": kbLink(); break;
+    case "i": kbInvert(); break;
+    case "u": fileInput.click(); break;
+    case "n": createFolder(); break;
+    case "r": loadFiles(); showToast("Yangilandi"); break;
+    case "/": e.preventDefault(); kbFocusSearch(); break;
+    case "?": e.preventDefault(); showShortcutsHelp(); break;
+    default: return;
+  }
+}
+
+// ---- viewer keys ----
+function kbViewerKey(e, mod, typing) {
+  if (typing) return;
+  const k = e.key;
+  if (mod) {
+    if (e.altKey || !annotState.editMode) return;
+    const c = k.toLowerCase();
+    if (c === "z") { e.preventDefault(); if (e.shiftKey) annotRedo(); else annotUndo(); }
+    else if (c === "y") { e.preventDefault(); annotRedo(); }
+    else if (c === "s") { e.preventDefault(); saveAnnotated(); }
+    return;
+  }
+  if (e.altKey) return;
+  const zoomable = annotState.type === "image" || annotState.type === "pdf";
+  const c = k.length === 1 ? k.toLowerCase() : k;
+  switch (c) {
+    case "ArrowLeft":
+    case "ArrowRight":
+      if (e.target && e.target.tagName === "VIDEO") return;
+      e.preventDefault();
+      annotNavigate(c === "ArrowLeft" ? -1 : 1);
+      break;
+    case "+": case "=": if (zoomable) setAnnotZoom(annotState.scale * 1.25); break;
+    case "-": case "_": if (zoomable) setAnnotZoom(annotState.scale / 1.25); break;
+    case "0": if (zoomable) setAnnotZoom(1); break;
+    case "f": toggleAnnotFullscreen(); break;
+    case "d": {
+      const f = annotState.file;
+      if (f) downloadFile(f.id, f.storage_path, f.filename);
+      break;
+    }
+    case "e": {
+      const b = document.getElementById("annot-edit");
+      if (b && b.style.display !== "none") b.click();
+      break;
+    }
+    default: return;
+  }
+}
+
+window.addEventListener("keydown", (e) => {
+  if (!kbAppActive()) return;
+  const typing = kbIsTyping(e.target);
+  const mod = e.ctrlKey || e.metaKey;
+  const modalOpen = !!document.querySelector(".modal-backdrop");
+
+  if (modalOpen) {
+    // Help dialog: ? closes it again (Esc is handled by the dialog itself)
+    if (e.key === "?" && document.getElementById("shortcuts-modal") && !typing) {
+      e.preventDefault();
+      document.getElementById("shortcuts-modal").remove();
+    }
+    return;
+  }
+  const ctx = document.getElementById("file-context-menu");
+  if (ctx) {
+    if (e.key === "Escape") return; // the menu closes itself
+    if (!["Shift", "Control", "Alt", "Meta"].includes(e.key)) hideFileContextMenu();
+  }
+  if (annotState.open) { kbViewerKey(e, mod, typing); return; }
+  kbListKey(e, mod, typing);
+}, true);
+
+// A mouse/finger interaction ends keyboard-cursor mode (the outline would look stale).
+document.addEventListener("pointerdown", () => {
+  if (kbCursorId) kbSetCursor(null, true);
+}, true);
+
+// ---- viewer: previous / next file (buttons for touch, ← → for keyboard) ----
+let annotNavBusy = false;
+
+function annotSiblings() {
+  const f = annotState.file;
+  if (!f) return [];
+  return allFiles.filter((x) => (x.folder || null) === (f.folder || null) && isViewable(x.filename));
+}
+
+function updateAnnotNavButtons() {
+  const off = annotSiblings().length < 2;
+  ["annot-prev", "annot-next"].forEach((id) => {
+    const b = document.getElementById(id);
+    if (b) b.disabled = off;
+  });
+}
+
+async function annotNavigate(dir) {
+  if (!annotState.open || !annotState.file || annotNavBusy) return;
+  const list = annotSiblings();
+  if (list.length < 2) return;
+  if (annotHasUnsavedEdits()) {
+    showToast("Saqlanmagan chizmalar bor", "warning", "Avval saqlang yoki yopib bekor qiling.");
+    return;
+  }
+  const i = list.findIndex((x) => String(x.id) === String(annotState.file.id));
+  const next = list[(i + dir + list.length) % list.length];
+  if (!next) return;
+  annotNavBusy = true;
+  try {
+    const v = document.querySelector("#annot-scroll video");
+    if (v) { v.pause(); v.removeAttribute("src"); v.load(); }
+    await openAnnotationViewer(next, isViewable(next.filename));
+  } finally {
+    annotNavBusy = false;
+  }
+}
+
+document.getElementById("annot-prev")?.addEventListener("click", () => annotNavigate(-1));
+document.getElementById("annot-next")?.addEventListener("click", () => annotNavigate(1));
+
+// ---- help dialog (also opened from the settings menu) ----
+// Help page is for computers only: phones and tablets (narrow screens) don't get it.
+const HELP_MIN_WIDTH = 1025;
+function helpAvailable() {
+  return window.matchMedia(`(min-width: ${HELP_MIN_WIDTH}px)`).matches;
+}
+
+function showShortcutsHelp() {
+  if (!helpAvailable()) return;
+  const old = document.getElementById("shortcuts-modal");
+  if (old) { old.remove(); return; }
+
+  const combo = (c) => c.split("+").map((p) => `<kbd>${p}</kbd>`).join("+");
+  const row = (keys, text) =>
+    `<div class="sc-row"><span class="sc-keys">${keys.map(combo).join('<i>yoki</i>')}</span><span class="sc-text">${text}</span></div>`;
+
+  const sections = [
+    ["Fayllar", [
+      [["Delete", "Ctrl+Backspace"], "Tanlangan fayllarni o'chirish (keyin Enter — tasdiqlash)"],
+      [["Ctrl+A"], "Hammasini tanlash"],
+      [["I"], "Tanlovni teskarisiga aylantirish"],
+      [["↑", "↓"], "Fayllar bo'ylab yurish (tanlaydi)"],
+      [["Shift+↑", "Shift+↓"], "Tanlovni kengaytirish"],
+      [["Alt+↑", "Alt+↓"], "Tanlamasdan yurish"],
+      [["Space"], "Joriy faylni tanlash / bekor qilish"],
+      [["Home", "End"], "Birinchi / oxirgi fayl"],
+      [["Enter"], "Ochish (ko'rish yoki yuklab olish)"],
+      [["Esc"], "Tanlovni bekor qilish"],
+    ]],
+    ["Amallar", [
+      [["D"], "Yuklab olish (bir nechta bo'lsa ZIP)"],
+      [["M"], "Papkaga ko'chirish"],
+      [["L"], "Ommaviy havola yaratish / nusxalash"],
+      [["U"], "Fayl yuklash"],
+      [["N"], "Yangi papka"],
+      [["R"], "Yangilash"],
+      [["/", "Ctrl+K"], "Qidirish"],
+      [["0"], "Barcha fayllar (All)"],
+      [["1", "2", "…9"], "Papkalarga o'tish"],
+      [["?"], "Shu oyna"],
+    ]],
+    ["Ko'rish oynasi", [
+      [["←", "→"], "Oldingi / keyingi fayl"],
+      [["+", "-", "0"], "Kattalashtirish / kichraytirish / asl o'lcham"],
+      [["F"], "To'liq ekran"],
+      [["D"], "Yuklab olish"],
+      [["E"], "Chizish rejimi"],
+      [["Ctrl+Z", "Ctrl+Y"], "Bekor qilish / qaytarish (chizishda)"],
+      [["Ctrl+S"], "Chizmani saqlash"],
+      [["Esc"], "Yopish"],
+    ]],
+  ];
+  const modal = document.createElement("div");
+  modal.id = "shortcuts-modal";
+  modal.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal-box shortcuts-box">
+        <h3 class="prompt-title">Tezkor tugmalar</h3>
+        ${sections.map(([title, rows]) => `<div class="sc-title">${title}</div>${rows.map(([k, t]) => row(k, t)).join("")}`).join("")}
+        <button type="button" class="prompt-btn prompt-btn-ok sc-close">Yopish</button>
+      </div>
+    </div>`;
+  const close = () => { document.removeEventListener("keydown", onKey); modal.remove(); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  modal.querySelector(".sc-close").addEventListener("click", close);
+  modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
+    if (e.target.classList.contains("modal-backdrop")) close();
+  });
+  document.body.appendChild(modal);
+  modal.querySelector(".sc-close").focus({ preventScroll: true });
+}
+
+document.getElementById("settings-shortcuts-btn")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const gear = document.getElementById("gear-btn");
+  const menu = document.getElementById("settings-modal");
+  if (gear && menu && !menu.hidden) gear.click(); // close the settings menu first
+  showShortcutsHelp();
+});
