@@ -384,14 +384,6 @@
             <img src="/assets/librechat.png" alt="LibreChat">
             LibreChat
           </button>
-          <button type="button" class="agent-tab dark-icon" data-agent="langgraph" role="tab" aria-selected="false">
-            <img src="/assets/langgraph.png" alt="LangGraph">
-            LangGraph
-          </button>
-          <button type="button" class="agent-tab dark-icon" data-agent="llamaindex" role="tab" aria-selected="false">
-            <img src="/assets/llamaindex.png" alt="LlamaIndex">
-            LlamaIndex
-          </button>
         </div>
 
         <div class="agent-panel active" data-panel="claude" role="tabpanel">
@@ -468,26 +460,6 @@
             <li>LibreChat ni qayta ishga tushiring</li>
           </ol>
           <p class="note">Self-hosted LibreChat MCP serverlarni config orqali ulaydi.</p>
-        </div>
-
-        <div class="agent-panel" data-panel="langgraph" role="tabpanel">
-          <ol>
-            <li>Python loyihada <code>langchain-mcp-adapters</code> o‘rnating</li>
-            <li>MultiServerMCPClient yoki SSE client bilan URL ni ulang</li>
-            <li>Tool’larni LangGraph node’lariga ulang</li>
-            <li>Graph ni ishga tushirib sinab ko‘ring</li>
-          </ol>
-          <p class="note">LangGraph — kod orqali MCP client; UI tab emas.</p>
-        </div>
-
-        <div class="agent-panel" data-panel="llamaindex" role="tabpanel">
-          <ol>
-            <li><code>llama-index</code> + MCP integratsiya paketini o‘rnating</li>
-            <li>BasicMCPClient yoki shunga o‘xshash client bilan URL ni bering</li>
-            <li>Tool’larni agent / workflow ga ulang</li>
-            <li>Skriptni ishga tushirib sinab ko‘ring</li>
-          </ol>
-          <p class="note">LlamaIndex — dasturiy MCP client; agent framework ichida ishlatiladi.</p>
         </div>
       </div>
     </div>
