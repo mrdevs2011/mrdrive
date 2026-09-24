@@ -39,7 +39,7 @@ function svgToPngDataUrl(svgMarkup, size) {
   const wrapped =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
     `<rect x="0.5" y="0.5" width="${size - 1}" height="${size - 1}" rx="8" fill="#fff" stroke="#e4e4e7"/>` +
-    `<g transform="translate(${(size - 28) / 2},${(size - 28) / 2}) scale(${28 / 24})">` +
+    `<g fill="none" transform="translate(${(size - 28) / 2},${(size - 28) / 2}) scale(${28 / 24})">` +
     cleaned.replace(/<svg[^>]*>/, "").replace(/<\/svg>/, "") +
     `</g></svg>`;
   const svgUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(wrapped);
@@ -62,7 +62,7 @@ function rasterizeDragIcon(key, svgMarkup) {
   const wrapped =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">` +
     `<rect x="0.5" y="0.5" width="${size - 1}" height="${size - 1}" rx="8" fill="#ffffff" stroke="#e4e4e7"/>` +
-    `<g transform="translate(${(size - 28) / 2},${(size - 28) / 2}) scale(${28 / 24})">` +
+    `<g fill="none" transform="translate(${(size - 28) / 2},${(size - 28) / 2}) scale(${28 / 24})">` +
     cleaned.replace(/<svg[^>]*>/, "").replace(/<\/svg>/, "") +
     `</g></svg>`;
   const svgUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(wrapped);
@@ -1292,7 +1292,13 @@ function createProgressItem(filename) {
   uploadProgressEl.appendChild(item);
 
   return {
+    setQueued() {
+      fill.style.width = "0%";
+      status.textContent = "Waiting…";
+      item.classList.add("queued");
+    },
     setPercent(p) {
+      item.classList.remove("queued");
       const v = Math.max(0, Math.min(100, Math.round(p)));
       fill.style.width = v + "%";
       status.textContent = v + "%";
@@ -1325,13 +1331,13 @@ function createProgressItem(filename) {
 // supabase-js has no progress callback, so we POST to the Storage REST endpoint
 // ourselves with XMLHttpRequest (xhr.upload.onprogress = real bytes sent).
 // Same endpoint / headers / body format that supabase-js uses internally.
-function uploadToStorage(path, file, accessToken, onProgress) {
+function uploadToStorage(path, file, accessToken, onProgress, upsert) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`);
     xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
     xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
-    xhr.setRequestHeader("x-upsert", "false");
+    xhr.setRequestHeader("x-upsert", upsert ? "true" : "false");
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(e.loaded / e.total);
@@ -1343,9 +1349,11 @@ function uploadToStorage(path, file, accessToken, onProgress) {
         const j = JSON.parse(xhr.responseText);
         msg = j.message || j.error || msg;
       } catch (_) { /* keep HTTP status */ }
-      reject(new Error(msg));
+      const err = new Error(msg);
+      err.retryable = xhr.status >= 500 || xhr.status === 429 || xhr.status === 408;
+      reject(err);
     };
-    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.onerror = () => { const e = new Error("Network error"); e.retryable = true; reject(e); };
     xhr.onabort = () => reject(new Error("Upload cancelled"));
 
     const form = new FormData();
@@ -1355,16 +1363,74 @@ function uploadToStorage(path, file, accessToken, onProgress) {
   });
 }
 
-async function uploadFile(file, folder) {
+// --- Upload queue ----------------------------------------------------------
+// 100 files at once must not open 100 parallel requests (browser/Supabase
+// throttle -> random failures). Files are queued and UPLOAD_CONCURRENCY run at
+// a time; every file remembers the folder that was open WHEN IT WAS ADDED, so
+// switching tabs while a big batch uploads can't misplace files.
+const UPLOAD_CONCURRENCY = 4;
+const UPLOAD_MAX_ATTEMPTS = 3;
+const uploadQueue = [];
+let activeUploads = 0;
+let batchStats = { ok: 0, fail: 0, skipped: 0 };
+let reloadTimer = null;
+
+function scheduleLoadFiles() {
+  // One list refresh for a burst of finished uploads, not one per file.
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => loadFiles(), 500);
+}
+
+function pumpUploadQueue() {
+  while (activeUploads < UPLOAD_CONCURRENCY && uploadQueue.length) {
+    const job = uploadQueue.shift();
+    activeUploads++;
+    job().finally(() => {
+      activeUploads--;
+      pumpUploadQueue();
+    });
+  }
+  if (!activeUploads && !uploadQueue.length) finishBatch();
+}
+
+function finishBatch() {
+  const { ok, fail, skipped } = batchStats;
+  batchStats = { ok: 0, fail: 0, skipped: 0 };
+  if (ok + fail + skipped <= 1) return;   // single file: the row itself is feedback
+  clearTimeout(reloadTimer);
+  loadFiles();
+  const detail = [fail ? `${fail} failed` : "", skipped ? `${skipped} duplicates skipped` : ""]
+    .filter(Boolean).join(" · ");
+  showToast(`${ok} files uploaded`, fail ? "warning" : "success", detail);
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function uploadFile(file, folder) {
   const fileId = getFileUniqueId(file);
   if (uploadingFileIds.has(fileId)) {
+    batchStats.skipped++;
     notifyDuplicate(file);
-    return;
+    return Promise.resolve();
   }
   uploadingFileIds.add(fileId); // must stay BEFORE the first await
 
-  let keepBlocked = false;
+  // Decide the destination NOW (not when the upload finally starts).
+  const targetFolder = folder !== undefined ? folder : currentFolder;
   const ui = createProgressItem(file.name);
+  ui.setQueued();
+
+  return new Promise((resolve) => {
+    uploadQueue.push(async () => {
+      try { await runUpload(file, fileId, targetFolder, ui); }
+      finally { resolve(); }
+    });
+    pumpUploadQueue();
+  });
+}
+
+async function runUpload(file, fileId, targetFolder, ui) {
+  let keepBlocked = false;
   let path = null;
 
   try {
@@ -1372,13 +1438,25 @@ async function uploadFile(file, folder) {
     if (!session) throw new Error("Not logged in");
     const user = session.user;
 
+    // Unique even for same-named files added in the same millisecond.
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    path = `${user.id}/${Date.now()}_${safeName}`;
+    const rand = Math.random().toString(36).slice(2, 8);
+    path = `${user.id}/${Date.now()}_${rand}_${safeName}`;
 
-    await uploadToStorage(path, file, session.access_token, (ratio) => {
-      if (ratio >= 1) ui.setSaving();   // bytes sent, server still working
-      else ui.setPercent(ratio * 100);
-    });
+    ui.setPercent(0);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await uploadToStorage(path, file, session.access_token, (ratio) => {
+          if (ratio >= 1) ui.setSaving();   // bytes sent, server still working
+          else ui.setPercent(ratio * 100);
+        }, attempt > 1);
+        break;
+      } catch (err) {
+        if (!err.retryable || attempt >= UPLOAD_MAX_ATTEMPTS) throw err;
+        ui.setPercent(0);
+        await sleep(600 * attempt);
+      }
+    }
     ui.setSaving();
 
     const insertData = {
@@ -1387,7 +1465,6 @@ async function uploadFile(file, folder) {
       storage_path: path,
       size: file.size
     };
-    const targetFolder = folder !== undefined ? folder : currentFolder;
     if (targetFolder) insertData.folder = targetFolder;
 
     const { error: dbError } = await sb.from(TABLE).insert(insertData);
@@ -1400,9 +1477,11 @@ async function uploadFile(file, folder) {
     markLocalUpload(file.name, file.size);
     ui.setDone();
     keepBlocked = true;
-    loadFiles();
+    batchStats.ok++;
+    scheduleLoadFiles();
   } catch (err) {
     console.error(`Upload error (${file.name}):`, err);
+    batchStats.fail++;
     ui.setError(err.message);
   } finally {
     if (keepBlocked) {
@@ -1414,7 +1493,12 @@ async function uploadFile(file, folder) {
 }
 
 function handleFiles(fileListObj) {
-  [...fileListObj].forEach(uploadFile);
+  // Snapshot the list (a live FileList/input can be reset) and the folder that
+  // is open right now; never hand uploadFile straight to forEach — it would
+  // receive the array index as its 2nd argument (= "folder").
+  const files = Array.from(fileListObj);
+  const folder = currentFolder || null;
+  files.forEach((f) => uploadFile(f, folder));
 }
 
 fileInput.addEventListener("change", (e) => {
@@ -2145,42 +2229,69 @@ function selectRange(fromId, toId) {
 // hover-zoomed thumbnail is showing, a clone of exactly that thumbnail (same
 // spot, same size) grows to fill the screen while the real viewer loads
 // underneath — so it visually "opens" from where the user was looking.
+let pendingZoomClone = null;
+
 function playImageOpenZoom(thumbImg) {
   const rect = thumbImg.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
+  if (pendingZoomClone) { pendingZoomClone.remove(); pendingZoomClone = null; }
 
+  // The clone mirrors the hover preview EXACTLY (same box, object-fit: contain,
+  // no radius/border), so there is no visual jump at the moment of the click.
   const clone = document.createElement("img");
   clone.src = thumbImg.currentSrc || thumbImg.src;
   clone.className = "thumb-zoom-clone";
-  clone.style.position = "fixed";
-  clone.style.left = rect.left + "px";
-  clone.style.top = rect.top + "px";
-  clone.style.width = rect.width + "px";
-  clone.style.height = rect.height + "px";
-  clone.style.objectFit = "cover";
-  clone.style.borderRadius = "8px";
-  clone.style.zIndex = "2100";
-  clone.style.pointerEvents = "none";
-  clone.style.willChange = "transform, opacity, border-radius";
-  clone.style.transform = "translate(0px, 0px) scale(1)";
-  clone.style.transition =
-    "transform .42s cubic-bezier(.22,1,.36,1), border-radius .42s cubic-bezier(.22,1,.36,1), opacity .25s ease .25s";
+  clone.style.cssText =
+    "position:fixed;margin:0;padding:0;border:0;background:transparent;" +
+    "object-fit:contain;pointer-events:none;z-index:2100;" +
+    `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;`;
   document.body.appendChild(clone);
+  pendingZoomClone = clone;
 
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const scale = Math.max(vw / rect.width, vh / rect.height);
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const tx = vw / 2 - cx;
-  const ty = vh / 2 - cy;
+  // Safety net: never leave the clone on screen if the viewer fails to load.
+  setTimeout(() => {
+    if (pendingZoomClone === clone) { clone.remove(); pendingZoomClone = null; }
+  }, 4000);
+}
 
-  requestAnimationFrame(() => {
-    clone.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
-    clone.style.borderRadius = "0px";
-    clone.style.opacity = "0";
+// Called by loadImageForAnnot once the viewer's real image is in the DOM.
+// Grows the clone smoothly from the hover-preview size straight to the exact
+// box the viewer image occupies (no overshoot, so nothing "snaps back"), then
+// reveals the real image and removes the clone.
+function finishImageOpenZoom(pageEl) {
+  const clone = pendingZoomClone;
+  if (!clone) return;
+  pendingZoomClone = null;
+  const target = pageEl.getBoundingClientRect();
+  if (!target.width || !target.height) { clone.remove(); return; }
+
+  // .annot-page has its own fade-in keyframes that would override our
+  // opacity:0 and flash the real image mid-animation — turn them off here.
+  pageEl.style.animation = "none";
+  pageEl.style.opacity = "0";
+  const DURATION = 650; // ms — slow, smooth growth
+  const ease = "cubic-bezier(.25,.8,.25,1)";
+  clone.style.transition =
+    `left ${DURATION}ms ${ease}, top ${DURATION}ms ${ease}, ` +
+    `width ${DURATION}ms ${ease}, height ${DURATION}ms ${ease}`;
+  // Force a reflow so the transition starts from the current (hover) box.
+  void clone.offsetWidth;
+  clone.style.left = target.left + "px";
+  clone.style.top = target.top + "px";
+  clone.style.width = target.width + "px";
+  clone.style.height = target.height + "px";
+
+  let done = false;
+  const end = () => {
+    if (done) return;
+    done = true;
+    pageEl.style.opacity = "";
+    clone.remove();
+  };
+  clone.addEventListener("transitionend", (e) => {
+    if (e.propertyName === "height" || e.propertyName === "width") end();
   });
-
-  setTimeout(() => clone.remove(), 480);
+  setTimeout(end, DURATION + 120);
 }
 
 // Card click: open preview when the file is viewable (image/video/pdf/code).
@@ -2690,10 +2801,10 @@ const SWEEP_DURATION = 1500;   // wave of grains breaking loose — a touch long
 const COLLAPSE_DELAY = 1200;
 const FADE_IN_MS     = 180;    // canvas crossfades over the live card, grains stay still meanwhile — longer = imperceptible hand-off
 const TILE_SIZE      = 1.0;    // finer grain = reads as sand, not confetti
-const DRIFT_X        = 8;      // gentle sideways scatter as grains fall
-const PUFF_Y         = 3;      // tiny initial lift before gravity takes over — decays fast, gives the fall a soft "breath"
+const DRIFT_X        = 110;    // px: how far grains spread sideways (wide, airy scatter)
+const PUFF_Y         = 16;     // px: soft upward lift as a grain breaks loose, then it arcs outward and down
 const GRAVITY        = 0.00065; // gentler downward pull — grains drift down like dust, not snap like rocks
-const START_SPEED     = 0.02;   // px/ms: grains ease into motion instead of jumping
+const START_SPEED     = 0.012;  // px/ms: grains ease into motion instead of jumping
 const NOISE_AMP      = 0;      // subtle jitter, not chaotic
 
 function __dissolveHash(n) {
@@ -2828,6 +2939,7 @@ function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY) {
   const cap = Math.ceil(W / G) * Math.ceil(H / G);
   const x = new Float32Array(cap), y = new Float32Array(cap), vx = new Float32Array(cap);
   const g = new Float32Array(cap), delay = new Float32Array(cap), col = new Uint32Array(cap);
+  const lift = new Float32Array(cap), ph = new Float32Array(cap);
   const maxDist = Math.hypot(cssW, cssH) || 1;
   let n = 0;
   for (let yy = 0; yy < H; yy += G) {
@@ -2839,14 +2951,19 @@ function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY) {
       const cx = xx / dpr;
       const dist = Math.hypot(cx - epX, cy - epY);
       x[n] = xx; y[n] = yy;
-      vx[n] = Math.random() - 0.5;
+      // Wide, natural spread: bell-shaped random sideways speed + a push away
+      // from the epicenter, so the cloud opens up like a puff of dust.
+      const away = (cx - epX) / (cssW || 1);              // -1 … 1
+      vx[n] = (Math.random() + Math.random() - 1) * 1.6 + away * 1.2;
+      lift[n] = 0.4 + Math.random() * 1.3;
+      ph[n] = Math.random() * 6.2832;
       g[n] = 0.8 + Math.random() * 0.5;                       // each grain falls a bit differently
-      delay[n] = ((cy / cssH) * 0.7 + (dist / maxDist) * 0.3) * SWEEP_DURATION + Math.random() * 180;
+      delay[n] = ((cy / cssH) * 0.7 + (dist / maxDist) * 0.3) * SWEEP_DURATION + Math.random() * 380;
       col[n] = c;
       n++;
     }
   }
-  return { n, G, x, y, vx, g, delay, col };
+  return { n, G, x, y, vx, g, delay, col, lift, ph };
 }
 
 function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY) {
@@ -2941,7 +3058,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
   card.style.boxSizing = "border-box";
   card.style.overflow = "hidden";
 
-  const padX = 40, padTop = 24;
+  const padX = 150, padTop = 60;
   const padBottom = Math.min(340, Math.max(200, window.innerHeight - startRect.top + 40));
   // Match the screen's real resolution (a 1x snapshot over a 2x card looks blurry -> visible "pop").
   // Only step down if the pixel buffer would get too big.
@@ -2967,7 +3084,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
     if (!grains.n) {
       await __dissolveFloatFallback(card);
     } else {
-      const { n, G, x: gx, y: gy, vx: gvx, g: gg, delay: gdelay, col: gcol } = grains;
+      const { n, G, x: gx, y: gy, vx: gvx, g: gg, delay: gdelay, col: gcol, lift: glift, ph: gph } = grains;
       const ox = Math.round(padX * dpr), oy = Math.round(padTop * dpr);
       const OW = Math.ceil((width + padX * 2) * dpr);
       const OH = Math.ceil((height + padTop + padBottom) * dpr);
@@ -2987,6 +3104,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
       const img = octx.createImageData(OW, OH);
       const buf = new Uint32Array(img.data.buffer);
       const fadeZone = 130 * dpr;            // grains dissolve smoothly before the canvas edge
+      const fadeZoneX = 100 * dpr;           // …and before the left/right edges
       const gravDev = GRAVITY * dpr;
       const v0Dev = START_SPEED * dpr;
       const driftDev = DRIFT_X * dpr;
@@ -3019,10 +3137,15 @@ async function playDeleteDissolve(card, clickX, clickY) {
             if (life >= 1) continue;
             alive = true;
             const tSec = local * 0.55;
-            px = gx[i] + gvx[i] * driftDev * life;
+            // Sideways spread eases OUT (fast start, glides to a stop) and a slow
+            // sway makes each grain wander instead of travelling in a straight line.
+            const inv = 1 - life;
+            const driftEase = 1 - inv * inv * inv;
+            const sway = Math.sin(local * 0.0016 + gph[i]) * 7 * dpr * Math.min(1, life * 5);
+            px = gx[i] + gvx[i] * driftDev * driftEase + sway;
             // Tiny soft "lift" right as the grain breaks loose (decays in ~150ms),
             // then gravity takes over — reads as a gentle breath, not a hard drop.
-            const puff = puffDev * Math.exp(-local / 150);
+            const puff = puffDev * glift[i] * Math.exp(-local / 320);
             py = gy[i] - puff + v0Dev * local + gravDev * gg[i] * tSec * tSec;
             // stays solid while falling, fades smoothly near the end
             let a = 1;
@@ -3034,6 +3157,11 @@ async function playDeleteDissolve(card, clickX, clickY) {
             if (room < fadeZone) {
               const t = Math.max(0, room / fadeZone);
               a *= t * t * (3 - 2 * t); // smoothstep — no hard edge cutoff
+            }
+            const roomX = Math.min(px + ox, OW - (px + ox));
+            if (roomX < fadeZoneX) {
+              const t = Math.max(0, roomX / fadeZoneX);
+              a *= t * t * (3 - 2 * t);
             }
             if (a <= 0.01) continue;
             if (a < 1) c = (c & 0x00ffffff) | ((((c >>> 24) * a) | 0) << 24);
@@ -4382,6 +4510,7 @@ async function loadImageForAnnot(url, scroll, loader) {
 
   scroll.innerHTML = "";
   scroll.appendChild(page);
+  finishImageOpenZoom(page);
   attachDrawingHandlers(canvas, 0);
   updateCursor();
   pushHistory();

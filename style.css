@@ -306,11 +306,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 6px;
-  scrollbar-width: thin;
 }
-.folder-tabs::-webkit-scrollbar { height: 6px; }
-.folder-tabs::-webkit-scrollbar-track { background: transparent; }
-.folder-tabs::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 .folder-tab {
   flex-shrink: 0;
   display: flex;
@@ -1381,13 +1377,6 @@ body.is-dragging-file .folder-tab-wrap {
   overflow-y: hidden;
   padding: 2px 2px 14px;
   margin-bottom: 6px;
-  scrollbar-width: thin;
-}
-.folder-picker-list::-webkit-scrollbar { height: 6px; }
-.folder-picker-list::-webkit-scrollbar-track { background: transparent; }
-.folder-picker-list::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 3px;
 }
 .folder-picker-item {
   flex: 0 0 auto;
@@ -1561,7 +1550,6 @@ body.is-dragging-file .folder-tab-wrap {
 .annot-toolbar {
   display: none !important;
 }
-.annot-toolbar::-webkit-scrollbar { display: none; }
 
 .annot-tool-group {
   display: flex;
@@ -1689,13 +1677,7 @@ body.is-dragging-file .folder-tab-wrap {
   align-items: center;
   padding: 10px;
   gap: 10px;
-  scrollbar-width: thin;
-  scrollbar-color: #2a2f3a transparent;
 }
-.annot-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-.annot-scroll::-webkit-scrollbar-track { background: transparent; }
-.annot-scroll::-webkit-scrollbar-thumb { background: #2a2f3a; border-radius: 8px; }
-.annot-scroll::-webkit-scrollbar-thumb:hover { background: #3a4152; }
 
 /* Page / image container – annotations stick to content */
 .annot-page {
@@ -1790,8 +1772,6 @@ body.is-dragging-file .folder-tab-wrap {
   background: #0b0e14;
   max-height: calc(100vh - 160px);
   tab-size: 2;
-  scrollbar-width: thin;
-  scrollbar-color: #2a2f3a transparent;
 }
 /* highlight.js paints its own colors onto <code>; keep our dark panel as
    the single background so it doesn't double up or clash. */
@@ -1807,13 +1787,6 @@ body.is-dragging-file .folder-tab-wrap {
   white-space: pre;
   display: block;
 }
-.annot-code-wrap pre::-webkit-scrollbar { width: 8px; height: 8px; }
-.annot-code-wrap pre::-webkit-scrollbar-track { background: transparent; }
-.annot-code-wrap pre::-webkit-scrollbar-thumb {
-  background: #2a2f3a;
-  border-radius: 8px;
-}
-.annot-code-wrap pre::-webkit-scrollbar-thumb:hover { background: #3a4152; }
 .annot-scroll.is-text .annot-code-wrap pre {
   flex: 1;
   min-height: 0; /* required so overflow:auto works inside flex */
@@ -2321,3 +2294,42 @@ header, .toolbar {
 @media (pointer: coarse) {
   .file-card { -webkit-user-select: none; user-select: none; }
 }
+
+
+/* ===== Thin custom scrollbars (see scrollbar.js) =====
+   Native scrollbars are hidden everywhere; scrollbar.js draws a hair-thin
+   overlay bar for each scrollable area instead. */
+html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+.ts-track {
+  position: fixed;
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+  border-radius: 999px;
+  transition: opacity .25s ease;
+}
+.ts-track.ts-y { width: 6px; }
+.ts-track.ts-x { height: 6px; }
+.ts-track.ts-show { opacity: 1; pointer-events: auto; }
+.ts-thumb {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(113, 113, 122, .55);
+  transition: background .15s ease, width .15s ease, height .15s ease;
+  touch-action: none;
+}
+/* resting = 3px hair line hugging the edge, hover/drag = 6px */
+.ts-y .ts-thumb { right: 0; width: 3px; }
+.ts-x .ts-thumb { bottom: 0; height: 3px; }
+.ts-track:hover .ts-thumb, .ts-track.ts-drag .ts-thumb { background: rgba(82, 82, 91, .8); }
+.ts-y:hover .ts-thumb, .ts-y.ts-drag .ts-thumb { width: 6px; }
+.ts-x:hover .ts-thumb, .ts-x.ts-drag .ts-thumb { height: 6px; }
+/* on dark surfaces (code / pdf viewer) */
+.ts-dark .ts-thumb { background: rgba(255, 255, 255, .28); }
+.ts-dark:hover .ts-thumb, .ts-dark.ts-drag .ts-thumb { background: rgba(255, 255, 255, .55); }
+
+/* Files waiting in the upload queue (100-file batches upload 4 at a time) */
+.upload-item.queued { opacity: .6; }
+.upload-item.queued .upload-item-status { color: var(--text-muted); }
