@@ -2855,9 +2855,6 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   width: 100%;
   height: 130px;
   display: block;
-  filter: drop-shadow(0 0 8px rgba(180, 230, 255, 0.5))
-          drop-shadow(0 0 20px rgba(96, 165, 250, 0.4))
-          drop-shadow(0 0 40px rgba(37, 99, 235, 0.25));
 }
 /* legacy bar classes kept inert in case any residual markup appears */
 .mr-audio-bar { display: none; }

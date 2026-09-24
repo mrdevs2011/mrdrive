@@ -5627,7 +5627,7 @@ function mountMrAudioPlayer(host, opts) {
     }
   })();
 
-  function strokeThread(pts, width, color, blur) {
+  function strokeThread(pts, width, color) {
     if (pts.length < 3) return;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -5641,9 +5641,7 @@ function mountMrAudioPlayer(host, opts) {
     ctx.lineWidth = width;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    if (blur > 0) { ctx.shadowBlur = blur; ctx.shadowColor = color; }
     ctx.stroke();
-    ctx.shadowBlur = 0;
   }
 
   function fillMembrane(top, bot, c0, c1) {
@@ -5745,8 +5743,7 @@ function mountMrAudioPlayer(host, opts) {
       }
       const a = th.alpha * (0.7 + e * 0.4);
       const col = "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")";
-      const blur = th.kind === 0 ? 8 + e * 6 : (th.kind === 1 ? 3 : 1.5);
-      strokeThread(ptsBuf, th.thick * (0.6 + e * 0.5), col, blur);
+      strokeThread(ptsBuf, th.thick * (0.6 + e * 0.5), col);
     }
 
     ctx.globalCompositeOperation = "screen";
