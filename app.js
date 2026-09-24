@@ -1706,26 +1706,57 @@ async function createFolder(fileIds) {
     return;
   }
 
-  const { error } = await sb.from(FOLDERS_TABLE).insert({
+  // OPTIMISTIC: Add folder to local state immediately (no wait for DB)
+  const optimisticFolder = {
+    id: "temp-" + Date.now(),
+    name: trimmed,
+    user_id: user.id,
+    created_at: new Date().toISOString()
+  };
+  allFolders.push(optimisticFolder);
+  
+  // Show folder instantly
+  renderToolbar();
+  showToast(`Folder created: ${trimmed}`, "success");
+  
+  if (dropIds) {
+    currentFolder = trimmed;
+    syncFolderUrl(trimmed);
+    renderFiles();
+  } else {
+    currentFolder = trimmed;
+    syncFolderUrl(trimmed);
+    renderFiles();
+  }
+
+  // Background sync to database
+  const { data, error } = await sb.from(FOLDERS_TABLE).insert({
     user_id: user.id,
     name: trimmed
-  });
+  }).select().single();
 
   if (error) {
-    showAlert("Error: " + error.message);
+    // Revert optimistic update on error
+    allFolders = allFolders.filter(f => f.id !== optimisticFolder.id);
+    renderToolbar();
+    showAlert("Error creating folder: " + error.message);
     return;
   }
 
+  // Replace temporary ID with real ID from database
+  const idx = allFolders.findIndex(f => f.id === optimisticFolder.id);
+  if (idx !== -1) {
+    allFolders[idx] = data;
+    renderToolbar();
+  }
+
   if (dropIds) {
-    // Files were dropped on "+ Folder": create it, put them inside, stay in the current view.
+    // Files were dropped on "+ Folder": move them inside
     await moveFilesToFolder(dropIds, trimmed);
     loadFiles();
     return;
   }
 
-  currentFolder = trimmed;
-  syncFolderUrl(trimmed);
-  showToast(`Folder created: ${trimmed}`);
   loadFiles();
 }
 
@@ -1854,6 +1885,101 @@ document.addEventListener("click", (e) => {
     if (!card.contains(e.target)) card.classList.remove("actions-open");
   });
 });
+
+// Image preview hover: show enlarged preview on hover
+fileListEl.addEventListener("mouseenter", (e) => {
+  const card = e.target.closest(".file-card");
+  if (!card) return;
+  const img = card.querySelector("img.file-type-icon.file-thumb");
+  if (!img) return;
+  
+  const handleMouseMove = (moveEvent) => {
+    const thumb = card.querySelector("img.file-type-icon.file-thumb");
+    if (!thumb) return;
+    
+    // Create preview container if it doesn't exist
+    let previewOverlay = document.getElementById("file-preview-overlay");
+    if (!previewOverlay) {
+      previewOverlay = document.createElement("div");
+      previewOverlay.id = "file-preview-overlay";
+      previewOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9000;
+        animation: fadeIn 0.2s ease;
+        padding: 20px;
+      `;
+      
+      // Add close button
+      const closeBtn = document.createElement("button");
+      closeBtn.style.cssText = `
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(0,0,0,0.5);
+        border: 1px solid rgba(255,255,255,0.2);
+        color: white;
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        transition: all 0.2s ease;
+      `;
+      closeBtn.innerHTML = "×";
+      closeBtn.onmouseover = () => {
+        closeBtn.style.background = "rgba(0,0,0,0.8)";
+        closeBtn.style.borderColor = "rgba(255,255,255,0.4)";
+      };
+      closeBtn.onmouseout = () => {
+        closeBtn.style.background = "rgba(0,0,0,0.5)";
+        closeBtn.style.borderColor = "rgba(255,255,255,0.2)";
+      };
+      closeBtn.onclick = () => {
+        previewOverlay.remove();
+        document.getElementById("file-preview-overlay").remove();
+      };
+      
+      previewOverlay.appendChild(closeBtn);
+      document.body.appendChild(previewOverlay);
+    }
+    
+    // Create preview image wrapper
+    let previewImg = previewOverlay.querySelector("img");
+    if (!previewImg) {
+      previewImg = document.createElement("img");
+      previewImg.style.cssText = `
+        max-width: 80vw;
+        max-height: 80vh;
+        object-fit: contain;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      `;
+      previewOverlay.appendChild(previewImg);
+    }
+    previewImg.src = thumb.src;
+  };
+  
+  const handleMouseLeave = () => {
+    card.removeEventListener("mousemove", handleMouseMove);
+    card.removeEventListener("mouseleave", handleMouseLeave);
+    const overlay = document.getElementById("file-preview-overlay");
+    if (overlay) overlay.remove();
+  };
+  
+  card.addEventListener("mousemove", handleMouseMove);
+  card.addEventListener("mouseleave", handleMouseLeave);
+}, true);
 
 function updateSelectionClasses() {
   fileListEl.querySelectorAll(".file-card").forEach((card) => {
@@ -2032,9 +2158,8 @@ let touchHoldActive = false;
     touchHoldActive = true;
     clear();
     card = c;
-    // Native touch drag-and-drop would cancel our long-press; moving files on a
-    // phone is done through the menu ("Move to folder…") instead.
-    c.draggable = false;
+    // Enable drag-and-drop on touch too - allow users to drag files to folder tabs
+    c.draggable = true;
     dragCard = c;
     const t = e.touches[0];
     startX = t.clientX; startY = t.clientY;
@@ -2950,8 +3075,8 @@ function showFileContextMenu(clientX, clientY, ids) {
     <button type="button" class="ctx-item" role="menuitem" data-action="download">
       ${ICON_DOWNLOAD}<span>${dlLabel}</span>
     </button>
-    <button type="button" class="ctx-item" role="menuitem" data-action="move">
-      ${ICON_FOLDER}<span>${n === 1 ? "Move to folder…" : `Move ${n} files to folder…`}</span>
+    <button type="button" class="ctx-item" role="menuitem" data-action="move" title="Drag to a folder tab">
+      ${ICON_FOLDER}<span>${n === 1 ? "Drag to folder" : `Drag ${n} files to folder`}</span>
     </button>
     ${getFilteredFiles().length > n ? `<button type="button" class="ctx-item" role="menuitem" data-action="selectall">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg><span>Select all</span>

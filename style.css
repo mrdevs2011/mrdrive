@@ -499,6 +499,7 @@ body.is-dragging-file .folder-tab-wrap {
   justify-content: space-between;
   align-items: center;
   overflow: hidden;
+  touch-action: manipulation;
   /* Classic ease — gap closes smoothly, rows below slide up */
   transition:
     border-color 0.3s ease,
@@ -2082,6 +2083,28 @@ img.file-type-icon.file-thumb,
   filter: none !important;
   transform: none !important;
   color: transparent;
+}
+
+/* Hover preview: enlarged image overlay */
+.file-card:has(img.file-type-icon.file-thumb):hover::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  pointer-events: none;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .file-thumb-pending {
   display: inline-block;
