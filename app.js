@@ -5553,12 +5553,13 @@ function mountMrAudioPlayer(host, opts) {
   const BIN_N = 128;
   let smoothBins = new Float32Array(BIN_N).fill(0.2);
   let smoothEnergy = 0.25;
-  const SMOOTH = 0.18;
+  const SMOOTH = 0.14;
 
   function envelope(nx) {
-    // softer diamond: ends still taper but keep ~25% energy so edges react to audio
+    // diamond skeleton: sharp pointed ends, full body in center
+    // edges keep a small floor so they still react, but shape is restored
     const s = Math.sin(Math.PI * nx);
-    return 0.22 + 0.78 * Math.pow(s, 1.15);
+    return 0.08 + 0.92 * Math.pow(s, 1.55);
   }
 
   function sampleFreq(nx) {
@@ -5678,7 +5679,7 @@ function mountMrAudioPlayer(host, opts) {
       const nx = i / n;
       xs[i] = nx * w;
       envs[i] = envelope(nx);
-      fms[i] = 0.35 + binAt(nx) * 1.65;
+      fms[i] = 0.25 + binAt(nx) * 1.55;
     }
 
     ctx.save();
@@ -5694,9 +5695,9 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq + phase) * 0.5 +
           Math.sin(nx * Math.PI * th.freq * 1.5 + phase * 1.1) * 0.28 +
           Math.sin(nx * Math.PI * th.freq * 0.5 + phase * 0.7) * 0.14;
-        const amp = h * 0.42 * th.amp * envs[i] * fms[i] * e;
+        const amp = h * 0.48 * th.amp * envs[i] * fms[i] * e;
         const y = midY + wave * amp;
-        const half = h * 0.05 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
+        const half = h * 0.065 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
         yTop[i] = y - half;
         yBot[i] = y + half;
       }
@@ -5718,7 +5719,7 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq + phase) * 0.5 +
           Math.sin(nx * Math.PI * th.freq * 1.6 + phase * 1.15) * 0.27 +
           Math.sin(nx * Math.PI * th.freq * 0.5 + phase * 0.65) * 0.14;
-        const amp = h * 0.44 * th.amp * envs[i] * fms[i] * e;
+        const amp = h * 0.52 * th.amp * envs[i] * fms[i] * e;
         ys[i] = midY + wave * amp;
       }
       const a = th.a * (0.7 + e * 0.35);
