@@ -4,175 +4,203 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MRdrive → Claude</title>
+<link rel="icon" type="image/png" href="/assets/logo.png">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  :root {
+    --primary: #2563eb;
+    --accent: #3b82f6;
+    --bg: #f1f5fb;
+    --surface: #ffffff;
+    --border: #dbe4f0;
+    --text: #0f172a;
+    --muted: #64748b;
+  }
   body {
-    background: #fafafa; color: #18181b;
-    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     padding: 24px;
   }
   .card {
-    background: #fff; border: 1px solid #e4e4e7; border-radius: 16px;
-    padding: 28px 32px 32px; max-width: 560px; width: 100%;
-  }
-  .topbar {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    max-width: 440px;
+    width: 100%;
+    box-shadow: 0 8px 28px rgba(37, 99, 235, 0.06);
   }
   .back {
-    display: inline-flex; align-items: center; gap: 6px;
-    color: #52525b; text-decoration: none; font-size: 13px; font-weight: 500;
-    padding: 6px 10px; border-radius: 8px; margin: -6px 0 -6px -10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 20px;
   }
-  .back:hover { background: #f4f4f5; color: #18181b; }
-  .back svg { flex-shrink: 0; }
-  h1 { font-size: 20px; margin-bottom: 6px; }
-  p.sub { color: #71717a; font-size: 14px; margin-bottom: 22px; line-height: 1.5; }
-  .row { margin-bottom: 22px; }
+  .back:hover { color: var(--primary); }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .brand img { width: 28px; height: 28px; }
+  h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
+  .sub {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 8px 0 22px;
+  }
   label {
-    display: block; font-size: 12px; color: #71717a; margin-bottom: 6px;
-    text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600;
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 8px;
   }
   .urlbox {
-    display: flex; align-items: center; gap: 8px;
-    background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #eef3fb;
+    border: 1px solid var(--border);
+    border-radius: 12px;
     padding: 8px 10px;
   }
   .urlbox code {
-    flex: 1; font-size: 12px; word-break: break-all;
-    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-    letter-spacing: 0.3px; line-height: 1.45;
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    word-break: break-all;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    color: var(--text);
+    line-height: 1.45;
   }
   .iconbtn {
-    border: none; background: transparent; color: #52525b; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    flex-shrink: 0;
   }
-  .iconbtn:hover { background: #e4e4e7; color: #18181b; }
-  .iconbtn.copied { color: #16a34a; }
-  .muted { color: #71717a; font-size: 13px; margin-top: 8px; line-height: 1.6; }
-
-  .gate { text-align: center; padding: 8px 0 4px; }
-  .gate p { color: #71717a; font-size: 14px; margin-bottom: 18px; line-height: 1.6; }
-  .gate a.btn {
-    display: inline-block; background: #18181b; color: #fff; text-decoration: none;
-    border: none; border-radius: 8px; padding: 10px 18px; font-size: 14px;
+  .iconbtn:hover { background: #dbe7fb; color: var(--primary); }
+  .iconbtn.copied { color: var(--primary); }
+  .hint {
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.5;
   }
+  .steps {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+  .steps h2 {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+  }
+  .steps ol {
+    padding-left: 18px;
+    font-size: 13.5px;
+    color: var(--text);
+    line-height: 1.7;
+  }
+  .steps a { color: var(--primary); text-decoration: none; font-weight: 500; }
+  .steps a:hover { text-decoration: underline; }
+  .gate { text-align: center; padding: 12px 0 4px; }
+  .gate p { color: var(--muted); font-size: 14px; margin-bottom: 16px; line-height: 1.55; }
+  .btn {
+    display: inline-block;
+    background: var(--primary);
+    color: #fff;
+    text-decoration: none;
+    border: none;
+    border-radius: 10px;
+    padding: 11px 18px;
+    font-size: 14px;
+    font-weight: 550;
+  }
+  .btn:hover { filter: brightness(1.05); }
   .skeleton {
-    height: 38px; border-radius: 10px; background: #f0f0f1;
+    height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #e8eef8, #f5f8fc, #e8eef8);
+    background-size: 200% 100%;
     animation: pulse 1.2s ease-in-out infinite;
   }
-  @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-
-  .name-badge {
-    display: inline-block; background: #f4f4f5; border-radius: 6px;
-    padding: 4px 10px; font-size: 13px; font-weight: 600; margin-bottom: 12px;
+  @keyframes pulse {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
   }
-
-  .howto {
-    background: #fafafa;
-    border: 1px solid #e4e4e7;
-    border-radius: 12px;
-    padding: 16px 18px;
-    margin-top: 4px;
-  }
-  .howto h2 {
-    font-size: 13px; font-weight: 600; color: #3f3f46;
-    margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.03em;
-  }
-  .howto ol {
-    margin: 0; padding-left: 20px;
-    font-size: 14px; color: #3f3f46; line-height: 1.75;
-  }
-  .howto ol li { margin-bottom: 6px; }
-  .howto ol li:last-child { margin-bottom: 0; }
-  .howto .path {
-    font-family: "SF Mono", Menlo, Consolas, monospace;
-    font-size: 12px;
-    background: #e4e4e7;
-    padding: 1px 6px;
-    border-radius: 4px;
-    color: #18181b;
-  }
-  .howto .tip {
-    margin-top: 12px; padding-top: 12px; border-top: 1px solid #e4e4e7;
-    font-size: 13px; color: #71717a; line-height: 1.55;
+  .badge {
+    display: inline-block;
+    background: #dbe7fb;
+    color: var(--primary);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-bottom: 14px;
   }
 </style>
 </head>
 <body>
   <div class="card">
-    <div class="topbar">
-      <a class="back" href="/">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/>
-        </svg>
-        MRdrive ga qaytish
-      </a>
-    </div>
+    <a class="back" href="/">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/>
+      </svg>
+      Orqaga
+    </a>
 
-    <h1>Claude ga ulanish</h1>
-    <p class="sub" id="subline">
-      Quyidagi havolani Claude sozlamalariga qo‘ying — keyin Claude MRdrive dagi
-      fayllaringizni ko‘ra oladi va yuklay oladi.
-    </p>
+    <div class="brand">
+      <img src="/assets/logo.png" alt="" width="28" height="28">
+      <h1>Claude ulanish</h1>
+    </div>
+    <p class="sub" id="subline">MCP havolasini Claude sozlamalariga qo‘ying.</p>
 
     <div id="gate" class="gate" style="display:none;"></div>
 
     <div id="content" style="display:none;">
-      <div class="row">
-        <span class="name-badge" id="nameBadge"></span>
-        <label>Sizning MCP havolangiz</label>
-        <div class="urlbox">
-          <button class="iconbtn" id="copyBtn" title="Nusxalash">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15V5C5 4.44772 5.44772 4 6 4H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </button>
-          <code id="mcpUrl">••••••••••••••••••••••••••••••••••••••••••••••••</code>
-          <button class="iconbtn" id="eyeBtn" title="Ko'rsatish / Yashirish">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" id="eyeIcon"><path d="M2 12C2 12 5.5 5 12 5C18.5 5 22 12 22 12C22 12 18.5 19 12 19C5.5 19 2 12 2 12Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
-          </button>
-        </div>
-        <p class="muted">
-          Bu havola faqat sizniki. Name + token birga Claude da hisobingizni aniqlaydi.
-        </p>
+      <span class="badge" id="nameBadge"></span>
+      <label>MCP havola</label>
+      <div class="urlbox">
+        <button class="iconbtn" id="copyBtn" title="Nusxalash" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15V5C5 4.44772 5.44772 4 6 4H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <code id="mcpUrl">••••••••••••••••••••••••••••••••••••••••••••••••</code>
+        <button class="iconbtn" id="eyeBtn" title="Ko'rsatish" type="button">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" id="eyeIcon"><path d="M2 12C2 12 5.5 5 12 5C18.5 5 22 12 22 12C22 12 18.5 19 12 19C5.5 19 2 12 2 12Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
       </div>
+      <p class="hint">Faqat sizniki. Boshqaga bermang.</p>
 
-      <div class="howto">
-        <h2>Claude da qayerga qo‘yiladi?</h2>
+      <div class="steps">
+        <h2>Qanday ulash</h2>
         <ol>
-          <li>
-            Brauzerda oching:
-            <a href="https://claude.ai" target="_blank" rel="noopener">claude.ai</a>
-          </li>
-          <li>
-            Chap pastki burchakdagi profilingiz →
-            <span class="path">Sozlamalar</span>
-          </li>
-          <li>
-            Chap menyudan
-            <span class="path">Ulashlar</span>
-            ni tanlang
-          </li>
-          <li>
-            <span class="path">Maxsus ulanish qo'shish</span>
-            (yoki “Add connector”) tugmasini bosing
-          </li>
-          <li>
-            <strong>Remote MCP server URL</strong> maydoniga yuqoridagi havolani
-            joylashtiring (ko‘z belgisi bilan ochib, nusxalang)
-          </li>
-          <li>
-            Nom bering (masalan: <em>MRdrive — Muhammadrasul</em>) va saqlang
-          </li>
-          <li>
-            Chatda sinab ko‘ring:
-            <em>«MRdrive da nima bor?»</em>
-          </li>
+          <li><a href="https://claude.ai" target="_blank" rel="noopener">claude.ai</a> → Sozlamalar → Ulashlar</li>
+          <li>«Maxsus ulanish» → MCP URL maydoniga havolani qo‘ying</li>
+          <li>Saqlang va chatda sinab ko‘ring</li>
         </ol>
-        <p class="tip">
-          Bir nechta MRdrive hisobi bo‘lsa — har biri uchun alohida connector
-          qo‘shing. Claude da ular name orqali farqlanadi.
-        </p>
       </div>
     </div>
   </div>
@@ -195,13 +223,13 @@
         gateEl.style.display = "none";
         contentEl.style.display = "block";
         document.getElementById("nameBadge").textContent = name || "";
-        if (name) subline.textContent = "Claude uchun shaxsiy ulanish — " + name;
+        if (name) subline.textContent = name + " uchun shaxsiy MCP ulanish";
 
         const urlEl = document.getElementById("mcpUrl");
         const eyeIcon = document.getElementById("eyeIcon");
         const eyeBtn = document.getElementById("eyeBtn");
         const copyBtn = document.getElementById("copyBtn");
-        const masked = "•".repeat(Math.min(mcpUrl.length, 56));
+        const masked = "•".repeat(Math.min(mcpUrl.length, 48));
         let revealed = false;
 
         const EYE_OPEN = eyeIcon.innerHTML;
@@ -227,7 +255,7 @@
       showGate('<div class="skeleton"></div>');
 
       if (typeof SUPABASE_URL === "undefined" || !SUPABASE_URL || !window.supabase) {
-        showGate('<p>Server sozlamalari yuklanmadi. Birozdan so\'ng qayta urinib ko\'ring.</p>');
+        showGate("<p>Server sozlamalari yuklanmadi.</p>");
         return;
       }
 
@@ -235,10 +263,10 @@
       const { data: { session } } = await sb.auth.getSession();
 
       if (!session) {
-        subline.textContent = "Bu sahifa faqat tizimga kirgan foydalanuvchilar uchun.";
+        subline.textContent = "Avval tizimga kiring.";
         showGate(
-          '<p>MCP havolangizni ko\'rish uchun avval MRdrive\'ga tizimga kiring.</p>' +
-          '<a class="btn" href="/login/">Tizimga kirish</a>'
+          "<p>MCP havolani ko‘rish uchun tizimga kiring.</p>" +
+          '<a class="btn" href="/login/">Kirish</a>'
         );
         return;
       }
@@ -249,15 +277,15 @@
 
       if (storedToken && /^[0-9a-f]{48}$/i.test(storedToken) && storedName) {
         const proto = location.protocol.replace(":", "");
-        const mcpUrl = `${proto}://${location.host}/api/mcp?name=${encodeURIComponent(storedName)}&token=${storedToken}`;
+        const mcpUrl = proto + "://" + location.host + "/api/mcp?name=" +
+          encodeURIComponent(storedName) + "&token=" + storedToken;
         showUrl(mcpUrl, storedName);
         return;
       }
 
-      // Token yo'q — account tahrirlanmaydi; asosiy sahifada qayta login qilish kerak
       showGate(
-        '<p>MCP token hali yaratilmagan. Asosiy sahifada <strong>username va parol</strong> bilan qayta tizimga kiring — token avtomatik saqlanadi. Keyin bu sahifaga qayting.</p>' +
-        '<a class="btn" href="/">MRdrive ga qaytish</a>'
+        "<p>Token hali yo‘q. Username va parol bilan qayta kiring.</p>" +
+        '<a class="btn" href="/">MRdrive</a>'
       );
     })();
   </script>
