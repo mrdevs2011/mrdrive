@@ -1157,16 +1157,20 @@ async function logout() {
 }
 
 // ==========================================
-// USAGE — Supabase Free tier storage (1 GB) in the settings menu
+// USAGE — Supabase storage quota in the settings menu
 // Red = video, yellow = images, blue = everything else.
 // Totals come from the get_storage_usage() SQL function (usage-stats.sql),
 // which sums the WHOLE project. If it isn't installed yet we fall back to the
 // signed-in user's own files and say so.
 // ==========================================
-const STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024; // Supabase Free plan: 1 GB
+// The real limit is stored in the database (app_settings.storage_limit_bytes) and
+// returned by get_storage_usage(); Supabase doesn't expose the plan quota to the
+// browser. 1 GB (Free plan) is only the fallback until usage-stats.sql is run.
+const DEFAULT_STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024;
 let usageFetchedAt = 0;
 
 function renderStorageUsage(u, note) {
+  const STORAGE_LIMIT_BYTES = Number(u.limit) > 0 ? Number(u.limit) : DEFAULT_STORAGE_LIMIT_BYTES;
   const total = (u.video || 0) + (u.image || 0) + (u.file || 0);
   const pct = (total / STORAGE_LIMIT_BYTES) * 100;
   const pctText = total > 0 && pct < 0.1 ? "<0.1%" : (pct >= 10 ? Math.round(pct) : pct.toFixed(1)) + "%";
