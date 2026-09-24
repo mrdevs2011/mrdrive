@@ -48,245 +48,150 @@ body { background: var(--bg); color: var(--text); }
   z-index: 20000;
   overflow: hidden;
   opacity: 1;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.32s ease;
 }
 #boot-loader.is-hiding { opacity: 0; pointer-events: none; }
 
-/* --- Splash scene (jami 3s, bir marta) ---
-   0.0–0.4s  logo paydo bo'ladi, fayllar/rasmlar/media atrofida aylana boshlaydi
-   0.4–1.6s  hammasi logo atrofida orbitada aylanadi
-   1.6–2.25s "WHOOP" — girdob logo markaziga so'rib oladi (spiral, tezlashib)
-   2.25s     zarba: logo portlab kattalashadi, halqa + uchqunlar
-   2.3–2.75s MRdrive yozuvi ochiladi, so'ng butun sahna kattalashib app ichiga kiradi */
+/* Minimal classic splash: logo, quiet orbit, wordmark, thin bar. */
 .splash-scene {
   position: relative;
   width: 0;
   height: 0;
-  margin-top: -14px;
-  transition: transform 0.25s cubic-bezier(.5,0,.9,.4);
+  margin-top: -10px;
+  transition: transform 0.32s cubic-bezier(.4, 0, .2, 1);
 }
-#boot-loader.is-hiding .splash-scene { transform: scale(1.35); }
+#boot-loader.is-hiding .splash-scene { transform: scale(1.08); }
 
-/* --- Girdob (whoosh) --- */
-.sp-swirl {
-  position: absolute;
-  left: -170px; top: -170px;
-  width: 340px; height: 340px;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg,
-    transparent 0%,
-    color-mix(in srgb, var(--accent) 55%, transparent) 22%,
-    transparent 45%,
-    color-mix(in srgb, var(--text) 22%, transparent) 72%,
-    transparent 100%);
-  -webkit-mask: radial-gradient(circle, transparent 36%, #000 40%, #000 60%, transparent 66%);
-          mask: radial-gradient(circle, transparent 36%, #000 40%, #000 60%, transparent 66%);
-  opacity: 0;
-  animation: spSwirl 3s cubic-bezier(.5,0,.8,.5) both;
-}
-@keyframes spSwirl {
-  0%, 40%  { opacity: 0; transform: rotate(0deg) scale(1.15); }
-  55%      { opacity: 0.55; transform: rotate(240deg) scale(1); }
-  74%      { opacity: 0.9; transform: rotate(760deg) scale(0.22); }
-  76%, 100%{ opacity: 0; transform: rotate(800deg) scale(0.1); }
-}
-
-/* --- Orbitadagi elementlar: orb > in > fx > body --- */
 .sp-orb {
   position: absolute; left: 0; top: 0; width: 0; height: 0;
-  --Rm: min(var(--r), 42vw);
+  --Rm: min(var(--r), 28vw);
   z-index: 2;
-  animation: spOrbit 2.1s var(--d) both;
+  animation: spOrbit 2.4s var(--d) both;
 }
 .sp-orb-in {
   position: absolute; left: 0; top: 0; width: 0; height: 0;
-  animation: spOrbitUp 2.1s var(--d) both;
+  animation: spOrbitUp 2.4s var(--d) both;
 }
 .sp-fx {
   position: absolute; left: 0; top: 0; width: 0; height: 0;
-  animation: spFx 2.1s var(--d) both;
+  animation: spFx 2.4s var(--d) both;
 }
 .sp-body {
   position: absolute; left: 0; top: 0;
   transform: translate(-50%, -50%);
   display: block;
-  will-change: transform;
 }
-
 @keyframes spOrbit {
-  0%   { transform: rotate(calc(var(--a) - var(--dir) * 70deg)) translateX(calc(var(--Rm) * 1.35));
-         animation-timing-function: cubic-bezier(.2,.7,.25,1); }
-  16%  { transform: rotate(var(--a)) translateX(var(--Rm));
-         animation-timing-function: cubic-bezier(.4,.1,.6,.9); }
-  58%  { transform: rotate(calc(var(--a) + var(--dir) * 150deg)) translateX(calc(var(--Rm) * .9));
-         animation-timing-function: cubic-bezier(.55,0,.95,.45); }
-  100% { transform: rotate(calc(var(--a) + var(--dir) * 620deg)) translateX(0px); }
+  0%   { transform: rotate(calc(var(--a) - var(--dir) * 40deg)) translateX(calc(var(--Rm) * 1.12)); }
+  22%  { transform: rotate(var(--a)) translateX(var(--Rm)); }
+  72%  { transform: rotate(calc(var(--a) + var(--dir) * 90deg)) translateX(calc(var(--Rm) * 0.92)); }
+  100% { transform: rotate(calc(var(--a) + var(--dir) * 210deg)) translateX(0px); }
 }
-/* Teskari aylanish — elementlar to'g'ri turib qolishi uchun */
 @keyframes spOrbitUp {
-  0%   { transform: rotate(calc(var(--dir) * 70deg - var(--a)));
-         animation-timing-function: cubic-bezier(.2,.7,.25,1); }
-  16%  { transform: rotate(calc(0deg - var(--a)));
-         animation-timing-function: cubic-bezier(.4,.1,.6,.9); }
-  58%  { transform: rotate(calc(0deg - var(--a) - var(--dir) * 150deg));
-         animation-timing-function: cubic-bezier(.55,0,.95,.45); }
-  100% { transform: rotate(calc(0deg - var(--a) - var(--dir) * 620deg)); }
+  0%   { transform: rotate(calc(var(--dir) * 40deg - var(--a))); }
+  22%  { transform: rotate(calc(0deg - var(--a))); }
+  72%  { transform: rotate(calc(0deg - var(--a) - var(--dir) * 90deg)); }
+  100% { transform: rotate(calc(0deg - var(--a) - var(--dir) * 210deg)); }
 }
 @keyframes spFx {
-  0%   { opacity: 0; transform: scale(0.3); animation-timing-function: cubic-bezier(.2,.9,.3,1.2); }
-  14%  { opacity: 1; transform: scale(1); }
-  58%  { opacity: 1; transform: scale(1); animation-timing-function: ease-in; }
-  92%  { opacity: 1; transform: scale(0.35); }
-  100% { opacity: 0; transform: scale(0.05); }
+  0%   { opacity: 0; transform: scale(0.7); }
+  18%  { opacity: 0.55; transform: scale(1); }
+  70%  { opacity: 0.45; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.4); }
+}
+.sp-icon {
+  width: 26px;
+  height: 26px;
+  opacity: 0.72;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08));
 }
 
-/* Orbita kartalari */
-.sp-icon { width: 44px; height: 44px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.18)); }
-.sp-pill {
-  display: flex; align-items: center; gap: 6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  padding: 6px 11px 6px 8px;
-  font-size: 11.5px; font-weight: 550;
-  color: var(--text-muted);
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-}
-.sp-pill i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.sp-thumb {
-  width: 46px; height: 46px;
-  border-radius: 11px;
-  display: flex; align-items: center; justify-content: center;
-  border: 2px solid #fff;
-  box-shadow: 0 5px 14px rgba(0,0,0,0.2);
-  overflow: hidden;
-}
-.sp-thumb svg { display: block; }
-.dot-blue  { background: #3b82f6; }
-.dot-green { background: #22c55e; }
-.dot-amber { background: #f59e0b; }
-.dot-pink  { background: #ec4899; }
-.dot-violet{ background: #8b5cf6; }
-
-/* --- Logo --- */
 .sp-logo {
   position: absolute;
-  left: -28px; top: -28px;
-  width: 56px; height: 56px;
+  left: -24px; top: -24px;
+  width: 48px; height: 48px;
   z-index: 3;
-  animation: spLogo 3s both;
+  animation: spLogo 2.8s both;
 }
 .sp-logo svg {
   display: block;
-  width: 56px; height: 56px;
-  border-radius: 13px;
-  box-shadow: 0 8px 24px rgba(24,24,27,0.22);
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(24,24,27,0.12);
 }
 @keyframes spLogo {
-  0%   { opacity: 0; transform: scale(0.4) rotate(-14deg); }
-  11%  { opacity: 1; transform: scale(1.1) rotate(2deg); }
-  15%  { transform: scale(1) rotate(0deg); }
-  60%  { transform: scale(1); }
-  70%  { transform: scale(0.95); }
-  74%  { transform: scale(0.88); }
-  75.5%{ transform: scale(1.42); }
-  80%  { transform: scale(0.95); }
-  84%  { transform: scale(1.06); }
-  88%, 100% { transform: scale(1); }
+  0%   { opacity: 0; transform: scale(0.92); }
+  14%  { opacity: 1; transform: scale(1); }
+  86%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
-/* --- Zarba effektlari (2.25s) --- */
-.sp-flash {
-  position: absolute;
-  left: -90px; top: -90px; width: 180px; height: 180px;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, transparent) 0%, transparent 68%);
-  opacity: 0;
-  z-index: 1;
-  animation: spFlash 3s both;
-}
-@keyframes spFlash {
-  0%, 74.5% { opacity: 0; transform: scale(0.3); }
-  76%       { opacity: 1; transform: scale(0.9); }
-  92%, 100% { opacity: 0; transform: scale(3.2); }
-}
 .sp-ring {
   position: absolute;
-  left: -30px; top: -30px; width: 60px; height: 60px;
+  left: -34px; top: -34px; width: 68px; height: 68px;
   border-radius: 50%;
-  border: 2px solid var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
   opacity: 0;
   z-index: 1;
-  animation: spRing 3s both;
+  animation: spRing 2.8s both;
 }
-.sp-ring.r2 { border-color: var(--border-strong); animation-delay: 0.09s; }
+.sp-ring.r2 {
+  left: -46px; top: -46px; width: 92px; height: 92px;
+  border-color: var(--border);
+  animation-delay: 0.12s;
+}
 @keyframes spRing {
-  0%, 74.5% { opacity: 0; transform: scale(0.8); }
-  75.5%     { opacity: 0.8; transform: scale(0.9); }
-  93%, 100% { opacity: 0; transform: scale(5); }
-}
-.sp-spark {
-  position: absolute;
-  left: -3px; top: -3px; width: 6px; height: 6px;
-  border-radius: 50%;
-  opacity: 0;
-  z-index: 1;
-  animation: spSpark 3s both;
-}
-@keyframes spSpark {
-  0%, 74.5% { opacity: 0; transform: rotate(var(--ang)) translateX(20px) scale(1); }
-  75.5%     { opacity: 1; transform: rotate(var(--ang)) translateX(26px) scale(1.2); }
-  92%, 100% { opacity: 0; transform: rotate(var(--ang)) translateX(var(--dist)) scale(0); }
+  0%, 8% { opacity: 0; transform: scale(0.92); }
+  22%    { opacity: 0.55; transform: scale(1); }
+  80%    { opacity: 0.2; transform: scale(1.04); }
+  100%   { opacity: 0; transform: scale(1.12); }
 }
 
-/* --- Wordmark --- */
 .sp-word {
   position: absolute;
-  left: -100px; width: 200px;
-  top: 46px;
+  left: -90px; width: 180px;
+  top: 38px;
   text-align: center;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
   color: var(--text);
   opacity: 0;
-  animation: spWord 0.5s cubic-bezier(.2,.8,.2,1) 2.28s both;
+  animation: spWord 0.55s cubic-bezier(.2,.8,.2,1) 0.55s both;
 }
 @keyframes spWord {
-  0%   { opacity: 0; transform: translateY(10px) scale(0.9); letter-spacing: 0.3em; }
-  100% { opacity: 1; transform: translateY(0) scale(1); letter-spacing: 0.01em; }
+  0%   { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
-/* --- Progress (2.7s) --- */
 .sp-progress {
   position: absolute;
-  left: -48px; top: 84px;
-  width: 96px; height: 3px;
-  border-radius: 3px;
+  left: -40px; top: 68px;
+  width: 80px; height: 2px;
+  border-radius: 2px;
   background: var(--border);
   overflow: hidden;
   opacity: 0;
-  animation: spProgFade 3s both;
+  animation: spProgFade 2.8s both;
 }
 .sp-progress i {
   display: block; width: 100%; height: 100%;
   background: var(--accent);
-  border-radius: 3px;
+  border-radius: 2px;
   transform-origin: left center;
   transform: scaleX(0);
-  animation: spProg 2.7s cubic-bezier(.4,0,.2,1) both;
+  animation: spProg 2.2s cubic-bezier(.4,0,.2,1) 0.25s both;
 }
 @keyframes spProg { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
 @keyframes spProgFade {
-  0%, 8% { opacity: 0; }
+  0%, 6% { opacity: 0; }
   16%    { opacity: 1; }
-  72%    { opacity: 1; }
-  76%, 100% { opacity: 0; }
+  82%    { opacity: 1; }
+  100%   { opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sp-orb, .sp-swirl, .sp-flash, .sp-ring, .sp-spark { display: none; }
+  .sp-orb, .sp-ring { display: none; }
   .sp-logo { animation: none; }
   .sp-word { animation: none; opacity: 1; }
   .sp-progress, .sp-progress i { animation: none; }
