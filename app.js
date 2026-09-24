@@ -1573,6 +1573,7 @@ function uploadToStorage(path, file, accessToken, onProgress, upsert) {
 // switching tabs while a big batch uploads can't misplace files.
 const UPLOAD_CONCURRENCY = 4;
 const UPLOAD_MAX_ATTEMPTS = 3;
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB — reject before queue/UI
 const uploadQueue = [];
 let activeUploads = 0;
 let batchStats = { ok: 0, fail: 0, skipped: 0 };
@@ -1611,6 +1612,13 @@ function finishBatch() {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function uploadFile(file, folder) {
+  // Size gate: block before progress UI / queue / network
+  if (file && typeof file.size === "number" && file.size > MAX_UPLOAD_BYTES) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    showToast("Fayl juda katta", "warning", `${file.name} — ${mb} MB (maks. 50 MB)`);
+    return Promise.resolve();
+  }
+
   const fileId = getFileUniqueId(file);
   if (uploadingFileIds.has(fileId)) {
     batchStats.skipped++;
