@@ -4566,6 +4566,20 @@ function getFilteredFiles() {
   return getSearchFilteredFiles();
 }
 
+function setAnnotFilenamePath(file) {
+  const el = document.getElementById("annot-filename");
+  if (!el) return;
+  const name = file && file.filename ? String(file.filename) : "";
+  const folder = file && file.folder ? String(file.folder) : "";
+  // ~/folder/name.png  or  ~/name.png
+  let prefix = "~/";
+  if (folder) prefix += folder.replace(/^\/+|\/+$/g, "") + "/";
+  el.innerHTML =
+    '<span class="annot-path-prefix">' + escapeHtml(prefix) + '</span>' +
+    '<span class="annot-path-name">' + escapeHtml(name) + '</span>';
+  el.title = prefix + name;
+}
+
 async function openAnnotationViewer(file, kind, opts) {
   if (pendingCloseFinish) pendingCloseFinish();
   const viewer = document.getElementById("annot-viewer");
@@ -4599,7 +4613,7 @@ async function openAnnotationViewer(file, kind, opts) {
   annotState.editMode = false;
   updateAnnotNavButtons();
 
-  filenameEl.textContent = file.filename;
+  setAnnotFilenamePath(file);
   scroll.innerHTML = "";
   scroll.className = "annot-scroll";
   viewer.style.display = "flex";

@@ -1768,12 +1768,28 @@ body.is-dragging-file .folder-tab-wrap {
 
 .annot-filename {
   flex: 1;
+  min-width: 0;
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text);
+  cursor: default;
+}
+.annot-filename .annot-path-prefix {
+  color: var(--text-muted, #71717a);
+  font-weight: 450;
+  transition: color 0.15s ease;
+}
+.annot-filename .annot-path-name {
+  color: var(--text, #18181b);
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+.annot-filename:hover .annot-path-prefix,
+.annot-filename:hover .annot-path-name {
+  color: var(--text, #18181b);
 }
 
 .annot-top-actions {
@@ -2134,6 +2150,16 @@ body.is-dragging-file .folder-tab-wrap {
 }
 .annot-viewer.kind-code .annot-filename {
   color: #e4e4e7;
+}
+.annot-viewer.kind-code .annot-filename .annot-path-prefix {
+  color: #a1a1aa;
+}
+.annot-viewer.kind-code .annot-filename .annot-path-name {
+  color: #fafafa;
+}
+.annot-viewer.kind-code .annot-filename:hover .annot-path-prefix,
+.annot-viewer.kind-code .annot-filename:hover .annot-path-name {
+  color: #fff;
 }
 .annot-viewer.kind-code .annot-btn {
   background: #27272a;
