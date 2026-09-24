@@ -5556,19 +5556,20 @@ function mountMrAudioPlayer(host, opts) {
   const SMOOTH = 0.18;
 
   function envelope(nx) {
+    // softer diamond: ends still taper but keep ~25% energy so edges react to audio
     const s = Math.sin(Math.PI * nx);
-    return s * s; // fast diamond taper
+    return 0.22 + 0.78 * Math.pow(s, 1.15);
   }
 
   function sampleFreq(nx) {
     if (!analyser || !freqData) return 0.25;
     const n = freqData.length;
-    const b1 = Math.min(n - 1, (nx * n * 0.55) | 0);
-    const b2 = Math.min(n - 1, ((1 - nx) * n * 0.35) | 0);
-    const b3 = Math.min(n - 1, (nx * n * 0.15) | 0);
-    const raw = (freqData[b1] * 0.5 + freqData[b2] * 0.3 + freqData[b3] * 0.2) / 255;
-    // very high sensitivity: expand quiet signals, boost peaks
-    return Math.min(1.2, Math.pow(raw, 0.55) * 1.9);
+    // spread bins across full width so left/right edges also get strong signal
+    const b1 = Math.min(n - 1, (nx * n * 0.85) | 0);
+    const b2 = Math.min(n - 1, ((0.15 + nx * 0.7) * n) | 0);
+    const b3 = Math.min(n - 1, (Math.abs(nx - 0.5) * 2 * n * 0.4) | 0);
+    const raw = (freqData[b1] * 0.45 + freqData[b2] * 0.35 + freqData[b3] * 0.2) / 255;
+    return Math.min(1.25, Math.pow(raw, 0.5) * 2.0);
   }
 
   function updateSmooth(idle) {
@@ -5677,7 +5678,7 @@ function mountMrAudioPlayer(host, opts) {
       const nx = i / n;
       xs[i] = nx * w;
       envs[i] = envelope(nx);
-      fms[i] = 0.2 + binAt(nx) * 1.7;
+      fms[i] = 0.35 + binAt(nx) * 1.65;
     }
 
     ctx.save();
