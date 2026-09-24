@@ -2359,13 +2359,13 @@ async function explainDeleteFailure(id) {
    - Fully inlined computed styles (no fetch dependency)
    - Guaranteed visual effect (never snaps away)
    ============================================================ */
-const ANIM_DURATION  = 1500;   // sand falls fast, doesn't linger
-const SWEEP_DURATION = 520;    // wave of grains breaking loose
-const COLLAPSE_DELAY = 520;
+const ANIM_DURATION  = 3000;   // sand falls fast, doesn't linger
+const SWEEP_DURATION = 1300;   // wave of grains breaking loose
+const COLLAPSE_DELAY = 1100;
 const TILE_SIZE      = 1.8;    // finer grain = reads as sand, not confetti
 const DRIFT_X        = 5;      // gentle sideways scatter as grains fall
 const PUFF_Y         = 0;      // tiny initial lift before gravity takes over
-const GRAVITY        = 0.0075; // strong downward pull — grains fall, not float
+const GRAVITY        = 0.00085; // strong downward pull — grains fall, not float
 const NOISE_AMP      = 0;      // subtle jitter, not chaotic
 
 function __dissolveHash(n) {
@@ -2523,7 +2523,7 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
         rotV: 0,
         g: 0.8 + rnd(9) * 0.5,                    // each grain falls a bit differently
         // sand crumbles from the top down (mixed with distance from the tap)
-        delay: ((y / cssHeight) * 0.7 + (distToEp / maxDist) * 0.3) * SWEEP_DURATION + rnd(6) * 260,
+        delay: ((y / cssHeight) * 0.7 + (distToEp / maxDist) * 0.3) * SWEEP_DURATION + rnd(6) * 500,
         fadeBias: 0.4 + rnd(7) * 0.45,
         seed,
       });
@@ -2548,7 +2548,7 @@ function __dissolveFloatFallback(card) {
       "z-index:9998",
       "pointer-events:none",
       "box-sizing:border-box",
-      "transition:transform 0.9s cubic-bezier(.55,0,1,.45), opacity 0.9s ease-in",
+      "transition:transform 1.6s cubic-bezier(.45,0,.8,.5), opacity 1.6s ease-in",
       "transform:translateY(0)",
       "opacity:1"
     ].join(";");
@@ -2658,7 +2658,8 @@ async function playDeleteDissolve(card, clickX, clickY) {
           // Guaranteed to reach 0 exactly at life=1 (no abrupt cutoff), while
           // fadeBias still staggers how early each grain starts to vanish.
           // Grains stay solid while falling, only fade near the very end.
-          const alpha = life < 0.65 ? 1 : Math.max(0, 1 - (life - 0.65) / 0.35);
+          const fadeT = Math.min(1, Math.max(0, (life - 0.45) / 0.55));
+          const alpha = 1 - fadeT * fadeT * (3 - 2 * fadeT);
           if (alpha <= 0.01) continue;
 
           const scale = 1;
@@ -2715,13 +2716,14 @@ async function playDeleteDissolve(card, clickX, clickY) {
       resolve();
     };
     const onEnd = (e) => {
-      if (!e || e.propertyName === "max-height" || e.propertyName === "max-width" || e.propertyName === "opacity") {
+      if (!e || e.target !== card) return;
+      if (e.propertyName === "max-height" || e.propertyName === "max-width") {
         card.removeEventListener("transitionend", onEnd);
         done();
       }
     };
     card.addEventListener("transitionend", onEnd);
-    setTimeout(done, 480);
+    setTimeout(done, 1250);
   });
 }
 

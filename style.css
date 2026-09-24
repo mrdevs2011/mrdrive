@@ -297,9 +297,9 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   background: var(--surface);
   max-width: 280px;
   transition:
-    max-width 0.42s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.28s ease,
-    margin 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    max-width 1s cubic-bezier(0.45, 0, 0.15, 1),
+    opacity 0.7s ease,
+    margin 1s cubic-bezier(0.45, 0, 0.15, 1),
     border-width 0.3s ease;
 }
 .folder-tab-wrap .folder-tab { border: none; border-radius: 0; }
@@ -475,10 +475,10 @@ body.is-dragging-file .folder-tab-wrap {
     border-color 0.3s ease,
     background 0.3s ease,
     box-shadow 0.3s ease,
-    max-height 0.42s cubic-bezier(0.4, 0, 0.2, 1),
-    margin 0.42s cubic-bezier(0.4, 0, 0.2, 1),
-    padding 0.42s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.28s ease,
+    max-height 0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    margin 0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.55s ease,
     border-width 0.3s ease;
 }
 .file-card:hover { border-color: var(--border-strong); }
