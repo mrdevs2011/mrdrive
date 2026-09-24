@@ -5468,7 +5468,6 @@ function mountMrAudioPlayer(host, opts) {
   }
   const filename = opts.filename || "Audio";
   const sizeLabel = typeof opts.size === "number" ? formatSize(opts.size) : (opts.size || "");
-  const BAR_N = 50;
   host.innerHTML = "";
   const root = document.createElement("div");
   root.className = "mr-audio-player";
@@ -5477,7 +5476,9 @@ function mountMrAudioPlayer(host, opts) {
       <h4 class="mr-audio-title"></h4>
       <p class="mr-audio-sub"></p>
     </div>
-    <div class="mr-audio-wave" aria-hidden="true">${Array(BAR_N).fill('<i class="mr-audio-bar"></i>').join("")}</div>
+    <div class="mr-audio-wave" aria-hidden="true">
+      <canvas class="mr-audio-wave-canvas"></canvas>
+    </div>
     <div class="mr-audio-time">00:00 / 00:00</div>
     <div class="mr-audio-progress" role="slider" aria-label="Progress">
       <div class="mr-audio-progress-fill"></div>
@@ -5498,7 +5499,9 @@ function mountMrAudioPlayer(host, opts) {
   audio.style.display = "none";
   root.appendChild(audio);
 
-  const bars = root.querySelectorAll(".mr-audio-bar");
+  const waveWrap = root.querySelector(".mr-audio-wave");
+  const canvas = root.querySelector(".mr-audio-wave-canvas");
+  const ctx = canvas.getContext("2d");
   const fill = root.querySelector(".mr-audio-progress-fill");
   const timeEl = root.querySelector(".mr-audio-time");
   const playBtn = root.querySelector('[data-act="play"]');
@@ -5513,6 +5516,19 @@ function mountMrAudioPlayer(host, opts) {
   let wiredGraph = false;
   let lastSec = -1;
   let alive = true;
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  function sizeCanvas() {
+    const w = waveWrap.clientWidth || 400;
+    const h = 90;
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  sizeCanvas();
+  window.addEventListener("resize", sizeCanvas);
 
   const setIcon = (html) => { playBtn.innerHTML = svgIcon(html); };
   const setTime = () => {
@@ -5533,32 +5549,101 @@ function mountMrAudioPlayer(host, opts) {
     }
   }
 
-  function resetBars() {
-    bars.forEach((b) => { b.classList.remove("active"); b.style.height = ""; });
+  function resetWave() {
+    sizeCanvas();
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
+    ctx.clearRect(0, 0, w, h);
+    // idle soft base wave (tapered silhouette)
+    drawFluidWave(0.18, true);
+  }
+
+  // layers: [ampScale, phaseSpeed, yOffset, color, blur-ish alpha]
+  const LAYERS = [
+    { amp: 0.55, speed: 1.15, y: 0.50, color: "rgba(59,130,246,0.55)", width: 2.8 },
+    { amp: 0.72, speed: 0.85, y: 0.48, color: "rgba(96,165,250,0.45)", width: 3.4 },
+    { amp: 0.40, speed: 1.40, y: 0.52, color: "rgba(147,197,253,0.40)", width: 2.2 },
+    { amp: 0.88, speed: 0.65, y: 0.50, color: "rgba(37,99,235,0.35)", width: 4.0 },
+    { amp: 0.30, speed: 1.70, y: 0.47, color: "rgba(191,219,254,0.50)", width: 1.8 }
+  ];
+
+  function drawFluidWave(energy, idle) {
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
+    ctx.clearRect(0, 0, w, h);
+    const t = idle ? (performance.now() / 1000) * 0.6 : (audio.currentTime || 0);
+    const midY = h * 0.5;
+    const steps = Math.max(80, Math.floor(w / 3));
+
+    // soft glow underlay
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let L = 0; L < LAYERS.length; L++) {
+      const layer = LAYERS[L];
+      const pts = [];
+      for (let i = 0; i <= steps; i++) {
+        const x = (i / steps) * w;
+        const nx = i / steps; // 0..1
+        // symmetrical taper envelope (wide center, pointed ends)
+        const env = Math.sin(Math.PI * nx);
+        const env2 = env * env;
+        let freqMod = 1;
+        if (analyser && freqData && !idle) {
+          const bin = Math.min(freqData.length - 1, Math.floor(nx * (freqData.length * 0.55)));
+          freqMod = 0.45 + (freqData[bin] / 255) * 1.1;
+        }
+        const wave =
+          Math.sin(nx * Math.PI * 3.2 + t * layer.speed * 2.1 + L * 0.7) * 0.55 +
+          Math.sin(nx * Math.PI * 6.5 + t * layer.speed * 1.3 + L) * 0.28 +
+          Math.sin(nx * Math.PI * 11 + t * layer.speed * 0.9) * 0.12;
+        const y = midY + wave * (h * 0.42) * layer.amp * env2 * freqMod * energy;
+        pts.push({ x, y });
+      }
+      // fill path (closed under the wave for soft body)
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, midY);
+      for (let i = 0; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.lineTo(pts[pts.length - 1].x, midY);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, midY - h * 0.4, 0, midY + h * 0.4);
+      grad.addColorStop(0, layer.color.replace(/[\d.]+\)$/, "0.08)"));
+      grad.addColorStop(0.45, layer.color);
+      grad.addColorStop(1, layer.color.replace(/[\d.]+\)$/, "0.05)"));
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // luminous stroke on the ridge
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.strokeStyle = layer.color.replace(/[\d.]+\)$/, "0.85)");
+      ctx.lineWidth = layer.width;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function draw() {
-    if (!alive || audio.paused) return;
+    if (!alive) return;
+    if (audio.paused && !dragging) {
+      // keep a gentle idle pulse while paused
+      drawFluidWave(0.22 + 0.06 * Math.sin(performance.now() / 900), true);
+      raf = requestAnimationFrame(draw);
+      return;
+    }
     raf = requestAnimationFrame(draw);
-    const center = Math.floor(bars.length / 2);
+    let energy = 0.55;
     if (analyser && freqData) {
       analyser.getByteFrequencyData(freqData);
-      bars.forEach((b, i) => {
-        const dist = Math.abs(i - center);
-        let h = (freqData[dist % freqData.length] / 3) + 5;
-        h = Math.max(5, h * (1 - (dist / Math.max(center, 1)) * 0.7));
-        b.style.height = h + "px";
-        b.classList.add("active");
-      });
+      let sum = 0;
+      for (let i = 0; i < freqData.length; i++) sum += freqData[i];
+      energy = 0.35 + (sum / (freqData.length * 255)) * 1.15;
     } else {
-      const t = audio.currentTime || 0;
-      bars.forEach((b, i) => {
-        const dist = Math.abs(i - center) / Math.max(center, 1);
-        const pulse = 8 + Math.abs(Math.sin(t * 4 + i * 0.18)) * 22 * (1 - dist * 0.75);
-        b.style.height = pulse + "px";
-        b.classList.add("active");
-      });
+      energy = 0.5 + 0.25 * Math.abs(Math.sin((audio.currentTime || 0) * 2.4));
     }
+    drawFluidWave(energy, false);
     if (!dragging && audio.duration) fill.style.width = (audio.currentTime / audio.duration) * 100 + "%";
     const sec = Math.floor(audio.currentTime || 0);
     if (sec !== lastSec) { lastSec = sec; setTime(); }
@@ -5646,7 +5731,7 @@ function mountMrAudioPlayer(host, opts) {
     if (audio.loop) return;
     setIcon(MR_AUDIO_ICONS.play);
     fill.style.width = "0%";
-    resetBars();
+    resetWave();
     setTime();
   });
   audio.addEventListener("error", () => {
@@ -5655,9 +5740,14 @@ function mountMrAudioPlayer(host, opts) {
   });
   if (audio.readyState >= 1 && typeof opts.onReady === "function") opts.onReady();
 
+  // start gentle idle wave immediately
+  resetWave();
+  raf = requestAnimationFrame(draw);
+
   const destroy = () => {
     alive = false;
     cancelAnimationFrame(raf);
+    window.removeEventListener("resize", sizeCanvas);
     try { audio.pause(); } catch (_) {}
     audio.removeAttribute("src");
     try { audio.load(); } catch (_) {}
