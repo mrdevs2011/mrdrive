@@ -499,6 +499,7 @@ body.is-dragging-file .folder-tab-wrap {
   justify-content: space-between;
   align-items: center;
   overflow: hidden;
+  position: relative;
   touch-action: manipulation;
   /* Classic ease — gap closes smoothly, rows below slide up */
   transition:
@@ -511,7 +512,7 @@ body.is-dragging-file .folder-tab-wrap {
     opacity 0.55s ease,
     border-width 0.3s ease;
 }
-.file-card:hover { border-color: var(--border-strong); }
+.file-card:hover { border-color: var(--border-strong); overflow: visible; z-index: 30; }
 
 /* Classic list collapse — row closes, items below ease into place */
 .file-card.is-deleting {
@@ -2072,12 +2073,12 @@ img.file-type-icon.file-thumb,
   color: transparent;
   opacity: 1 !important;
   filter: none !important;
-  transform: none !important; /* scale(1.1) makes thumbs soft */
   image-rendering: auto;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
+  position: relative;
+  transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s ease;
 }
-.file-card:hover img.file-type-icon.file-thumb,
 .file-card.selected img.file-type-icon.file-thumb {
   opacity: 1 !important;
   filter: none !important;
@@ -2085,27 +2086,21 @@ img.file-type-icon.file-thumb,
   color: transparent;
 }
 
-/* Hover preview: enlarged image overlay */
-.file-card:has(img.file-type-icon.file-thumb):hover::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9000;
-  pointer-events: none;
-  animation: fadeIn 0.2s ease;
+/* Hover: real-shape zoom preview.
+   The list thumb is a cropped 34x34 square; on hover it scales up in place
+   (transform doesn't affect layout, so nothing else in the row shifts) and
+   switches from a cropping fit to a containing one, so the whole photo
+   becomes visible at its own proportions instead of the cropped square. */
+.file-card:hover img.file-type-icon.file-thumb {
+  object-fit: contain;
+  transform: scale(4) !important;
+  transform-origin: left center;
+  background: var(--surface, #fff);
+  box-shadow: 0 14px 34px rgba(0,0,0,0.28);
+  border-color: var(--border-strong, #d4d4d8);
+  z-index: 30;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
 .file-thumb-pending {
   display: inline-block;
   background: linear-gradient(90deg, #f4f4f5 25%, #e4e4e7 50%, #f4f4f5 75%);

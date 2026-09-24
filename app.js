@@ -1924,100 +1924,9 @@ document.addEventListener("click", (e) => {
   });
 });
 
-// Image preview hover: show enlarged preview on hover
-fileListEl.addEventListener("mouseenter", (e) => {
-  const card = e.target.closest(".file-card");
-  if (!card) return;
-  const img = card.querySelector("img.file-type-icon.file-thumb");
-  if (!img) return;
-  
-  const handleMouseMove = (moveEvent) => {
-    const thumb = card.querySelector("img.file-type-icon.file-thumb");
-    if (!thumb) return;
-    
-    // Create preview container if it doesn't exist
-    let previewOverlay = document.getElementById("file-preview-overlay");
-    if (!previewOverlay) {
-      previewOverlay = document.createElement("div");
-      previewOverlay.id = "file-preview-overlay";
-      previewOverlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.6);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9000;
-        animation: fadeIn 0.2s ease;
-        padding: 20px;
-      `;
-      
-      // Add close button
-      const closeBtn = document.createElement("button");
-      closeBtn.style.cssText = `
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        background: rgba(0,0,0,0.5);
-        border: 1px solid rgba(255,255,255,0.2);
-        color: white;
-        width: 40px;
-        height: 40px;
-        border-radius: 8px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 20px;
-        transition: all 0.2s ease;
-      `;
-      closeBtn.innerHTML = "×";
-      closeBtn.onmouseover = () => {
-        closeBtn.style.background = "rgba(0,0,0,0.8)";
-        closeBtn.style.borderColor = "rgba(255,255,255,0.4)";
-      };
-      closeBtn.onmouseout = () => {
-        closeBtn.style.background = "rgba(0,0,0,0.5)";
-        closeBtn.style.borderColor = "rgba(255,255,255,0.2)";
-      };
-      closeBtn.onclick = () => {
-        previewOverlay.remove();
-        document.getElementById("file-preview-overlay").remove();
-      };
-      
-      previewOverlay.appendChild(closeBtn);
-      document.body.appendChild(previewOverlay);
-    }
-    
-    // Create preview image wrapper
-    let previewImg = previewOverlay.querySelector("img");
-    if (!previewImg) {
-      previewImg = document.createElement("img");
-      previewImg.style.cssText = `
-        max-width: 80vw;
-        max-height: 80vh;
-        object-fit: contain;
-        border-radius: 12px;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      `;
-      previewOverlay.appendChild(previewImg);
-    }
-    previewImg.src = thumb.src;
-  };
-  
-  const handleMouseLeave = () => {
-    card.removeEventListener("mousemove", handleMouseMove);
-    card.removeEventListener("mouseleave", handleMouseLeave);
-    const overlay = document.getElementById("file-preview-overlay");
-    if (overlay) overlay.remove();
-  };
-  
-  card.addEventListener("mousemove", handleMouseMove);
-  card.addEventListener("mouseleave", handleMouseLeave);
-}, true);
+// Hover-preview intentionally removed: hovering a file card no longer darkens
+// the screen or shows an enlarged image. Thumbnails are still preloaded on
+// page load (preloadAllThumbs) so opening a file is instant either way.
 
 function updateSelectionClasses() {
   fileListEl.querySelectorAll(".file-card").forEach((card) => {
@@ -3938,26 +3847,44 @@ async function openAnnotationViewer(file, kind, opts) {
   scroll.appendChild(loader);
 
   try {
-    const { data: { session } } = await sb.auth.getSession();
-    const { data: urlData, error } = await sb.storage
-      .from(BUCKET)
-      .createSignedUrl(file.storage_path, 3600);
-    if (error || !urlData) throw error || new Error("Could not get file URL");
+    let signedUrl;
+    // Images: reuse the already-preloaded thumbnail URL instead of asking
+    // Supabase for a brand-new signed URL every time. A fresh signed URL is a
+    // different string, so the browser can't match it to the cached bytes and
+    // ends up re-downloading from Supabase on every open. Reusing the same
+    // cached URL lets the browser serve it instantly from its own cache.
+    if (kind === "image") {
+      const cached = thumbUrlCache.get(String(file.id));
+      if (cached && cached.url && cached.expiresAt - Date.now() > 60 * 1000) {
+        signedUrl = cached.url;
+      }
+    }
+    if (!signedUrl) {
+      const { data: urlData, error } = await sb.storage
+        .from(BUCKET)
+        .createSignedUrl(file.storage_path, 3600);
+      if (error || !urlData) throw error || new Error("Could not get file URL");
+      signedUrl = urlData.signedUrl;
+      if (kind === "image") {
+        // Cache it so the next open (and the list thumbnail) reuses this same URL.
+        thumbUrlCache.set(String(file.id), { url: signedUrl, expiresAt: Date.now() + 3600 * 1000 });
+      }
+    }
 
     if (kind === "image") {
-      await loadImageForAnnot(urlData.signedUrl, scroll, loader);
+      await loadImageForAnnot(signedUrl, scroll, loader);
       statusHint.textContent = "1 barmoq = chizish · 2 barmoq = surish · Pinch = zoom";
     } else if (kind === "pdf") {
-      await loadPdfForAnnot(urlData.signedUrl, scroll, loader);
+      await loadPdfForAnnot(signedUrl, scroll, loader);
       statusHint.textContent = "Chizmalar sahifaga yopishadi · 1 barmoq chizish · 2 barmoq surish";
     } else if (kind === "code") {
       scroll.classList.add("is-text");
-      await loadCodeForAnnot(urlData.signedUrl, scroll, loader, file.filename);
+      await loadCodeForAnnot(signedUrl, scroll, loader, file.filename);
       statusHint.textContent = "Dark mode kod ko'rinishi · Faqat o'qish";
       // Hide drawing tools for code
       toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
     } else if (kind === "video") {
-      await loadVideoForAnnot(urlData.signedUrl, scroll);
+      await loadVideoForAnnot(signedUrl, scroll);
       statusHint.textContent = "Video ko'rish · Faqat o'qish";
       toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
     }
