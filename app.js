@@ -256,6 +256,7 @@ let kbCursorId = null; // card the arrow keys are standing on (keyboard shortcut
 const localUploadKeys = new Set(); // "filename:::size"
 const localDeleteIds = new Set();
 const localDeleteFolderIds = new Set();
+const localDeleteFolderNames = new Set();
 const highlightFileIds = new Set(); // ids to flash green after render
 let filesListReady = false;
 
@@ -268,9 +269,13 @@ function markLocalDelete(id) {
   localDeleteIds.add(String(id));
   setTimeout(() => localDeleteIds.delete(String(id)), 20000);
 }
-function markLocalDeleteFolder(id) {
+function markLocalDeleteFolder(id, name) {
   localDeleteFolderIds.add(String(id));
-  setTimeout(() => localDeleteFolderIds.delete(String(id)), 20000);
+  if (name) localDeleteFolderNames.add(String(name));
+  setTimeout(() => {
+    localDeleteFolderIds.delete(String(id));
+    if (name) localDeleteFolderNames.delete(String(name));
+  }, 20000);
 }
 function notifyRemoteFileChanges(prevFiles, nextFiles) {
   const remoteDeleted = [];
@@ -1812,8 +1817,12 @@ async function loadFiles(silent) {
     return;
   }
 
-  const newFiles = filesRes.data;
-  const newFolders = foldersRes.data || [];
+  const newFiles = (filesRes.data || [])
+    .filter((f) => !localDeleteIds.has(String(f.id)))
+    .map((f) => (f.folder && localDeleteFolderNames.has(String(f.folder)) ? { ...f, folder: null } : f));
+  const newFolders = (foldersRes.data || []).filter((f) =>
+    !localDeleteFolderIds.has(String(f.id)) && !localDeleteFolderNames.has(String(f.name))
+  );
 
   if (silent) {
     // Polling call: skip the re-render entirely if nothing actually changed,
@@ -2312,7 +2321,7 @@ async function deleteFolder(id, name, evt) {
   }
   if (tabEl) await playDeleteDissolve(tabEl, clickX, clickY);
 
-  markLocalDeleteFolder(id);
+  markLocalDeleteFolder(id, name);
 
   if (filesInFolder.length > 0) {
     await sb.from(TABLE).update({ folder: null }).eq("folder", name);
@@ -2332,7 +2341,6 @@ async function deleteFolder(id, name, evt) {
     allFiles = allFiles.map((f) => (f.folder === name ? { ...f, folder: null } : f));
   }
   setFolder(null);
-  setTimeout(() => loadFiles(true), 500);
 }
 
 // Parses the search box. A leading "/" scopes the search to one specific
