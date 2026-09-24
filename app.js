@@ -1717,7 +1717,7 @@ async function deleteFolder(id, name, evt) {
     msg += `\n\nHeads up: this folder has ${filesInFolder.length} ${filesInFolder.length === 1 ? "file" : "files"}. ${filesInFolder.length === 1 ? "It" : "They"} will move to "All" (not deleted).`;
   }
 
-  if (!(await showConfirm(msg, "Delete"))) return;
+  if (!(await showConfirm(msg, "Delete", { skippable: true }))) return;
 
   const clickX = evt ? evt.clientX : undefined;
   const clickY = evt ? evt.clientY : undefined;
@@ -2359,14 +2359,14 @@ async function explainDeleteFailure(id) {
    - Fully inlined computed styles (no fetch dependency)
    - Guaranteed visual effect (never snaps away)
    ============================================================ */
-const ANIM_DURATION  = 1700;   // sand falls fast, doesn't linger
-const SWEEP_DURATION = 380;    // wave of grains breaking loose
+const ANIM_DURATION  = 1500;   // sand falls fast, doesn't linger
+const SWEEP_DURATION = 520;    // wave of grains breaking loose
 const COLLAPSE_DELAY = 520;
 const TILE_SIZE      = 1.8;    // finer grain = reads as sand, not confetti
-const DRIFT_X        = 26;     // gentle sideways scatter as grains fall
-const PUFF_Y         = 10;     // tiny initial lift before gravity takes over
-const GRAVITY        = 0.0052; // strong downward pull — grains fall, not float
-const NOISE_AMP      = 10;     // subtle jitter, not chaotic
+const DRIFT_X        = 5;      // gentle sideways scatter as grains fall
+const PUFF_Y         = 0;      // tiny initial lift before gravity takes over
+const GRAVITY        = 0.0075; // strong downward pull — grains fall, not float
+const NOISE_AMP      = 0;      // subtle jitter, not chaotic
 
 function __dissolveHash(n) {
   const s = Math.sin(n * 127.1) * 43758.5453;
@@ -2509,8 +2509,8 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
       // Grains break loose near the epicenter first, drift a little sideways,
       // then fall — real sand, not floating ash.
       const tSize = tile * (0.65 + rnd(8) * 0.7);
-      const vx = (rnd(2) - 0.5) * 1.6;            // mild left/right scatter
-      const vy = 0.15 + rnd(3) * 0.5;             // downward from the start
+      const vx = (rnd(2) - 0.5) * 1.0;            // almost straight down
+      const vy = 0;                                // no upward/floaty motion
 
       tiles.push({
         sx: x * dpr, sy: y * dpr,
@@ -2519,9 +2519,11 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
         x, y, tile: tSize,
         vx,
         vy,
-        rot:  (rnd(4) - 0.5) * 1.2,
-        rotV: (rnd(5) - 0.5) * 0.28,
-        delay: (distToEp / maxDist) * SWEEP_DURATION + rnd(6) * 180,
+        rot: 0,
+        rotV: 0,
+        g: 0.8 + rnd(9) * 0.5,                    // each grain falls a bit differently
+        // sand crumbles from the top down (mixed with distance from the tap)
+        delay: ((y / cssHeight) * 0.7 + (distToEp / maxDist) * 0.3) * SWEEP_DURATION + rnd(6) * 260,
         fadeBias: 0.4 + rnd(7) * 0.45,
         seed,
       });
@@ -2651,15 +2653,15 @@ async function playDeleteDissolve(card, clickX, clickY) {
           const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.0) - 0.5) * NOISE_AMP * ease;
           const px = t.x + t.vx * DRIFT_X * ease + nX;
           const py = t.y - PUFF_Y * Math.sin(Math.min(life, 0.3) * Math.PI / 0.3) * 0.4
-            + t.vy * 14 * ease
-            + GRAVITY * tSec * tSec;
+            + GRAVITY * (t.g || 1) * tSec * tSec;
 
           // Guaranteed to reach 0 exactly at life=1 (no abrupt cutoff), while
           // fadeBias still staggers how early each grain starts to vanish.
-          const alpha = Math.pow(Math.max(0, 1 - life), 0.7 + t.fadeBias * 0.7);
+          // Grains stay solid while falling, only fade near the very end.
+          const alpha = life < 0.65 ? 1 : Math.max(0, 1 - (life - 0.65) / 0.35);
           if (alpha <= 0.01) continue;
 
-          const scale = 1 - life * 0.35;
+          const scale = 1;
           octx.globalAlpha = alpha;
           octx.save();
           octx.translate(px + ox + ts * 0.5, py + oy + ts * 0.5);
@@ -2727,7 +2729,7 @@ async function deleteFile(id, path, evt) {
   const clickX = evt ? evt.clientX : undefined;
   const clickY = evt ? evt.clientY : undefined;
 
-  if (!(await showConfirm("Delete this file?", "Delete"))) return;
+  if (!(await showConfirm("Delete this file?", "Delete", { skippable: true }))) return;
 
   // Prefer data-file-id; fall back to the button's parent card (event target)
   let card = fileListEl.querySelector(`.file-card[data-file-id="${id}"]`);
@@ -2841,7 +2843,7 @@ async function deleteSelectedFiles(ids, clickX, clickY) {
     list.length === 1
       ? "Delete this file?"
       : `Delete these ${list.length} files?`;
-  if (!(await showConfirm(msg, "Delete"))) return;
+  if (!(await showConfirm(msg, "Delete", { skippable: true }))) return;
 
   // Dissolve all visible selected cards in parallel
   const cards = list
@@ -3046,7 +3048,12 @@ async function unpublishFile(fileId) {
 
 // In-app confirm dialog. Native confirm() can be suppressed by the browser
 // ("prevent additional dialogs"), in which case it silently returns false.
-function showConfirm(message, okLabel = "OK") {
+// "Delete without asking." lives ONLY in RAM: a page reload resets it to false.
+let skipDeleteConfirm = false;
+
+function showConfirm(message, okLabel = "OK", opts = {}) {
+  const skippable = !!opts.skippable;
+  if (skippable && skipDeleteConfirm) return Promise.resolve(true);
   return new Promise((resolve) => {
     const existing = document.getElementById("confirm-modal");
     if (existing) existing.remove();
@@ -3057,6 +3064,7 @@ function showConfirm(message, okLabel = "OK") {
       <div class="modal-backdrop">
         <div class="modal-box">
           <p class="confirm-msg"></p>
+          ${skippable ? `<label class="confirm-skip"><input type="checkbox" class="confirm-skip-cb"><span>Delete without asking.</span></label>` : ""}
           <div class="confirm-actions">
             <button type="button" class="confirm-cancel">Cancel</button>
             <button type="button" class="confirm-ok"></button>
@@ -3077,7 +3085,11 @@ function showConfirm(message, okLabel = "OK") {
     document.addEventListener("keydown", onKey);
 
     modal.querySelector(".confirm-cancel").onclick = () => done(false);
-    modal.querySelector(".confirm-ok").onclick = () => done(true);
+    modal.querySelector(".confirm-ok").onclick = () => {
+      const cb = modal.querySelector(".confirm-skip-cb");
+      if (skippable && cb && cb.checked) skipDeleteConfirm = true;
+      done(true);
+    };
     modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
       if (e.target.classList.contains("modal-backdrop")) done(false);
     });

@@ -1211,6 +1211,17 @@ body.is-dragging-file .folder-tab-wrap {
   white-space: pre-line;
   margin-bottom: 20px;
 }
+.confirm-skip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.confirm-skip input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); }
 .confirm-actions { display: flex; gap: 8px; }
 .confirm-actions button {
   flex: 1;
