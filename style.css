@@ -2737,7 +2737,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 }
 .mr-audio-progress-fill {
   height: 100%;
-  background: #1DB954;
+  background: var(--accent);
   width: 0%;
   border-radius: 3px;
   position: relative;
@@ -2750,7 +2750,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   width: 16px;
   height: 16px;
   background: #fff;
-  border: 3px solid #1DB954;
+  border: 3px solid var(--accent);
   border-radius: 50%;
   box-shadow: 0 2px 6px rgba(0,0,0,0.2);
 }
@@ -2786,12 +2786,12 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   border-radius: 50%;
 }
 .mr-audio-play .mr-audio-svg { width: 26px; height: 26px; }
-.mr-audio-btn.is-active { color: #1DB954; }
+.mr-audio-btn.is-active { color: var(--accent); }
 .mr-audio-spin {
   position: absolute;
   top: -2.5px; left: -2.5px; right: -2.5px; bottom: -2.5px;
   border: 3px solid transparent;
-  border-top-color: #1DB954;
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: mrAudioSpin 0.8s linear infinite;
 }
@@ -2800,7 +2800,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 @media (prefers-reduced-motion: reduce) {
   .mr-audio-bar { transition: none; }
   .mr-audio-time.is-pop { animation: none; }
-  .mr-audio-spin { animation: none; border-top-color: #1DB954; }
+  .mr-audio-spin { animation: none; border-top-color: var(--accent); }
 }
 @media (max-width: 480px) {
   .mr-audio-title { font-size: 17px; }
