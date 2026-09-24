@@ -2077,6 +2077,12 @@ img.file-type-icon.file-thumb,
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   position: relative;
+  /* Override the inherited `.file-type-icon { pointer-events: none }` —
+     without this, the enlarged hover image is invisible to the mouse and
+     every move/click "passes through" to whatever card sits underneath it,
+     which is exactly what closed the zoom early and opened the wrong file. */
+  pointer-events: auto;
+  cursor: pointer;
   transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s ease;
 }
 .file-card.selected img.file-type-icon.file-thumb {
