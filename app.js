@@ -5520,7 +5520,7 @@ function mountMrAudioPlayer(host, opts) {
 
   function sizeCanvas() {
     const w = waveWrap.clientWidth || 400;
-    const h = 64;
+    const h = 72;
     canvas.style.width = w + "px";
     canvas.style.height = h + "px";
     canvas.width = Math.round(w * dpr);
@@ -5698,12 +5698,12 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq * 1.6 - phase * 1.4 + 1.1) * 0.26 +
           Math.sin(nx * Math.PI * th.freq * 0.55 - phase * 0.9 + 2.3) * 0.18 +
           Math.sin(nx * Math.PI * 5.5 - phase * 3.1 + L * 0.7) * 0.09;
-        const amp = h * 0.34 * th.amp * envs[i] * fms[i] * e;
+        const amp = h * 0.28 * th.amp * envs[i] * fms[i] * e;
         let y = midY + wave * amp;
-        let half = h * 0.045 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
-        if (y - half < 2) half = y - 2;
-        if (y + half > h - 2) half = h - 2 - y;
-        if (half < 0.5) half = 0.5;
+        let half = h * 0.032 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
+        const yPad = h * 0.08;
+        if (y - half < yPad) half = Math.max(0.5, y - yPad);
+        if (y + half > h - yPad) half = Math.max(0.5, h - yPad - y);
         yTop[i] = y - half;
         yBot[i] = y + half;
       }
@@ -5728,10 +5728,11 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq * 1.7 - phase * (1.5 + drift * 0.5) + 0.8) * 0.27 +
           Math.sin(nx * Math.PI * th.freq * 0.5 - phase * 1.1 + 2.1) * 0.18 +
           Math.sin(nx * Math.PI * 6.2 - phase * (2.8 + drift) + L * 0.55) * 0.10;
-        const amp = h * 0.36 * th.amp * envs[i] * fms[i] * e;
+        const amp = h * 0.30 * th.amp * envs[i] * fms[i] * e;
         let y = midY + wave * amp;
-        if (y < 2) y = 2;
-        if (y > h - 2) y = h - 2;
+        const yPad = h * 0.08;
+        if (y < yPad) y = yPad;
+        if (y > h - yPad) y = h - yPad;
         ys[i] = y;
       }
       const a = th.a * (0.7 + e * 0.35);
