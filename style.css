@@ -123,9 +123,11 @@ body { background: var(--bg); color: var(--text); }
 .sp-icon {
   width: 26px;
   height: 26px;
-  opacity: 0.82;
-  filter: drop-shadow(0 3px 8px rgba(0,0,0,0.1));
+  display: block;
+  opacity: 0.95;
+  filter: drop-shadow(0 3px 10px rgba(15, 23, 42, 0.12));
   border-radius: 6px;
+  overflow: visible;
 }
 
 .sp-logo {
