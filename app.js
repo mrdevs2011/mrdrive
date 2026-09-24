@@ -1742,9 +1742,129 @@ function handleFiles(fileListObj) {
   // Snapshot the list (a live FileList/input can be reset) and the folder that
   // is open right now; never hand uploadFile straight to forEach — it would
   // receive the array index as its 2nd argument (= "folder").
-  const files = Array.from(fileListObj);
+  const files = Array.from(fileListObj || []);
   const folder = currentFolder || null;
-  files.forEach((f) => uploadFile(f, folder));
+  files.forEach((f) => {
+    // Folder-picker (webkitdirectory) fills webkitRelativePath: "Dir/sub/a.png"
+    const rel = f.webkitRelativePath || "";
+    if (rel && rel.includes("/")) {
+      const parts = rel.split("/");
+      const dir = parts.slice(0, -1).join("/");
+      const base = parts[parts.length - 1] || f.name;
+      const named = base !== f.name ? new File([f], base, { type: f.type, lastModified: f.lastModified }) : f;
+      ensureFolderExists(dir).then((folderName) => uploadFile(named, folderName));
+    } else {
+      uploadFile(f, folder);
+    }
+  });
+}
+
+// ---- Real OS folder drag-and-drop (Chrome/Edge/Firefox via webkitGetAsEntry) ----
+function readAllDirectoryEntries(reader) {
+  return new Promise((resolve, reject) => {
+    const all = [];
+    const pump = () => {
+      reader.readEntries((batch) => {
+        if (!batch.length) return resolve(all);
+        all.push(...batch);
+        pump();
+      }, reject);
+    };
+    pump();
+  });
+}
+
+function entryToFile(fileEntry) {
+  return new Promise((resolve, reject) => fileEntry.file(resolve, reject));
+}
+
+/** Walk a FileSystemEntry tree; push { file, relativePath } for every file. */
+async function walkFsEntry(entry, pathPrefix, out) {
+  if (!entry) return;
+  if (entry.isFile) {
+    const file = await entryToFile(entry);
+    const relativePath = pathPrefix ? (pathPrefix + "/" + file.name) : file.name;
+    out.push({ file, relativePath });
+    return;
+  }
+  if (entry.isDirectory) {
+    const nextPrefix = pathPrefix ? (pathPrefix + "/" + entry.name) : entry.name;
+    const reader = entry.createReader();
+    const children = await readAllDirectoryEntries(reader);
+    for (const child of children) {
+      await walkFsEntry(child, nextPrefix, out);
+    }
+  }
+}
+
+/** Collect files from a drop, including nested directory contents. */
+async function collectFromDataTransfer(dt) {
+  const out = [];
+  const items = dt && dt.items;
+  let usedEntries = false;
+  if (items && items.length) {
+    const entries = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+      if (entry) {
+        usedEntries = true;
+        entries.push(entry);
+      }
+    }
+    if (usedEntries) {
+      for (const entry of entries) {
+        await walkFsEntry(entry, "", out);
+      }
+      return out;
+    }
+  }
+  // Fallback: plain file list (no real folder support)
+  for (const f of Array.from((dt && dt.files) || [])) {
+    out.push({ file: f, relativePath: f.webkitRelativePath || f.name });
+  }
+  return out;
+}
+
+async function handleDropItems(dataTransfer) {
+  let collected;
+  try {
+    collected = await collectFromDataTransfer(dataTransfer);
+  } catch (err) {
+    console.error("Folder drop failed:", err);
+    showToast("Papkani o'qib bo'lmadi", "error", err && err.message);
+    return;
+  }
+  if (!collected.length) {
+    showToast("Yuklash uchun fayl topilmadi", "warning");
+    return;
+  }
+
+  // Create needed folders first (unique relative dirs), then upload.
+  const folderNames = new Set();
+  for (const { relativePath } of collected) {
+    const parts = String(relativePath).replace(/^\/+/, "").split("/");
+    if (parts.length > 1) {
+      folderNames.add(parts.slice(0, -1).join("/"));
+    }
+  }
+  const folderMap = new Map(); // relDir -> ensured name
+  for (const dir of folderNames) {
+    folderMap.set(dir, await ensureFolderExists(dir));
+  }
+
+  const baseFolder = currentFolder || null;
+  for (const { file, relativePath } of collected) {
+    const parts = String(relativePath).replace(/^\/+/, "").split("/");
+    const baseName = parts[parts.length - 1] || file.name;
+    const relDir = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+    const targetFolder = relDir ? (folderMap.get(relDir) || relDir) : baseFolder;
+    const named =
+      baseName !== file.name
+        ? new File([file], baseName, { type: file.type, lastModified: file.lastModified })
+        : file;
+    uploadFile(named, targetFolder);
+  }
 }
 
 fileInput.addEventListener("change", (e) => {
@@ -1763,7 +1883,8 @@ dropzone.addEventListener("drop", (e) => {
   if (e.dataTransfer.types.includes("application/x-mrdrive-file")) return;
   e.preventDefault();
   dropzone.classList.remove("dragover");
-  handleFiles(e.dataTransfer.files);
+  // Real folders need async entry walk — plain files path still works inside
+  handleDropItems(e.dataTransfer);
 });
 
 window.addEventListener("paste", (e) => {
