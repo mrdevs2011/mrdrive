@@ -5668,7 +5668,7 @@ function mountMrAudioPlayer(host, opts) {
     smoothEnergy += (targetE - smoothEnergy) * SMOOTH;
     const e = smoothEnergy;
 
-    const t = idle ? performance.now() * 0.00018 : (audio.currentTime || 0) * 0.45;
+    const t = idle ? performance.now() * 0.00028 : (audio.currentTime || 0) * 0.55;
     const midY = h * 0.5;
     const n = STEPS;
 
@@ -5691,10 +5691,12 @@ function mountMrAudioPlayer(host, opts) {
       const phase = t * th.speed + th.phase;
       for (let i = 0; i <= n; i++) {
         const nx = i / n;
+        // left→right traveling + organic disorder
         const wave =
-          Math.sin(nx * Math.PI * th.freq + phase) * 0.5 +
-          Math.sin(nx * Math.PI * th.freq * 1.5 + phase * 1.1) * 0.28 +
-          Math.sin(nx * Math.PI * th.freq * 0.5 + phase * 0.7) * 0.14;
+          Math.sin(nx * Math.PI * th.freq - phase * 2.2) * 0.42 +
+          Math.sin(nx * Math.PI * th.freq * 1.6 - phase * 1.4 + 1.1) * 0.26 +
+          Math.sin(nx * Math.PI * th.freq * 0.55 - phase * 0.9 + 2.3) * 0.18 +
+          Math.sin(nx * Math.PI * 5.5 - phase * 3.1 + L * 0.7) * 0.09;
         const amp = h * 0.36 * th.amp * envs[i] * fms[i] * e;
         let y = midY + wave * amp;
         let half = h * 0.045 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
@@ -5718,10 +5720,13 @@ function mountMrAudioPlayer(host, opts) {
       const phase = t * th.speed + th.phase;
       for (let i = 0; i <= n; i++) {
         const nx = i / n;
+        // left→right flow, each thread slightly different drift
+        const drift = (L % 7) * 0.15;
         const wave =
-          Math.sin(nx * Math.PI * th.freq + phase) * 0.5 +
-          Math.sin(nx * Math.PI * th.freq * 1.6 + phase * 1.15) * 0.27 +
-          Math.sin(nx * Math.PI * th.freq * 0.5 + phase * 0.65) * 0.14;
+          Math.sin(nx * Math.PI * th.freq - phase * (2.0 + drift)) * 0.40 +
+          Math.sin(nx * Math.PI * th.freq * 1.7 - phase * (1.5 + drift * 0.5) + 0.8) * 0.27 +
+          Math.sin(nx * Math.PI * th.freq * 0.5 - phase * 1.1 + 2.1) * 0.18 +
+          Math.sin(nx * Math.PI * 6.2 - phase * (2.8 + drift) + L * 0.55) * 0.10;
         const amp = h * 0.38 * th.amp * envs[i] * fms[i] * e;
         let y = midY + wave * amp;
         if (y < 2) y = 2;
