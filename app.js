@@ -1156,6 +1156,69 @@ async function logout() {
   location.replace("/login/");
 }
 
+// ==========================================
+// USAGE — Supabase Free tier storage (1 GB) in the settings menu
+// Red = video, yellow = images, blue = everything else.
+// Totals come from the get_storage_usage() SQL function (usage-stats.sql),
+// which sums the WHOLE project. If it isn't installed yet we fall back to the
+// signed-in user's own files and say so.
+// ==========================================
+const STORAGE_LIMIT_BYTES = 1024 * 1024 * 1024; // Supabase Free plan: 1 GB
+let usageFetchedAt = 0;
+
+function renderStorageUsage(u, note) {
+  const total = (u.video || 0) + (u.image || 0) + (u.file || 0);
+  const pct = (total / STORAGE_LIMIT_BYTES) * 100;
+  const pctText = total > 0 && pct < 0.1 ? "<0.1%" : (pct >= 10 ? Math.round(pct) : pct.toFixed(1)) + "%";
+  const $ = (id) => document.getElementById(id);
+
+  const pctEl = $("usage-pct");
+  pctEl.textContent = pctText;
+  pctEl.classList.toggle("is-warn", pct >= 70 && pct < 90);
+  pctEl.classList.toggle("is-full", pct >= 90);
+
+  // Segment widths are shares of the 1 GB limit (scaled down if somehow over).
+  const scale = Math.max(total, STORAGE_LIMIT_BYTES);
+  const seg = (id, bytes) => {
+    const w = bytes > 0 ? Math.max(1.2, (bytes / scale) * 100) : 0; // keep tiny slices visible
+    $(id).style.width = w + "%";
+  };
+  seg("usage-seg-video", u.video || 0);
+  seg("usage-seg-image", u.image || 0);
+  seg("usage-seg-file", u.file || 0);
+  $("usage-bar").setAttribute("aria-valuenow", String(Math.min(100, Math.round(pct))));
+
+  $("usage-total").textContent = `${formatSize(total)} / ${formatSize(STORAGE_LIMIT_BYTES)} ishlatilgan`;
+  $("usage-video").textContent = formatSize(u.video || 0);
+  $("usage-image").textContent = formatSize(u.image || 0);
+  $("usage-file").textContent = formatSize(u.file || 0);
+
+  const noteEl = $("usage-note");
+  const bits = [];
+  if (typeof u.mine === "number") bits.push(`Sizning fayllaringiz: ${formatSize(u.mine)}`);
+  if (note) bits.push(note);
+  noteEl.textContent = bits.join(" · ");
+  noteEl.hidden = !bits.length;
+}
+
+async function refreshStorageUsage() {
+  if (Date.now() - usageFetchedAt < 3000) return; // don't hammer the DB on every open
+  try {
+    const { data, error } = await sb.rpc("get_storage_usage");
+    if (error || !data) throw error || new Error("no data");
+    renderStorageUsage(data);
+    usageFetchedAt = Date.now();
+  } catch (err) {
+    // Fallback: only this user's own files (RLS), until usage-stats.sql is run.
+    const mine = { video: 0, image: 0, file: 0 };
+    (allFiles || []).forEach((f) => {
+      const k = fileIconKeyForName(f.filename);
+      mine[k === "video" ? "video" : k === "image" ? "image" : "file"] += f.size || 0;
+    });
+    renderStorageUsage(mine, "faqat sizning fayllaringiz (usage-stats.sql ni ishga tushiring)");
+  }
+}
+
 // Gear icon → sozlamalar modal (Claude ga ulang + Account + Log out)
 (function initSettingsMenu() {
   const gearBtn = document.getElementById("gear-btn");
@@ -1178,6 +1241,7 @@ async function logout() {
     if (skipDeleteCb) skipDeleteCb.checked = isSkipDeleteConfirm();
     modal.hidden = false;
     gearBtn.classList.add("open");
+    refreshStorageUsage();
   }
 
   gearBtn.addEventListener("click", (e) => {

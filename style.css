@@ -2333,3 +2333,36 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 /* Files waiting in the upload queue (100-file batches upload 4 at a time) */
 .upload-item.queued { opacity: .6; }
 .upload-item.queued .upload-item-status { color: var(--text-muted); }
+
+
+/* ===== Usage (Supabase Free tier storage) in the settings menu ===== */
+.settings-modal { min-width: 280px; }
+.usage-box { padding: 10px 12px 12px; }
+.usage-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.usage-title { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
+.usage-pct { font-size: 15px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.usage-pct.is-warn { color: #b45309; }
+.usage-pct.is-full { color: var(--danger); }
+.usage-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--neutral-soft);
+  overflow: hidden;
+}
+.usage-seg { display: block; height: 100%; width: 0; border-radius: 999px; transition: width .7s cubic-bezier(.22,.61,.36,1); }
+.seg-video { background: #ef4444; }  /* qizil — video   */
+.seg-image { background: #eab308; }  /* sariq — rasm    */
+.seg-file  { background: #3b82f6; }  /* ko'k  — fayllar */
+.usage-total { margin-top: 7px; font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.usage-cats { margin-top: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.usage-cat {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 7px 9px; border-radius: 8px; background: var(--bg);
+}
+.usage-cat-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
+.usage-cat .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.usage-cat b { font-size: 12.5px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.usage-note { margin-top: 8px; font-size: 11px; color: var(--text-muted); line-height: 1.4; }

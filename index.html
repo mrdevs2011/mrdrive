@@ -74,6 +74,25 @@
               </svg>
               Log out
             </button>
+            <div class="settings-divider"></div>
+            <div class="usage-box" id="usage-box">
+              <div class="usage-head">
+                <span class="usage-title">Storage</span>
+                <span class="usage-pct" id="usage-pct">—</span>
+              </div>
+              <div class="usage-bar" id="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                <span class="usage-seg seg-video" id="usage-seg-video"></span>
+                <span class="usage-seg seg-image" id="usage-seg-image"></span>
+                <span class="usage-seg seg-file" id="usage-seg-file"></span>
+              </div>
+              <div class="usage-total" id="usage-total">Yuklanmoqda…</div>
+              <div class="usage-cats">
+                <div class="usage-cat"><span class="usage-cat-label"><i class="dot seg-video"></i>Video</span><b id="usage-video">—</b></div>
+                <div class="usage-cat"><span class="usage-cat-label"><i class="dot seg-image"></i>Rasm</span><b id="usage-image">—</b></div>
+                <div class="usage-cat"><span class="usage-cat-label"><i class="dot seg-file"></i>Fayl</span><b id="usage-file">—</b></div>
+              </div>
+              <div class="usage-note" id="usage-note" hidden></div>
+            </div>
           </div>
         </div>
       </div>
