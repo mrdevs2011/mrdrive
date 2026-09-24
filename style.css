@@ -2433,6 +2433,7 @@ img.file-type-icon.file-thumb:hover {
   background: transparent;
   box-shadow: none;
   border: none;
+  border-radius: 0;
   z-index: 30;
 }
 
