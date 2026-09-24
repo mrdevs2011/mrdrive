@@ -1210,13 +1210,29 @@ body.is-dragging-file .folder-tab-wrap {
   background: var(--bg);
   align-items: center;
   justify-content: center;
-  overflow: visible;
+  overflow: visible !important;
+  padding: 24px 12px;
 }
 .public-preview.is-audio .mr-audio-player {
   overflow: visible;
+  max-width: min(560px, 100%);
 }
 .public-preview.is-audio .mr-audio-wave {
   overflow: visible;
+}
+/* parent chain must not clip the wave */
+.public-modal-box:has(.public-preview.is-audio),
+.public-modal-box.has-preview:has(.is-audio) {
+  overflow: visible !important;
+}
+.public-modal-box.has-preview:has(.is-audio) #public-preview-wrap {
+  overflow: visible !important;
+  min-height: 0;
+}
+.annot-page-audio,
+.annot-viewer.kind-audio #annot-scroll,
+.annot-viewer.kind-audio .annot-page {
+  overflow: visible !important;
 }
 .public-preview.is-pdf {
   background: var(--bg);
