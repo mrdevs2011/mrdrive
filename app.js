@@ -5553,7 +5553,7 @@ function mountMrAudioPlayer(host, opts) {
   const BIN_N = 128;
   let smoothBins = new Float32Array(BIN_N).fill(0.2);
   let smoothEnergy = 0.25;
-  const SMOOTH = 0.12;
+  const SMOOTH = 0.18;
 
   function envelope(nx) {
     const s = Math.sin(Math.PI * nx);
@@ -5563,10 +5563,12 @@ function mountMrAudioPlayer(host, opts) {
   function sampleFreq(nx) {
     if (!analyser || !freqData) return 0.25;
     const n = freqData.length;
-    const b1 = Math.min(n - 1, (nx * n * 0.5) | 0);
-    const b2 = Math.min(n - 1, ((1 - nx) * n * 0.3) | 0);
-    const raw = (freqData[b1] * 0.65 + freqData[b2] * 0.35) / 255;
-    return Math.min(1, Math.pow(raw, 0.75) * 1.4);
+    const b1 = Math.min(n - 1, (nx * n * 0.55) | 0);
+    const b2 = Math.min(n - 1, ((1 - nx) * n * 0.35) | 0);
+    const b3 = Math.min(n - 1, (nx * n * 0.15) | 0);
+    const raw = (freqData[b1] * 0.5 + freqData[b2] * 0.3 + freqData[b3] * 0.2) / 255;
+    // very high sensitivity: expand quiet signals, boost peaks
+    return Math.min(1.2, Math.pow(raw, 0.55) * 1.9);
   }
 
   function updateSmooth(idle) {
@@ -5675,7 +5677,7 @@ function mountMrAudioPlayer(host, opts) {
       const nx = i / n;
       xs[i] = nx * w;
       envs[i] = envelope(nx);
-      fms[i] = 0.3 + binAt(nx) * 1.3;
+      fms[i] = 0.2 + binAt(nx) * 1.7;
     }
 
     ctx.save();
@@ -5691,7 +5693,7 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq + phase) * 0.5 +
           Math.sin(nx * Math.PI * th.freq * 1.5 + phase * 1.1) * 0.28 +
           Math.sin(nx * Math.PI * th.freq * 0.5 + phase * 0.7) * 0.14;
-        const amp = h * 0.34 * th.amp * envs[i] * fms[i] * e;
+        const amp = h * 0.42 * th.amp * envs[i] * fms[i] * e;
         const y = midY + wave * amp;
         const half = h * 0.05 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
         yTop[i] = y - half;
@@ -5715,7 +5717,7 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq + phase) * 0.5 +
           Math.sin(nx * Math.PI * th.freq * 1.6 + phase * 1.15) * 0.27 +
           Math.sin(nx * Math.PI * th.freq * 0.5 + phase * 0.65) * 0.14;
-        const amp = h * 0.36 * th.amp * envs[i] * fms[i] * e;
+        const amp = h * 0.44 * th.amp * envs[i] * fms[i] * e;
         ys[i] = midY + wave * amp;
       }
       const a = th.a * (0.7 + e * 0.35);
@@ -5747,7 +5749,7 @@ function mountMrAudioPlayer(host, opts) {
       let sum = 0;
       const lim = Math.min(freqData.length, 48);
       for (let i = 0; i < lim; i++) sum += freqData[i];
-      energy = 0.2 + Math.pow(sum / (lim * 255), 0.7) * 1.5;
+      energy = 0.15 + Math.pow(sum / (lim * 255), 0.5) * 2.1;
     } else {
       energy = 0.38 + 0.22 * Math.abs(Math.sin((audio.currentTime || 0) * 1.8));
     }
