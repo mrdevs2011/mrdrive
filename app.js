@@ -1999,7 +1999,7 @@ function wireFolderDropTargets(toolbar) {
 
     const raw = target.getAttribute("data-folder");
     const targetFolder = raw === "" || raw == null ? null : raw;
-    moveFilesToFolder(fileIds, targetFolder);
+    moveFilesToFolder(fileIds, targetFolder, { animate: true });
   }
 
   // Bind once on the toolbar (re-created each render, so always fresh)
@@ -2029,120 +2029,130 @@ function shouldPlayMoveFlight() {
  *  Used only for the picker / context-menu / mobile button path — never for
  *  drag-and-drop onto a folder tab (the user is already dragging there). */
 async function playMoveToFolderVisual(fileIds, targetFolder) {
-  if (!shouldPlayMoveFlight()) return;
-  const ids = (fileIds || []).map(String);
-  if (!ids.length || !fileListEl) return;
-
-  const tab = findFolderTabEl(targetFolder);
-  if (!tab) return;
-
   try {
-    tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-  } catch (_) {}
-  await new Promise((r) => setTimeout(r, 160));
+    if (!fileListEl) return;
+    const ids = (fileIds || []).map(String);
+    if (!ids.length) return;
 
-  const dest = tab.getBoundingClientRect();
-  if (dest.width < 2 && dest.height < 2) return;
-  const destX = dest.left + dest.width / 2;
-  const destY = dest.top + dest.height / 2;
+    const tab = findFolderTabEl(targetFolder);
+    if (!tab) return;
 
-  const cards = ids
-    .map((id) => fileListEl.querySelector(`.file-card[data-file-id="${id}"]`))
-    .filter((c) => {
-      if (!c) return false;
-      const r = c.getBoundingClientRect();
-      return r.width > 8 && r.height > 8 && r.bottom > 40 && r.top < window.innerHeight - 8;
+    try {
+      tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    } catch (_) {}
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const dest = tab.getBoundingClientRect();
+    const destX = dest.left + Math.max(dest.width, 8) / 2;
+    const destY = dest.top + Math.max(dest.height, 8) / 2;
+
+    let cards = ids
+      .map((id) => fileListEl.querySelector('.file-card[data-file-id="' + id + '"]'))
+      .filter(Boolean);
+    if (!cards.length) {
+      const listBox = fileListEl.getBoundingClientRect();
+      const ghost = document.createElement("div");
+      ghost.className = "file-card move-fly-fallback";
+      ghost.style.cssText = "position:fixed;left:" + Math.max(16, listBox.left + 16) + "px;top:" + Math.max(80, listBox.top + 24) + "px;width:220px;height:56px;";
+      cards = [ghost];
+    }
+
+    const MAX_FLIGHTS = 8;
+    const flyCards = cards.slice(0, MAX_FLIGHTS);
+    const extra = Math.max(0, ids.length - flyCards.length);
+
+    const layer = document.createElement("div");
+    layer.className = "move-fly-layer";
+    layer.setAttribute("aria-hidden", "true");
+    document.body.appendChild(layer);
+
+    tab.classList.add("folder-awaiting-catch");
+
+    const waitAnim = (anim, fallbackMs) => {
+      if (anim && anim.finished && typeof anim.finished.then === "function") {
+        return anim.finished.catch(function () {});
+      }
+      return new Promise(function (r) { setTimeout(r, fallbackMs || 600); });
+    };
+
+    const flights = flyCards.map((card, i) => {
+      const r = card.getBoundingClientRect();
+      const clone = card.classList.contains("move-fly-fallback") ? card : card.cloneNode(true);
+      clone.classList.add("move-fly-card");
+      clone.classList.remove("selected", "actions-open", "long-pressing", "is-dragging", "is-flying-away");
+      clone.removeAttribute("draggable");
+      clone.querySelectorAll(".file-actions, .file-actions-more").forEach((n) => n.remove());
+      clone.style.position = "fixed";
+      clone.style.left = r.left + "px";
+      clone.style.top = r.top + "px";
+      clone.style.width = Math.max(r.width, 40) + "px";
+      clone.style.height = Math.max(r.height, 36) + "px";
+      clone.style.margin = "0";
+      clone.style.zIndex = "30000";
+      clone.style.pointerEvents = "none";
+      layer.appendChild(clone);
+      if (card.parentNode && card !== clone) card.classList.add("is-flying-away");
+
+      const startX = r.left + r.width / 2;
+      const startY = r.top + r.height / 2;
+      const dx = destX - startX;
+      const dy = destY - startY;
+      const lift = -48 - (i % 4) * 8;
+      const spin = (i % 2 === 0 ? -1 : 1) * (8 + (i % 3) * 3);
+      const delay = i * 45;
+      const dur = 620 + Math.min(i, 6) * 20;
+
+      const anim = clone.animate(
+        [
+          { transform: "translate(0,0) scale(1) rotate(0deg)", opacity: 1, offset: 0 },
+          {
+            transform: "translate(" + (dx * 0.4) + "px, " + (dy * 0.25 + lift) + "px) scale(0.82) rotate(" + spin + "deg)",
+            opacity: 1,
+            offset: 0.4
+          },
+          {
+            transform: "translate(" + dx + "px, " + dy + "px) scale(0.14) rotate(" + (spin * 0.3) + "deg)",
+            opacity: 0.08,
+            offset: 1
+          }
+        ],
+        { duration: dur, delay: delay, easing: "cubic-bezier(0.22, 0.9, 0.28, 1)", fill: "forwards" }
+      );
+      return waitAnim(anim, delay + dur);
     });
-  if (!cards.length) return;
 
-  const MAX_FLIGHTS = 8;
-  const flyCards = cards.slice(0, MAX_FLIGHTS);
-  const extra = cards.length - flyCards.length;
-
-  const layer = document.createElement("div");
-  layer.className = "move-fly-layer";
-  layer.setAttribute("aria-hidden", "true");
-  document.body.appendChild(layer);
-
-  tab.classList.add("folder-awaiting-catch");
-
-  const flights = flyCards.map((card, i) => {
-    const r = card.getBoundingClientRect();
-    const clone = card.cloneNode(true);
-    clone.classList.add("move-fly-card");
-    clone.classList.remove("selected", "actions-open", "long-pressing", "is-dragging");
-    clone.removeAttribute("draggable");
-    clone.querySelectorAll(".file-actions, .file-actions-more").forEach((n) => n.remove());
-    clone.style.width = r.width + "px";
-    clone.style.height = r.height + "px";
-    clone.style.left = r.left + "px";
-    clone.style.top = r.top + "px";
-    layer.appendChild(clone);
-    card.classList.add("is-flying-away");
-
-    const startX = r.left + r.width / 2;
-    const startY = r.top + r.height / 2;
-    const dx = destX - startX;
-    const dy = destY - startY;
-    const lift = -56 - (i % 4) * 10;
-    const spin = (i % 2 === 0 ? -1 : 1) * (10 + (i % 3) * 4);
-    const delay = i * 48;
-    const dur = 560 + Math.min(i, 6) * 24;
-
-    return clone.animate(
-      [
-        { transform: "translate(0,0) scale(1) rotate(0deg)", opacity: 1, offset: 0 },
-        {
-          transform: `translate(${dx * 0.42}px, ${dy * 0.28 + lift}px) scale(0.78) rotate(${spin}deg)`,
-          opacity: 0.96,
-          offset: 0.42,
-        },
-        {
-          transform: `translate(${dx}px, ${dy}px) scale(0.16) rotate(${spin * 0.35}deg)`,
-          opacity: 0.12,
-          offset: 1,
-        },
-      ],
-      { duration: dur, delay, easing: "cubic-bezier(0.22, 0.9, 0.28, 1)", fill: "forwards" }
-    ).finished.catch(() => {});
-  });
-
-  if (extra > 0 && flyCards.length) {
-    const last = flyCards[flyCards.length - 1].getBoundingClientRect();
-    const badge = document.createElement("div");
-    badge.className = "move-fly-badge";
-    badge.textContent = "+" + extra;
-    badge.style.left = last.left + last.width - 18 + "px";
-    badge.style.top = last.top - 8 + "px";
-    layer.appendChild(badge);
-    const dx = destX - (last.left + last.width);
-    const dy = destY - last.top;
-    flights.push(
-      badge.animate(
+    if (extra > 0 && flyCards.length) {
+      const last = flyCards[flyCards.length - 1].getBoundingClientRect();
+      const badge = document.createElement("div");
+      badge.className = "move-fly-badge";
+      badge.textContent = "+" + extra;
+      badge.style.left = (last.left + last.width - 18) + "px";
+      badge.style.top = (last.top - 8) + "px";
+      layer.appendChild(badge);
+      const dx = destX - (last.left + last.width);
+      const dy = destY - last.top;
+      const anim = badge.animate(
         [
           { transform: "translate(0,0) scale(1)", opacity: 1 },
-          { transform: `translate(${dx}px, ${dy}px) scale(0.2)`, opacity: 0 },
+          { transform: "translate(" + dx + "px, " + dy + "px) scale(0.2)", opacity: 0 }
         ],
-        {
-          duration: 620,
-          delay: flyCards.length * 48,
-          easing: "cubic-bezier(0.22, 0.9, 0.28, 1)",
-          fill: "forwards",
-        }
-      ).finished.catch(() => {})
-    );
+        { duration: 640, delay: flyCards.length * 45, easing: "cubic-bezier(0.22, 0.9, 0.28, 1)", fill: "forwards" }
+      );
+      flights.push(waitAnim(anim, 800));
+    }
+
+    window.setTimeout(function () {
+      tab.classList.remove("folder-awaiting-catch");
+      tab.classList.add("folder-catch");
+    }, 280);
+
+    await Promise.all(flights);
+    await new Promise(function (r) { setTimeout(r, 60); });
+    tab.classList.remove("folder-catch", "folder-awaiting-catch");
+    layer.remove();
+  } catch (err) {
+    console.warn("move visual failed", err);
   }
-
-  const firstArrive = 300 + Math.min(flyCards.length, 3) * 40;
-  window.setTimeout(() => {
-    tab.classList.remove("folder-awaiting-catch");
-    tab.classList.add("folder-catch");
-  }, firstArrive);
-
-  await Promise.all(flights);
-  await new Promise((r) => setTimeout(r, 80));
-  tab.classList.remove("folder-catch", "folder-awaiting-catch");
-  layer.remove();
 }
 
 async function moveFilesToFolder(fileIds, targetFolder, opts) {

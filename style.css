@@ -126,27 +126,6 @@ body { background: var(--bg); color: var(--text); }
   100% { opacity: 1; transform: scale(1); }
 }
 
-.sp-ring {
-  position: absolute;
-  left: -34px; top: -34px; width: 68px; height: 68px;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  opacity: 0;
-  z-index: 1;
-  animation: spRing 2.8s both;
-}
-.sp-ring.r2 {
-  left: -46px; top: -46px; width: 92px; height: 92px;
-  border-color: var(--border);
-  animation-delay: 0.12s;
-}
-@keyframes spRing {
-  0%, 8% { opacity: 0; transform: scale(0.92); }
-  22%    { opacity: 0.55; transform: scale(1); }
-  80%    { opacity: 0.2; transform: scale(1.04); }
-  100%   { opacity: 0; transform: scale(1.12); }
-}
-
 .sp-word {
   position: absolute;
   left: -90px; width: 180px;
@@ -191,7 +170,7 @@ body { background: var(--bg); color: var(--text); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sp-orb, .sp-ring { display: none; }
+  .sp-orb { display: none; }
   .sp-logo { animation: none; }
   .sp-word { animation: none; opacity: 1; }
   .sp-progress, .sp-progress i { animation: none; }

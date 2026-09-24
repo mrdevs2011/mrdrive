@@ -25,7 +25,7 @@
 
   function build() {
     if (!scene) return;
-    var h = '<div class="sp-ring"></div><div class="sp-ring r2"></div>';
+    var h = '';
     ITEMS.forEach(function (it) {
       h += '<div class="sp-orb" style="--r:' + it.r + 'px;--a:' + it.a + 'deg;--dir:' + it.dir + ';--d:' + it.d + 's">' +
            '<div class="sp-orb-in"><div class="sp-fx">' + it.h + '</div></div></div>';
