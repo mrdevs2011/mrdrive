@@ -122,10 +122,43 @@ function fileIconUrlForName(name) {
 
 // Signed preview URLs for image thumbnails (list + drag ghost)
 const thumbUrlCache = new Map(); // id -> { url, expiresAt }
+// Real <img> objects kept alive so the browser's own image cache is warm —
+// this is what actually removes the delay when a preview opens, not just
+// having a signed URL string ready.
+const warmedImageCache = new Map(); // id -> HTMLImageElement
 
 function thumbUrlFor(fileId) {
   const c = thumbUrlCache.get(String(fileId));
   return c && c.url ? c.url : "";
+}
+
+/** Drop a file's thumbnail (signed URL + warmed image) from every in-memory
+ * cache. Call this the moment a file is deleted — locally or remotely —
+ * so a stale/old image can never be shown again for that id. */
+function forgetThumb(fileId) {
+  const key = String(fileId);
+  thumbUrlCache.delete(key);
+  warmedImageCache.delete(key);
+}
+function forgetThumbs(fileIds) {
+  (fileIds || []).forEach(forgetThumb);
+}
+
+/** Preload every image file's bytes into the browser cache right away, so
+ * opening a preview later is instant. Runs in the background and is safe
+ * to call repeatedly — already-warmed images are skipped. */
+function preloadAllThumbs(files) {
+  (files || []).forEach((f) => {
+    if (!isImageFileName(f.filename)) return;
+    const key = String(f.id);
+    const url = thumbUrlFor(key);
+    if (!url) return;
+    const existing = warmedImageCache.get(key);
+    if (existing && existing.src === url) return; // already warmed for this URL
+    const img = new Image();
+    img.src = url;
+    warmedImageCache.set(key, img);
+  });
 }
 
 /** Left-side icon: real square crop for images, SVG otherwise */
@@ -160,6 +193,10 @@ async function prefetchThumbUrls(files) {
       }
     }));
   }
+  // Warm the browser's real image cache for every image file (not just the
+  // ones currently rendered as cards) so opening a preview later has zero delay.
+  preloadAllThumbs(images);
+
   if (!fileListEl) return;
   fileListEl.querySelectorAll(".file-card[data-file-id]").forEach((card) => {
     const id = card.dataset.fileId;
@@ -228,6 +265,7 @@ function notifyRemoteFileChanges(prevFiles, nextFiles) {
   }
   for (const f of prevFiles || []) {
     if (nextById.has(f.id)) continue;
+    forgetThumb(f.id); // gone from the DB elsewhere (Claude/another session) — drop its cached image too
     if (localDeleteIds.has(String(f.id))) continue;
     showToast(`Claude ${f.filename} o'chirdi`, "warning");
     remoteDeleted.push(f);
@@ -3017,6 +3055,7 @@ async function deleteFile(id, path, evt) {
   if (card) await playDeleteDissolve(card, clickX, clickY);
 
   markLocalDelete(id);
+  forgetThumb(id); // drop the cached image immediately — it must vanish together with the file
 
   // 1) Database row first. .select() returns the rows that were actually deleted,
   //    so a silent RLS block (0 rows, no error) can be detected instead of ignored.
@@ -3216,6 +3255,7 @@ async function deleteSelectedFiles(ids, clickX, clickY) {
   }
 
   list.forEach((id) => markLocalDelete(id));
+  forgetThumbs(list); // drop cached images for every file being deleted, together with the files
 
   const files = list
     .map((id) => allFiles.find((f) => String(f.id) === String(id)))
