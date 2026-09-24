@@ -135,13 +135,23 @@ body { background: var(--bg); color: var(--text); }
   z-index: 3;
   animation: spLogo 2.8s cubic-bezier(.2, .9, .25, 1) both;
 }
-.sp-logo svg {
+.sp-logo img {
   display: block;
   width: 52px; height: 52px;
-  border-radius: 14px;
-  box-shadow:
-    0 8px 24px rgba(24, 24, 27, 0.14),
-    0 2px 6px rgba(24, 24, 27, 0.06);
+  object-fit: contain;
+  filter: drop-shadow(0 6px 16px rgba(59, 130, 246, 0.28));
+}
+.brand-logo {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.logo .brand-logo {
+  width: 48px;
+  height: 48px;
+  filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.22));
 }
 @keyframes spLogo {
   0%   { opacity: 0; transform: scale(0.72); }

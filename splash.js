@@ -32,10 +32,7 @@
            '<div class="sp-orb-in"><div class="sp-fx">' + it.h + '</div></div></div>';
     });
     h += '<div class="sp-logo" aria-hidden="true">' +
-         '<svg viewBox="0 0 40 40" fill="none">' +
-         '<rect width="40" height="40" rx="10" fill="#18181b"/>' +
-         '<path d="M10 26V14L20 22L30 14V26" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>' +
-         '</svg></div>' +
+         '<img src="/assets/logo.png" width="52" height="52" alt="" draggable="false"></div>' +
          '<div class="sp-word">MRdrive</div>' +
          '<div class="sp-progress" role="progressbar" aria-label="Yuklanmoqda"><i></i></div>';
     scene.innerHTML = h;
