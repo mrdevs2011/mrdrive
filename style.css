@@ -1,28 +1,30 @@
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
 
-/* ===== 3 brand colors — change these and the whole app follows ===== */
+/* ===== Brand palette: blue + black + white (+ red only for danger) ===== */
 :root {
-  --primary: #18181b;   /* 1) buttons, active tabs, main actions */
-  --accent:  #3b82f6;   /* 2) selection, focus, drag-over, public/success */
-  --danger:  #dc2626;   /* 3) delete, errors */
+  --primary: #2563eb;   /* 1) main actions, active tabs, CTAs — blue */
+  --accent:  #3b82f6;   /* 2) focus, selection, links, highlights */
+  --danger:  #dc2626;   /* 3) delete / errors only (rare) */
 
-  /* tints derived from the 3 colors above (don't edit) */
-  --accent-soft:   color-mix(in srgb, var(--accent) 10%, #fff);
-  --accent-strong: color-mix(in srgb, var(--accent) 72%, #000);
+  /* tints derived from the brand colors */
+  --accent-soft:   color-mix(in srgb, var(--accent) 12%, #fff);
+  --accent-strong: color-mix(in srgb, var(--accent) 68%, #0f172a);
+  --primary-soft:  color-mix(in srgb, var(--primary) 10%, #fff);
+  --primary-hover: color-mix(in srgb, var(--primary) 88%, #0f172a);
   --danger-soft:   color-mix(in srgb, var(--danger) 10%, #fff);
   --danger-strong: color-mix(in srgb, var(--danger) 72%, #000);
 
-  /* neutrals */
-  --bg: #fafafa;
+  /* neutrals — white surfaces, near-black text, cool blue-gray borders */
+  --bg: #f1f5fb;
   --surface: #ffffff;
-  --border: #e4e4e7;
-  --border-strong: #d4d4d8;
-  --text: #18181b;
-  --text-muted: #71717a;
-  --neutral-soft: #f4f4f5;
-  --neutral-text: #52525b;
+  --border: #dbe4f0;
+  --border-strong: #c5d0e0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --neutral-soft: #eef3fb;
+  --neutral-text: #475569;
 
-  /* status colors now reuse the 3 brand colors / neutrals */
+  /* status */
   --green: var(--accent);
   --green-bg: var(--accent-soft);
   --green-text: var(--accent-strong);
@@ -30,8 +32,8 @@
   --amber-text: var(--neutral-text);
   --red-bg: var(--danger-soft);
   --red-text: var(--danger-strong);
-  --blue-bg: var(--neutral-soft);
-  --blue-text: var(--neutral-text);
+  --blue-bg: var(--primary-soft);
+  --blue-text: var(--primary);
 }
 
 body { background: var(--bg); color: var(--text); }
@@ -2156,9 +2158,9 @@ body.is-dragging-file .folder-tab-wrap {
 
 /* Text/code previews: header always dark (matches dark code workspace) */
 .annot-viewer.kind-code .annot-topbar {
-  background: var(--primary);
-  border-bottom-color: #27272a;
-  color: #e4e4e7;
+  background: #0f172a;
+  border-bottom-color: #1e293b;
+  color: #e2e8f0;
 }
 .annot-viewer.kind-code .annot-filename {
   color: #e4e4e7;
