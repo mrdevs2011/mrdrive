@@ -542,7 +542,7 @@ function showPublicDownloadModal(token) {
             <button id="public-edit-btn" class="public-edit-btn" title="Tahrirlash" style="display:none;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             </button>
-            <button id="public-download-btn" class="public-download-btn" disabled title="Download" aria-label="Download">${ICON_DOWNLOAD}</button>
+            <button id="public-download-btn" class="public-download-btn" disabled title="Yuklab olish" aria-label="Yuklab olish">${ICON_DOWNLOAD}</button>
             <button id="public-fs-btn" class="public-fs-btn" title="Fullscreen" aria-label="Fullscreen" style="display:none;">${ICON_FULLSCREEN}</button>
           </div>
           <p id="public-status" class="public-status"></p>
@@ -579,8 +579,8 @@ function showPublicDownloadModal(token) {
         modalIcon.classList.remove("is-loading");
         modalIcon.innerHTML = ICON_DOWNLOAD;
         modalBox.classList.add("is-error");
-        filenameEl.textContent = "File not found";
-        metaEl.textContent = "This link was removed or doesn't exist.";
+        filenameEl.textContent = "Fayl topilmadi";
+        metaEl.textContent = "Bu havola o'chirilgan yoki mavjud emas.";
         return;
       }
 
@@ -588,8 +588,8 @@ function showPublicDownloadModal(token) {
         modalIcon.classList.remove("is-loading");
         modalIcon.innerHTML = ICON_DOWNLOAD;
         modalBox.classList.add("is-error");
-        filenameEl.textContent = "Expired";
-        metaEl.textContent = "This link has expired.";
+        filenameEl.textContent = "Muddati tugagan";
+        metaEl.textContent = "Bu havolaning muddati tugagan.";
         return;
       }
 
@@ -660,7 +660,7 @@ function showPublicDownloadModal(token) {
             }, { once: true });
             imgEl.addEventListener("error", () => {
               hideLoader();
-              statusEl.textContent = "Could not load this image";
+              statusEl.textContent = "Rasmni yuklab bo'lmadi";
             }, { once: true });
             imgEl.src = previewUrlData.signedUrl;
           } else {
@@ -676,7 +676,7 @@ function showPublicDownloadModal(token) {
             videoEl.addEventListener("loadedmetadata", hideLoader, { once: true });
             videoEl.addEventListener("error", () => {
               hideLoader();
-              statusEl.textContent = "Could not load this video";
+              statusEl.textContent = "Videoni yuklab bo'lmadi";
             }, { once: true });
             videoEl.src = previewUrlData.signedUrl;
             wrap.appendChild(videoEl);
@@ -705,13 +705,13 @@ function showPublicDownloadModal(token) {
           } catch (err) {
             console.error(err);
             hideLoader();
-            statusEl.textContent = "Could not preview this PDF";
+            statusEl.textContent = "PDF ni ko'rib bo'lmadi";
           }
         }
       }
 
       downloadBtn.onclick = async () => {
-        statusEl.textContent = "Preparing download...";
+        statusEl.textContent = "Yuklab olishga tayyorlanmoqda...";
         downloadBtn.disabled = true;
 
         try {
@@ -738,7 +738,7 @@ function showPublicDownloadModal(token) {
               a.click();
               a.remove();
               setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-              statusEl.textContent = "Downloaded";
+              statusEl.textContent = "Yuklab olindi";
               return;
             }
             statusEl.textContent = "Chizma eksport qilinmadi — asl fayl...";
@@ -751,7 +751,7 @@ function showPublicDownloadModal(token) {
             });
 
           if (urlError) {
-            statusEl.textContent = "Error: " + urlError.message;
+            statusEl.textContent = "Xato: " + urlError.message;
             return;
           }
 
@@ -764,10 +764,10 @@ function showPublicDownloadModal(token) {
           a.remove();
 
           sb.rpc("increment_download_count", { file_id: data.id });
-          statusEl.textContent = "Downloaded";
+          statusEl.textContent = "Yuklab olindi";
         } catch (err) {
           console.error(err);
-          statusEl.textContent = "Error: " + (err.message || "download failed");
+          statusEl.textContent = "Xato: " + (err.message || "download failed");
         } finally {
           downloadBtn.disabled = false;
         }
@@ -1327,7 +1327,7 @@ function notifyDuplicate(file) {
   const now = Date.now();
   if (now - lastDuplicateToastAt < 2000) return; // one toast per burst
   lastDuplicateToastAt = now;
-  showToast("Duplicate skipped", "warning", `${file.name} was just uploaded`);
+  showToast("Takror fayl o'tkazib yuborildi", "warning", `${file.name} hozirgina yuklandi`);
 }
 
 // --- Progress UI ---------------------------------------------------------
@@ -1362,7 +1362,7 @@ function createProgressItem(filename) {
   return {
     setQueued() {
       fill.style.width = "0%";
-      status.textContent = "Waiting…";
+      status.textContent = "Kutilmoqda…";
       item.classList.add("queued");
     },
     setPercent(p) {
@@ -1373,14 +1373,14 @@ function createProgressItem(filename) {
     },
     setSaving() {
       fill.style.width = "100%";
-      status.textContent = "Saving…";
+      status.textContent = "Saqlanmoqda…";
       item.classList.add("saving");
     },
     setDone() {
       item.classList.remove("saving");
       item.classList.add("done");
       fill.style.width = "100%";
-      status.textContent = "Done";
+      status.textContent = "Bajarildi";
       setTimeout(() => item.remove(), 1200);
     },
     setError(message) {
@@ -1794,18 +1794,18 @@ function renderToolbar() {
   toolbar.innerHTML = `
     <div class="search-wrap">
       <span class="search-icon">${ICON_SEARCH}</span>
-      <input type="text" id="search-input" placeholder="Search files..." value="${escapeHtml(currentSearch)}" />
+      <input type="text" id="search-input" placeholder="Fayllarni qidirish..." value="${escapeHtml(currentSearch)}" />
     </div>
     <div class="folder-tabs">
-      <button class="folder-tab ${currentFolder === null ? 'active' : ''}" data-folder="" onclick="setFolder(null)" title="Drop files here to remove from folder">
+      <button class="folder-tab ${currentFolder === null ? 'active' : ''}" data-folder="" onclick="setFolder(null)" title="Faylni papkadan chiqarish uchun shu yerga tashlang">
         ${ICON_FOLDER} All
       </button>
       ${allFolders.map(f => `
         <div class="folder-tab-wrap" data-folder="${escapeHtml(f.name)}" data-folder-id="${f.id}">
-          <button class="folder-tab ${currentFolder === f.name ? 'active' : ''}" data-folder="${escapeHtml(f.name)}" onclick="setFolder('${escapeJs(f.name)}')" title="Drop files here">
+          <button class="folder-tab ${currentFolder === f.name ? 'active' : ''}" data-folder="${escapeHtml(f.name)}" onclick="setFolder('${escapeJs(f.name)}')" title="Faylni shu papkaga tashlang">
             ${ICON_FOLDER} ${escapeHtml(f.name)}
           </button>
-          <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}', event)" title="Delete folder">
+          <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}', event)" title="Papkani o'chir">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
         </div>
@@ -1921,13 +1921,13 @@ async function moveFilesToFolder(fileIds, targetFolder) {
   const next = targetFolder || null;
   const toMove = files.filter((f) => (f.folder || null) !== next);
   if (!toMove.length) {
-    showToast(next ? `Already in "${next}"` : "Already in All", "warning");
+    showToast(next ? `Already in "${next}"` : "Allaqachon hammada", "warning");
     return;
   }
 
   const { error } = await sb.from(TABLE).update({ folder: next }).in("id", toMove.map((f) => f.id));
   if (error) {
-    showAlert("Error: " + error.message);
+    showAlert("Xato: " + error.message);
     return;
   }
 
@@ -1979,8 +1979,8 @@ window.addEventListener("popstate", (e) => {
 
 async function createFolder(fileIds) {
   const dropIds = Array.isArray(fileIds) ? fileIds.map(String) : null; // set when files were dropped on "+ Folder"
-  const name = await showPrompt(dropIds ? "Enter your folder name" : "New folder", {
-    okLabel: dropIds ? "Create & move" : "Create",
+  const name = await showPrompt(dropIds ? "Papka nomini kiriting" : "Yangi papka", {
+    okLabel: dropIds ? "Yaratish va ko'chirish" : "Yaratish",
     placeholder: "Folder name"
   });
   if (name == null || !String(name).trim()) return;
@@ -1990,7 +1990,7 @@ async function createFolder(fileIds) {
   if (!user) return;
 
   if (allFolders.some(f => f.name.toLowerCase() === trimmed.toLowerCase())) {
-    showToast("Folder already exists", "warning", "Pick a different name.");
+    showToast("Papka allaqachon mavjud", "warning", "Boshqa nom tanlang.");
     return;
   }
 
@@ -2005,7 +2005,7 @@ async function createFolder(fileIds) {
   
   // Show folder instantly
   renderToolbar();
-  showToast(`Folder created: ${trimmed}`, "success");
+  showToast(`Papka yaratildi: ${trimmed}`, "success");
   
   if (dropIds) {
     currentFolder = trimmed;
@@ -2050,12 +2050,12 @@ async function createFolder(fileIds) {
 
 async function deleteFolder(id, name, evt) {
   const filesInFolder = allFiles.filter(f => f.folder === name);
-  let msg = `Delete folder "${name}"?`;
+  let msg = `"${name}" papkasini o'chirishni xohlaysizmi?`;
   if (filesInFolder.length > 0) {
-    msg += `\n\nHeads up: this folder has ${filesInFolder.length} ${filesInFolder.length === 1 ? "file" : "files"}. ${filesInFolder.length === 1 ? "It" : "They"} will move to "All" (not deleted).`;
+    msg += `\n\nDiqqat: bu papkada ${filesInFolder.length} ta fayl bor. Ular "Hammasi" ga ko'chiriladi (o'chirilmaydi).`;
   }
 
-  if (!(await showConfirm(msg, "Delete", { skippable: true }))) return;
+  if (!(await showConfirm(msg, "O'chirish", { skippable: true }))) return;
 
   const clickX = evt ? evt.clientX : undefined;
   const clickY = evt ? evt.clientY : undefined;
@@ -2077,7 +2077,7 @@ async function deleteFolder(id, name, evt) {
   const { error } = await sb.from(FOLDERS_TABLE).delete().eq("id", id);
 
   if (error) {
-    showAlert("Error: " + error.message);
+    showAlert("Xato: " + error.message);
     loadFiles();
     return;
   }
@@ -2086,7 +2086,7 @@ async function deleteFolder(id, name, evt) {
     currentFolder = null;
     syncFolderUrl(null);
   }
-  showToast("Folder deleted");
+  showToast("Papka o'chirildi");
   // Optimistic: keep classic tab collapse, soft sync after
   allFolders = allFolders.filter((f) => String(f.id) !== String(id));
   if (filesInFolder.length > 0) {
@@ -2177,14 +2177,14 @@ function renderFiles() {
         <div class="file-actions-more">
           ${isPublic
             ? `<div class="toggle-group">
-                 <button class="toggle-btn copy-btn" onclick="copyPublicLink(${f.id}, this)" title="Copy link">${ICON_COPY}</button>
-                 <button class="toggle-btn refresh-btn" onclick="refreshPublicLink(${f.id})" title="Create a new link (the old one stops working)">${ICON_REFRESH}</button>
-                 <button class="toggle-btn unlink-btn" onclick="unpublishFile(${f.id})" title="Remove from public">${ICON_UNLINK}</button>
+                 <button class="toggle-btn copy-btn" onclick="copyPublicLink(${f.id}, this)" title="Havolani nusxalash">${ICON_COPY}</button>
+                 <button class="toggle-btn refresh-btn" onclick="refreshPublicLink(${f.id})" title="Yangi havola (eski ishlamay qoladi)">${ICON_REFRESH}</button>
+                 <button class="toggle-btn unlink-btn" onclick="unpublishFile(${f.id})" title="Ommaviydan o'chirish">${ICON_UNLINK}</button>
                </div>`
-            : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Create public link">${ICON_LINK}</button>`
+            : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Ommaviy havola yaratish">${ICON_LINK}</button>`
           }
-          <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Download">${ICON_DOWNLOAD}</button>
-          <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}', event)" title="Delete">${ICON_DELETE}</button>
+          <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Yuklab olish">${ICON_DOWNLOAD}</button>
+          <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}', event)" title="O'chirish">${ICON_DELETE}</button>
         </div>
       </div>
     </div>
@@ -2245,7 +2245,7 @@ async function fetchSelectedBlobs(ids) {
 async function saveSelectedToFolder() {
   try {
     const dir = await window.showDirectoryPicker({ mode: "readwrite" });
-    showToast("Saving…");
+    showToast("Saqlanmoqda…");
     const items = await fetchSelectedBlobs();
     for (const it of items) {
       const fh = await dir.getFileHandle(it.name, { create: true });
@@ -2256,7 +2256,7 @@ async function saveSelectedToFolder() {
     showToast(`Saved ${items.length} file(s)`);
   } catch (err) {
     if (err && err.name === "AbortError") return;
-    showAlert("Error: " + (err.message || err));
+    showAlert("Xato: " + (err.message || err));
   }
 }
 
@@ -2277,7 +2277,7 @@ async function downloadSelectedZip(ids) {
     items.forEach((it) => zip.file(it.name, it.blob));
     triggerSave(await zip.generateAsync({ type: "blob" }), "mrdrive-files.zip");
   } catch (err) {
-    showAlert("Error: " + (err.message || err));
+    showAlert("Xato: " + (err.message || err));
   }
 }
 
@@ -2485,7 +2485,7 @@ let touchHoldActive = false;
       try { hinted = !!sessionStorage.getItem("mrdrive_sel_hint"); } catch (_) {}
       if (!hinted) {
         try { sessionStorage.setItem("mrdrive_sel_hint", "1"); } catch (_) {}
-        showToast("Selection mode", "success", "Tap more files, then hold on one of them to open the menu. Tap empty space to cancel.");
+        showToast("Tanlash rejimi", "success", "Ko'proq fayl tanlang, menyu ochish uchun ushlab turing. Bekor qilish uchun bo'sh joyga bosing.");
       }
     }, LONG_PRESS_MS);
   }, { passive: true });
@@ -2808,7 +2808,7 @@ async function downloadFile(id, path, filename) {
     .createSignedUrl(path, 60, { download: filename });
 
   if (error) {
-    showAlert("Error: " + error.message);
+    showAlert("Xato: " + error.message);
     return;
   }
 
@@ -3326,7 +3326,7 @@ async function deleteFile(id, path, evt) {
   const clickX = evt ? evt.clientX : undefined;
   const clickY = evt ? evt.clientY : undefined;
 
-  if (!(await showConfirm("Delete this file?", "Delete", { skippable: true }))) return;
+  if (!(await showConfirm("Ushbu faylni o'chirishni xohlaysizmi?", "O'chirish", { skippable: true }))) return;
 
   // Prefer data-file-id; fall back to the button's parent card (event target)
   let card = fileListEl.querySelector(`.file-card[data-file-id="${id}"]`);
@@ -3343,7 +3343,7 @@ async function deleteFile(id, path, evt) {
   const { data: deletedRows, error } = await sb.from(TABLE).delete().eq("id", id).select();
 
   if (error) {
-    showAlert("Error: " + error.message);
+    showAlert("Xato: " + error.message);
     loadFiles();
     return;
   }
@@ -3357,11 +3357,11 @@ async function deleteFile(id, path, evt) {
   // 2) Then the stored file
   const { data: removed, error: storageError } = await sb.storage.from(BUCKET).remove([path]);
   if (storageError) {
-    showToast("File deleted", "warning", "Storage cleanup failed: " + storageError.message);
+    showToast("Fayl o'chirildi", "warning", "Xotirani tozalashda xato: " + storageError.message);
   } else if (!removed || removed.length === 0) {
-    showToast("File deleted", "warning", "It's gone from your list, but the stored copy may still be in storage.");
+    showToast("Fayl o'chirildi", "warning", "Ro'yxatdan o'chirildi, lekin xotiradagi nusxa qolgan bo'lishi mumkin.");
   } else {
-    showToast("File deleted");
+    showToast("Fayl o'chirildi");
   }
 
   // Keep list in sync without a hard re-render (preserves classic gap-close)
@@ -3389,8 +3389,8 @@ function showFileContextMenu(clientX, clientY, ids) {
   menu.className = "file-context-menu";
   menu.setAttribute("role", "menu");
 
-  const dlLabel = n === 1 ? "Download" : `Download ${n} files (ZIP)`;
-  const delLabel = n === 1 ? "Delete this file" : `Delete these ${n} files`;
+  const dlLabel = n === 1 ? "Yuklab olish" : `Download ${n} files (ZIP)`;
+  const delLabel = n === 1 ? "Ushbu faylni o'chirish" : `Delete these ${n} files`;
   menu.innerHTML = `
     <button type="button" class="ctx-item" role="menuitem" data-action="download">
       ${ICON_DOWNLOAD}<span>${dlLabel}</span>
@@ -3399,7 +3399,7 @@ function showFileContextMenu(clientX, clientY, ids) {
       ${ICON_FOLDER}<span>${n === 1 ? "Drag to folder" : `Drag ${n} files to folder`}</span>
     </button>
     ${getFilteredFiles().length > n ? `<button type="button" class="ctx-item" role="menuitem" data-action="selectall">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg><span>Select all</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg><span>Hammasini tanlash</span>
     </button>` : ""}
     <button type="button" class="ctx-item ctx-danger" role="menuitem" data-action="delete">
       ${ICON_DELETE}<span>${delLabel}</span>
@@ -3424,7 +3424,7 @@ function showFileContextMenu(clientX, clientY, ids) {
   menu.querySelector('[data-action="download"]').addEventListener("click", async (e) => {
     e.stopPropagation();
     hideFileContextMenu();
-    showToast(n === 1 ? "Downloading…" : `Preparing ${n} files…`);
+    showToast(n === 1 ? "Yuklab olinmoqda…" : `Preparing ${n} files…`);
     await downloadSelectedZip(ids);
   });
 
@@ -3487,7 +3487,7 @@ function showFolderPicker(fileIds) {
       </div>
     </div>`;
   modal.querySelector(".prompt-title").textContent =
-    ids.length === 1 ? "Move to folder" : `Move ${ids.length} files to`;
+    ids.length === 1 ? "Papkaga ko'chirish" : `Move ${ids.length} files to`;
   const list = modal.querySelector(".folder-picker-list");
 
   const close = () => { document.removeEventListener("keydown", onKey); modal.remove(); };
@@ -3523,9 +3523,9 @@ async function deleteSelectedFiles(ids, clickX, clickY) {
 
   const msg =
     list.length === 1
-      ? "Delete this file?"
+      ? "Ushbu faylni o'chirishni xohlaysizmi?"
       : `Delete these ${list.length} files?`;
-  if (!(await showConfirm(msg, "Delete", { skippable: true }))) return;
+  if (!(await showConfirm(msg, "O'chirish", { skippable: true }))) return;
 
   // Dissolve all visible selected cards in parallel
   const cards = list
@@ -3553,7 +3553,7 @@ async function deleteSelectedFiles(ids, clickX, clickY) {
     .select();
 
   if (error) {
-    showAlert("Error: " + error.message);
+    showAlert("Xato: " + error.message);
     loadFiles();
     return;
   }
@@ -3564,15 +3564,15 @@ async function deleteSelectedFiles(ids, clickX, clickY) {
     const { error: storageError } = await sb.storage.from(BUCKET).remove(paths);
     if (storageError) {
       showToast(
-        list.length === 1 ? "File deleted" : `${list.length} files deleted`,
+        list.length === 1 ? "Fayl o'chirildi" : `${list.length} files deleted`,
         "warning",
-        "Storage cleanup failed: " + storageError.message
+        "Xotirani tozalashda xato: " + storageError.message
       );
     } else {
-      showToast(list.length === 1 ? "File deleted" : `${list.length} files deleted`);
+      showToast(list.length === 1 ? "Fayl o'chirildi" : `${list.length} files deleted`);
     }
   } else {
-    showToast(list.length === 1 ? "File deleted" : `${list.length} files deleted`);
+    showToast(list.length === 1 ? "Fayl o'chirildi" : `${list.length} files deleted`);
   }
 
   const gone = new Set((deletedRows || []).map((r) => String(r.id)));
@@ -3628,14 +3628,14 @@ async function createPublicLink(fileId) {
       .eq("id", fileId);
 
     if (updateError) {
-      showAlert("Error: " + updateError.message);
+      showAlert("Xato: " + updateError.message);
       return;
     }
 
     const url = `${window.location.origin}${window.location.pathname}?share=${newToken}`;
     await copyToClipboard(url);
 
-    showToast("Public link created and copied");
+    showToast("Ommaviy havola yaratildi va nusxalandi");
     loadFiles();
   });
 }
@@ -3654,7 +3654,7 @@ async function copyPublicLink(fileId, btn) {
 
   const url = `${window.location.origin}${window.location.pathname}?share=${file.public_token}`;
   await copyToClipboard(url);
-  showToast("Link copied");
+  showToast("Havola nusxalandi");
 
   // Morph the button itself into a checkmark for a moment instead of
   // just relying on the toast — same button, brief state change.
@@ -3670,7 +3670,7 @@ async function copyPublicLink(fileId, btn) {
 }
 
 async function refreshPublicLink(fileId) {
-  if (!(await showConfirm("Create a new link? The old link will stop working.", "Create new link"))) return;
+  if (!(await showConfirm("Yangi havola yaratilsinmi? Eski havola ishlamay qoladi.", "Yangi havola"))) return;
 
   const { data: file, error } = await sb
     .from(TABLE)
@@ -3696,19 +3696,19 @@ async function refreshPublicLink(fileId) {
     .eq("id", fileId);
 
   if (updateError) {
-    showAlert("Error: " + updateError.message);
+    showAlert("Xato: " + updateError.message);
     return;
   }
 
   const url = `${window.location.origin}${window.location.pathname}?share=${newToken}`;
   await copyToClipboard(url);
 
-  showToast("New link created and copied");
+  showToast("Yangi havola yaratildi va nusxalandi");
   loadFiles();
 }
 
 async function unpublishFile(fileId) {
-  if (!(await showConfirm("Remove from public? The link will stop working.", "Remove"))) return;
+  if (!(await showConfirm("Ommaviydan o'chirish? Havola ishlamay qoladi.", "O'chirish"))) return;
 
   const { error } = await sb
     .from(TABLE)
@@ -3716,11 +3716,11 @@ async function unpublishFile(fileId) {
     .eq("id", fileId);
 
   if (error) {
-    showAlert("Error: " + error.message);
+    showAlert("Xato: " + error.message);
     return;
   }
 
-  showToast("Removed from public");
+  showToast("Ommaviydan o'chirildi");
   loadFiles();
 }
 
@@ -3739,7 +3739,7 @@ function showConfirm(message, okLabel = "OK", opts = {}) {
       <div class="modal-backdrop">
         <div class="modal-box">
           <p class="confirm-msg"></p>
-          ${skippable ? `<label class="confirm-skip"><input type="checkbox" class="confirm-skip-cb"><span>Delete without asking.</span></label>` : ""}
+          ${skippable ? `<label class="confirm-skip"><input type="checkbox" class="confirm-skip-cb"><span>O'chirishdan oldin so'ramaslik.</span></label>` : ""}
           <div class="confirm-actions">
             <button type="button" class="confirm-cancel">Cancel</button>
             <button type="button" class="confirm-ok"></button>
@@ -3810,7 +3810,7 @@ function showAlert(message) {
 function showPrompt(message, opts = {}) {
   const {
     okLabel = "OK",
-    cancelLabel = "Cancel",
+    cancelLabel = "Bekor qilish",
     placeholder = "",
     defaultValue = ""
   } = opts;

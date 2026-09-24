@@ -26,20 +26,20 @@
       <h1>MRdrive</h1>
 
       <div id="login-form">
-        <p class="form-title">Log in</p>
-        <input type="text" id="login-username" placeholder="Username" autocomplete="username" />
-        <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
-        <button type="button" id="login-btn">Log in</button>
-        <p class="switch-link">Don't have an account? <a href="#" id="to-signup">Sign up</a></p>
+        <p class="form-title">Kirish</p>
+        <input type="text" id="login-username" placeholder="Foydalanuvchi nomi" autocomplete="username" />
+        <input type="password" id="login-password" placeholder="Parol" autocomplete="current-password" />
+        <button type="button" id="login-btn">Kirish</button>
+        <p class="switch-link">Hisobingiz yo'qmi? <a href="#" id="to-signup">Ro'yxatdan o'tish</a></p>
       </div>
 
       <div id="signup-form" style="display:none;">
-        <p class="form-title">Sign up</p>
-        <input type="text" id="signup-name" placeholder="Your name" autocomplete="name" />
-        <input type="text" id="signup-username" placeholder="Username" autocomplete="username" />
-        <input type="password" id="signup-password" placeholder="Password (min 6 characters)" autocomplete="new-password" />
-        <button type="button" id="signup-btn">Sign up</button>
-        <p class="switch-link">Already have an account? <a href="#" id="to-login">Log in</a></p>
+        <p class="form-title">Ro'yxatdan o'tish</p>
+        <input type="text" id="signup-name" placeholder="Ismingiz" autocomplete="name" />
+        <input type="text" id="signup-username" placeholder="Foydalanuvchi nomi" autocomplete="username" />
+        <input type="password" id="signup-password" placeholder="Parol (kamida 6 ta belgi)" autocomplete="new-password" />
+        <button type="button" id="signup-btn">Ro'yxatdan o'tish</button>
+        <p class="switch-link">Hisobingiz bormi? <a href="#" id="to-login">Kirish</a></p>
       </div>
 
       <p id="auth-status"></p>
@@ -87,14 +87,14 @@
       const username = document.getElementById("signup-username").value.trim();
       const password = document.getElementById("signup-password").value;
       if (!name || !username || !password) {
-        authStatus.textContent = "Please fill in all fields.";
+        authStatus.textContent = "Barcha maydonlarni to'ldiring.";
         return;
       }
       if (password.length < 6) {
-        authStatus.textContent = "Password must be at least 6 characters.";
+        authStatus.textContent = "Parol kamida 6 ta belgi bo'lishi kerak.";
         return;
       }
-      authStatus.textContent = "Signing you up...";
+      authStatus.textContent = "Ro'yxatdan o'tkazilmoqda...";
       const mcp_token = await computeMcpToken(username, password);
       const { data, error } = await sb.auth.signUp({
         email: usernameToEmail(username),
@@ -103,16 +103,16 @@
       });
       if (error) {
         if (error.message.includes("already registered")) {
-          authStatus.textContent = "This username is taken. Pick another one.";
+          authStatus.textContent = "Bu foydalanuvchi nomi band. Boshqa nom tanlang.";
         } else {
-          authStatus.textContent = "Error: " + error.message;
+          authStatus.textContent = "Xato: " + error.message;
         }
         return;
       }
       if (data.session) {
         location.replace("/");
       } else {
-        authStatus.textContent = "Signed up. Please log in.";
+        authStatus.textContent = "Ro'yxatdan o'tdingiz. Iltimos kiring.";
         showLogin();
       }
     }
@@ -121,16 +121,16 @@
       const username = document.getElementById("login-username").value.trim();
       const password = document.getElementById("login-password").value;
       if (!username || !password) {
-        authStatus.textContent = "Enter your username and password.";
+        authStatus.textContent = "Foydalanuvchi nomi va parolni kiriting.";
         return;
       }
-      authStatus.textContent = "Checking...";
+      authStatus.textContent = "Tekshirilmoqda...";
       const { data, error } = await sb.auth.signInWithPassword({
         email: usernameToEmail(username),
         password,
       });
       if (error) {
-        authStatus.textContent = "Error: incorrect username or password.";
+        authStatus.textContent = "Xato: foydalanuvchi nomi yoki parol noto'g'ri.";
         return;
       }
       try {

@@ -2340,7 +2340,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .usage-box { padding: 10px 12px 12px; }
 .usage-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .usage-title { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
-.usage-pct { font-size: 15px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.usage-pct { font-size: 12px; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .usage-pct.is-warn { color: #b45309; }
 .usage-pct.is-full { color: var(--danger); }
 .usage-bar {
