@@ -5095,11 +5095,9 @@ function mountMrAudioPlayer(host, opts) {
       <div class="mr-audio-progress-fill"></div>
     </div>
     <div class="mr-audio-controls">
-      <button type="button" class="mr-audio-btn" data-act="loop" title="Takrorlash">${svgIcon(MR_AUDIO_ICONS.loop)}</button>
       <button type="button" class="mr-audio-btn" data-act="prev" title="-10 soniya">${svgIcon(MR_AUDIO_ICONS.prev)}</button>
       <button type="button" class="mr-audio-btn mr-audio-play" data-act="play" title="Play">${svgIcon(MR_AUDIO_ICONS.play)}</button>
       <button type="button" class="mr-audio-btn" data-act="next" title="+10 soniya">${svgIcon(MR_AUDIO_ICONS.next)}</button>
-      <button type="button" class="mr-audio-btn" data-act="share" title="Ulashish">${svgIcon(MR_AUDIO_ICONS.share)}</button>
     </div>
   `;
   root.querySelector(".mr-audio-title").textContent = audioDisplayName(filename);
@@ -5118,7 +5116,6 @@ function mountMrAudioPlayer(host, opts) {
   const fill = root.querySelector(".mr-audio-progress-fill");
   const timeEl = root.querySelector(".mr-audio-time");
   const playBtn = root.querySelector('[data-act="play"]');
-  const loopBtn = root.querySelector('[data-act="loop"]');
   const pbox = root.querySelector(".mr-audio-progress");
   const subEl = root.querySelector(".mr-audio-sub");
 
@@ -5239,10 +5236,6 @@ function mountMrAudioPlayer(host, opts) {
   }
 
   playBtn.addEventListener("click", togglePlay);
-  loopBtn.addEventListener("click", () => {
-    audio.loop = !audio.loop;
-    loopBtn.classList.toggle("is-active", audio.loop);
-  });
   root.querySelector('[data-act="prev"]').addEventListener("click", () => {
     audio.currentTime = Math.max(0, (audio.currentTime || 0) - 10);
     setTime();
@@ -5251,23 +5244,6 @@ function mountMrAudioPlayer(host, opts) {
     if (audio.duration) audio.currentTime = Math.min(audio.duration, (audio.currentTime || 0) + 10);
     setTime();
   });
-  root.querySelector('[data-act="share"]').addEventListener("click", async () => {
-    const title = audioDisplayName(filename);
-    const url = opts.shareUrl || window.location.href;
-    if (opts.onShare) {
-      opts.onShare();
-      return;
-    }
-    try {
-      if (navigator.share) {
-        await navigator.share({ title, url });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(url);
-        if (typeof showToast === "function") showToast("Havola nusxalandi");
-      }
-    } catch (_) {}
-  });
-
   const onMove = (ev) => { dragging = true; seekFromEvent(ev); };
   const onStop = () => {
     dragging = false;
@@ -5326,13 +5302,7 @@ async function loadAudioForAnnot(url, scroll, file) {
   mountMrAudioPlayer(page, {
     url,
     filename: file && file.filename,
-    size: file && file.size,
-    onShare: () => {
-      if (!file) return;
-      const live = file.is_public && file.public_token && !(file.expires_at && new Date(file.expires_at) < new Date());
-      if (live) copyPublicLink(file.id);
-      else createPublicLink(file.id);
-    }
+    size: file && file.size
   });
 }
 
