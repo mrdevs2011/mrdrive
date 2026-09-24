@@ -1862,48 +1862,12 @@ function updateSelectionClasses() {
   updateSelectionBar();
 }
 
-// Reliable alternative to dragging files out to the OS file manager (which
-// browsers on Linux/Wayland mostly can't do): a bar with real save buttons.
+// The floating bottom "download" button was removed: downloading selected files
+// now lives in the right-click (context) menu. Kept as a stub so old calls still work
+// and any leftover button from an older version is cleaned up.
 function updateSelectionBar() {
-  let bar = document.getElementById("selection-bar");
-  const n = selectedFileIds.size;
-  if (!n) { if (bar) bar.remove(); return; }
-  if (!bar) {
-    bar = document.createElement("button");
-    bar.id = "selection-bar";
-    bar.type = "button";
-    bar.className = "selection-fab";
-    bar.setAttribute("aria-label", "Download selected");
-    bar.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0-5-5m5 5 5-5"/><path d="M5 20h14"/></svg>`;
-    bar.onclick = async () => {
-      if (bar.classList.contains("busy")) return;
-      bar.classList.add("busy");
-      try { await downloadSelectedZip(); } finally { bar.classList.remove("busy"); }
-    };
-    // Drop target: drag selected file cards onto the button to get them as a ZIP.
-    const isCardDrag = (e) => Array.from(e.dataTransfer.types || []).some((t) => t.startsWith("application/x-mrdrive-file"));
-    bar.addEventListener("dragover", (e) => {
-      if (!isCardDrag(e)) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
-      bar.classList.add("drop-hover");
-    });
-    bar.addEventListener("dragleave", () => bar.classList.remove("drop-hover"));
-    bar.addEventListener("drop", async (e) => {
-      if (!isCardDrag(e)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      bar.classList.remove("drop-hover");
-      let ids = [];
-      try { ids = JSON.parse(e.dataTransfer.getData("application/x-mrdrive-files") || "[]"); } catch { ids = []; }
-      if (!ids.length) { const one = e.dataTransfer.getData("application/x-mrdrive-file"); if (one) ids = [one]; }
-      if (!ids.length || bar.classList.contains("busy")) return;
-      bar.classList.add("busy");
-      try { await downloadSelectedZip(ids); } finally { bar.classList.remove("busy"); }
-    });
-    document.body.appendChild(bar);
-  }
-  bar.title = n > 1 ? `Download ${n} files as ZIP` : "Download";
+  const bar = document.getElementById("selection-bar");
+  if (bar) bar.remove();
 }
 
 // Clicking anywhere except a file card / the download button drops the selection
@@ -2023,6 +1987,74 @@ fileListEl.addEventListener("click", (e) => {
   document.querySelectorAll(".file-card.actions-open").forEach(c => c.classList.remove("actions-open"));
   if (!wasOpen) card.classList.add("actions-open");
 });
+
+// ==========================================
+// LONG-PRESS (touch) — hold a card for 3 seconds to open the context menu
+// ==========================================
+const LONG_PRESS_MS = 3000;
+const LONG_PRESS_MOVE_TOLERANCE = 12; // px: bigger movement = scrolling, cancel
+let touchHoldActive = false;
+(function initLongPress() {
+  let timer = null, hint = null, card = null;
+  let startX = 0, startY = 0, fired = false, releaseTimer = null;
+
+  function clear() {
+    clearTimeout(timer); clearTimeout(hint);
+    timer = hint = null;
+    if (card) card.classList.remove("long-pressing");
+    card = null;
+  }
+
+  fileListEl.addEventListener("touchstart", (e) => {
+    clearTimeout(releaseTimer);
+    fired = false;
+    if (e.touches.length !== 1) { clear(); touchHoldActive = false; return; }
+    const c = e.target.closest && e.target.closest(".file-card");
+    if (!c || !c.dataset.fileId) return;
+    if (e.target.closest(".file-actions, .file-actions-more, button, a, input")) return;
+
+    touchHoldActive = true;
+    clear();
+    card = c;
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+
+    // small visual cue after a moment (so quick taps don't flash)
+    hint = setTimeout(() => { if (card) card.classList.add("long-pressing"); }, 450);
+
+    timer = setTimeout(() => {
+      const id = String(c.dataset.fileId);
+      let ids;
+      if (selectedFileIds.has(id) && selectedFileIds.size > 1) {
+        ids = Array.from(selectedFileIds);
+      } else {
+        selectedFileIds = new Set([id]);
+        updateSelectionClasses();
+        ids = [id];
+      }
+      fired = true;
+      clear();
+      if (navigator.vibrate) { try { navigator.vibrate(30); } catch (_) {} }
+      showFileContextMenu(startX, startY, ids);
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+
+  fileListEl.addEventListener("touchmove", (e) => {
+    if (!timer) return;
+    const t = e.touches[0];
+    if (Math.hypot(t.clientX - startX, t.clientY - startY) > LONG_PRESS_MOVE_TOLERANCE) clear();
+  }, { passive: true });
+
+  const end = (e) => {
+    clear();
+    // The finger lifting after a long press must not also "click" the card
+    // (which would open the preview) or close the menu that just opened.
+    if (fired && e.cancelable) e.preventDefault();
+    releaseTimer = setTimeout(() => { touchHoldActive = false; fired = false; }, 600);
+  };
+  fileListEl.addEventListener("touchend", end, { passive: false });
+  fileListEl.addEventListener("touchcancel", end, { passive: false });
+})();
 
 // Rubber-band (marquee) selection, like a desktop file manager: press on ANY
 // empty spot of the page (also below the list), drag, and every card the box
@@ -2876,8 +2908,12 @@ function showFileContextMenu(clientX, clientY, ids) {
   menu.className = "file-context-menu";
   menu.setAttribute("role", "menu");
 
+  const dlLabel = n === 1 ? "Download" : `Download ${n} files (ZIP)`;
   const delLabel = n === 1 ? "Delete this file" : `Delete these ${n} files`;
   menu.innerHTML = `
+    <button type="button" class="ctx-item" role="menuitem" data-action="download">
+      ${ICON_DOWNLOAD}<span>${dlLabel}</span>
+    </button>
     <button type="button" class="ctx-item ctx-danger" role="menuitem" data-action="delete">
       ${ICON_DELETE}<span>${delLabel}</span>
     </button>
@@ -2898,6 +2934,13 @@ function showFileContextMenu(clientX, clientY, ids) {
   menu.style.left = left + "px";
   menu.style.top = top + "px";
 
+  menu.querySelector('[data-action="download"]').addEventListener("click", async (e) => {
+    e.stopPropagation();
+    hideFileContextMenu();
+    showToast(n === 1 ? "Downloading…" : `Preparing ${n} files…`);
+    await downloadSelectedZip(ids);
+  });
+
   menu.querySelector('[data-action="delete"]').addEventListener("click", async (e) => {
     e.stopPropagation();
     hideFileContextMenu();
@@ -2907,14 +2950,16 @@ function showFileContextMenu(clientX, clientY, ids) {
   // Close on outside click / escape / scroll
   const close = (ev) => {
     if (ev.type === "keydown" && ev.key !== "Escape") return;
-    if (ev.type === "mousedown" && menu.contains(ev.target)) return;
+    if ((ev.type === "mousedown" || ev.type === "touchstart") && menu.contains(ev.target)) return;
     hideFileContextMenu();
+    document.removeEventListener("touchstart", close, true);
     document.removeEventListener("mousedown", close, true);
     document.removeEventListener("keydown", close, true);
     window.removeEventListener("scroll", close, true);
   };
   setTimeout(() => {
     document.addEventListener("mousedown", close, true);
+    document.addEventListener("touchstart", close, true);
     document.addEventListener("keydown", close, true);
     window.addEventListener("scroll", close, true);
   }, 0);
@@ -2989,6 +3034,9 @@ fileListEl.addEventListener("contextmenu", (e) => {
   const card = e.target.closest && e.target.closest(".file-card");
   if (!card || !card.dataset.fileId) return;
   e.preventDefault();
+  // On touch screens the browser fires this after ~0.5s of holding; our own
+  // 3-second long-press (below) opens the menu instead.
+  if (touchHoldActive || e.pointerType === "touch") return;
 
   const id = String(card.dataset.fileId);
   let ids;

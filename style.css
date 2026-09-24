@@ -2185,3 +2185,14 @@ header, .toolbar {
   width: 16px;
   height: 16px;
 }
+
+/* Touch: hold a card 3 s to open its menu — subtle "pressing" cue + no native callout */
+.file-card { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.file-card.long-pressing {
+  transform: scale(0.985);
+  background: var(--bg);
+  transition: transform 2.4s cubic-bezier(0.2, 0.6, 0.3, 1), background 2.4s ease;
+}
+@media (pointer: coarse) {
+  .file-card { -webkit-user-select: none; user-select: none; }
+}
