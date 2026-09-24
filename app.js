@@ -2402,7 +2402,8 @@ function __dissolveInlineAllStyles(src, dest) {
   }
   // Kill interactive chrome in the snapshot
   if (dest.classList && (dest.classList.contains("file-actions") || dest.classList.contains("file-actions-more"))) {
-    dest.style.display = "none";
+    // visibility (not display) so the snapshot keeps the exact live layout
+    dest.style.setProperty("visibility", "hidden");
   }
   const srcChildren = src.children;
   const destChildren = dest.children;
@@ -2434,10 +2435,13 @@ function __dissolveDomToCanvas(el) {
     // external PNGs / complex SVG would break foreignObject → blank → no sand)
     // File cards: hide actions. Folder tabs: only hide the X, keep the name label.
     if (clone.classList.contains("folder-tab-wrap")) {
-      clone.querySelectorAll(".folder-del-btn").forEach((b) => { b.style.display = "none"; });
+      clone.querySelectorAll(".folder-del-btn").forEach((b) => { b.style.setProperty("visibility", "hidden"); });
     } else {
+      // Hide with visibility (NOT display:none): the card is usually still hovered
+      // when Delete is clicked (no confirm dialog), so its layout has the action
+      // buttons expanded. display:none re-flowed the text and the card "jumped".
       clone.querySelectorAll(".file-actions, .file-actions-more, button, .file-type-icon, .folder-icon").forEach((b) => {
-        b.style.display = "none";
+        b.style.setProperty("visibility", "hidden");
       });
     }
     // Solid fallbacks so snapshot never depends on CSS variables
