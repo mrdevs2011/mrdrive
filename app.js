@@ -2454,7 +2454,7 @@ function __dissolveDomToCanvas(el) {
       `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
         `<foreignObject width="100%" height="100%" x="0" y="0">` +
           `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${w}px;height:${h}px;margin:0;padding:0;box-sizing:border-box;">` +
-            clone.outerHTML +
+            new XMLSerializer().serializeToString(clone) +
           `</div>` +
         `</foreignObject>` +
       `</svg>`;
@@ -2532,7 +2532,7 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
   return tiles;
 }
 
-/** Fallback when pixel snapshot fails: whole card floats up & fades (still not a snap). */
+/** Fallback when pixel snapshot fails: whole card falls down & fades (still not a snap). */
 function __dissolveFloatFallback(card) {
   return new Promise((resolve) => {
     const rect = card.getBoundingClientRect();
@@ -2548,14 +2548,14 @@ function __dissolveFloatFallback(card) {
       "z-index:9998",
       "pointer-events:none",
       "box-sizing:border-box",
-      "transition:transform 1.1s cubic-bezier(.22,.61,.36,1), opacity 1.1s ease",
-      "transform:translateY(0) scale(1)",
+      "transition:transform 0.9s cubic-bezier(.55,0,1,.45), opacity 0.9s ease-in",
+      "transform:translateY(0)",
       "opacity:1"
     ].join(";");
     document.body.appendChild(ghost);
     card.style.visibility = "hidden";
     requestAnimationFrame(() => {
-      ghost.style.transform = "translateY(-90px) scale(0.96)";
+      ghost.style.transform = "translateY(" + Math.max(240, window.innerHeight - rect.top) + "px)";
       ghost.style.opacity = "0";
     });
     setTimeout(() => {
