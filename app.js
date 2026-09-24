@@ -4695,6 +4695,11 @@ async function openAnnotationViewer(file, kind, opts) {
 
   // Keyboard
   window.addEventListener("keydown", annotKeyHandler);
+
+  // Live layout: reflow image/video/pdf when window size changes
+  bindAnnotResize();
+  // One extra pass after layout settles (flex/toolbar)
+  requestAnimationFrame(() => requestAnimationFrame(refitAnnotLayout));
 }
 
 // Enter drawing mode: pencil active (gray). Only freehand pen — no tools bar.
@@ -4877,6 +4882,7 @@ function closeAnnotationViewer(opts) {
   const videoEl = viewer.querySelector("#annot-scroll video, #annot-scroll audio");
   if (videoEl) { videoEl.pause(); videoEl.removeAttribute("src"); videoEl.load(); }
   if (window.__mrAudioDestroy) { try { window.__mrAudioDestroy(); } catch (_) {} }
+  unbindAnnotResize();
   viewer.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
   const closedFile = annotState.file;
@@ -5021,6 +5027,133 @@ function setAnnotZoom(scale) {
     const extra = (scale - 1) * p.baseH;
     p.el.style.marginBottom = (extra > 0 ? extra + 16 : 16) + "px";
   });
+}
+
+// Live reflow when the window / workspace size changes (desktop ↔ tablet).
+let annotResizeObserver = null;
+let annotResizeRaf = 0;
+
+function refitAnnotLayout() {
+  if (!annotState.open) return;
+  const scroll = document.getElementById("annot-scroll");
+  if (!scroll) return;
+  // Ignore mid-swipe transforms
+  if (scroll.style.transform && scroll.style.transform !== "none" && scroll.style.transform !== "") {
+    const t = scroll.style.transform;
+    if (t.includes("translate") && !t.includes("translate3d(0")) return;
+  }
+
+  const pad = 16;
+  const availW = Math.max(120, (scroll.clientWidth || window.innerWidth) - pad);
+  const availH = Math.max(120, (scroll.clientHeight || (window.innerHeight - 120)) - pad);
+  const type = annotState.type;
+  const userZoom = annotState.scale || 1;
+
+  if (type === "image" && annotState.pages && annotState.pages[0]) {
+    const p = annotState.pages[0];
+    if (!p.imgW || !p.imgH || !p.el) return;
+    const s = Math.min(availW / p.imgW, availH / p.imgH);
+    const w = Math.max(1, Math.round(p.imgW * s));
+    const h = Math.max(1, Math.round(p.imgH * s));
+    p.el.style.width = w + "px";
+    p.el.style.height = h + "px";
+    const img = p.el.querySelector("img");
+    if (img) {
+      img.width = w;
+      img.height = h;
+      img.style.width = w + "px";
+      img.style.height = h + "px";
+    }
+    if (p.canvas) {
+      p.canvas.style.width = w + "px";
+      p.canvas.style.height = h + "px";
+    }
+    p.baseH = h;
+    if (userZoom !== 1) {
+      setAnnotZoom(userZoom);
+    } else {
+      p.el.style.transform = "";
+      p.el.style.marginBottom = "";
+    }
+    return;
+  }
+
+  if (type === "video") {
+    const video = scroll.querySelector("video");
+    const page = scroll.querySelector(".annot-page-video");
+    if (!video || !page || !video.videoWidth) return;
+    const s = Math.min(availW / video.videoWidth, availH / video.videoHeight);
+    const w = Math.max(1, Math.round(video.videoWidth * s));
+    const h = Math.max(1, Math.round(video.videoHeight * s));
+    video.style.width = w + "px";
+    video.style.height = h + "px";
+    page.style.width = w + "px";
+    page.style.height = h + "px";
+    return;
+  }
+
+  if (type === "pdf" && annotState.pages && annotState.pages.length) {
+    annotState.pages.forEach((p) => {
+      if (!p.imgW || !p.imgH || !p.el) return;
+      // Fit to available width; vertical scroll for tall multi-page docs
+      const s = Math.min(1, availW / p.imgW);
+      const w = Math.max(1, Math.round(p.imgW * s));
+      const h = Math.max(1, Math.round(p.imgH * s));
+      p.el.style.width = w + "px";
+      p.el.style.height = h + "px";
+      const pdfCanvas = p.el.querySelector("canvas.pdf-page");
+      if (pdfCanvas) {
+        pdfCanvas.style.width = w + "px";
+        pdfCanvas.style.height = h + "px";
+      }
+      if (p.canvas) {
+        p.canvas.style.width = w + "px";
+        p.canvas.style.height = h + "px";
+      }
+      p.baseH = h;
+    });
+    if (userZoom !== 1) setAnnotZoom(userZoom);
+    else {
+      annotState.pages.forEach((p) => {
+        if (!p.el) return;
+        p.el.style.transform = "";
+        p.el.style.marginBottom = "";
+      });
+    }
+  }
+}
+
+function bindAnnotResize() {
+  // Idempotent: drop any previous listeners first (openAnnotationViewer can re-run on nav)
+  window.removeEventListener("resize", onAnnotWindowResize);
+  if (annotResizeObserver) {
+    annotResizeObserver.disconnect();
+    annotResizeObserver = null;
+  }
+  const workspace = document.getElementById("annot-workspace");
+  if (workspace && typeof ResizeObserver !== "undefined") {
+    annotResizeObserver = new ResizeObserver(() => {
+      cancelAnimationFrame(annotResizeRaf);
+      annotResizeRaf = requestAnimationFrame(refitAnnotLayout);
+    });
+    annotResizeObserver.observe(workspace);
+  }
+  window.addEventListener("resize", onAnnotWindowResize);
+}
+
+function onAnnotWindowResize() {
+  if (!annotState.open) return;
+  cancelAnimationFrame(annotResizeRaf);
+  annotResizeRaf = requestAnimationFrame(refitAnnotLayout);
+}
+
+function unbindAnnotResize() {
+  if (annotResizeObserver) {
+    annotResizeObserver.disconnect();
+    annotResizeObserver = null;
+  }
+  window.removeEventListener("resize", onAnnotWindowResize);
+  cancelAnimationFrame(annotResizeRaf);
 }
 
 
