@@ -2326,16 +2326,12 @@ async function deleteFolder(id, name, evt) {
     return;
   }
 
-  if (currentFolder === name) {
-    currentFolder = null;
-    syncFolderUrl(null);
-  }
   showToast("Papka o'chirildi");
-  // Optimistic: keep classic tab collapse, soft sync after
   allFolders = allFolders.filter((f) => String(f.id) !== String(id));
   if (filesInFolder.length > 0) {
     allFiles = allFiles.map((f) => (f.folder === name ? { ...f, folder: null } : f));
   }
+  setFolder(null);
   setTimeout(() => loadFiles(true), 500);
 }
 
