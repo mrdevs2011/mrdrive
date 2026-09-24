@@ -52,177 +52,246 @@ body { background: var(--bg); color: var(--text); }
 }
 #boot-loader.is-hiding { opacity: 0; pointer-events: none; }
 
-/* --- Splash scene (jami 2s, bir marta) ---
-   Timeline: fayllar ketma-ket logoga uchib kiradi (0.05 / 0.30 / 0.55 / 0.80s),
-   har biri kelganda logo "yutadi" (bump + halqa), pastda progress 0 → 100%. */
+/* --- Splash scene (jami 3s, bir marta) ---
+   0.0–0.4s  logo paydo bo'ladi, fayllar/rasmlar/media atrofida aylana boshlaydi
+   0.4–1.6s  hammasi logo atrofida orbitada aylanadi
+   1.6–2.25s "WHOOP" — girdob logo markaziga so'rib oladi (spiral, tezlashib)
+   2.25s     zarba: logo portlab kattalashadi, halqa + uchqunlar
+   2.3–2.75s MRdrive yozuvi ochiladi, so'ng butun sahna kattalashib app ichiga kiradi */
 .splash-scene {
   position: relative;
-  width: 320px;
-  height: 190px;
-  --dx: 112px;           /* pill chap chetidan logo markazigacha */
+  width: 0;
+  height: 0;
+  margin-top: -14px;
+  transition: transform 0.25s cubic-bezier(.5,0,.9,.4);
 }
+#boot-loader.is-hiding .splash-scene { transform: scale(1.35); }
 
-/* Logo — markazda */
-.splash-logo {
+/* --- Girdob (whoosh) --- */
+.sp-swirl {
   position: absolute;
-  left: 50%;
-  top: 62px;
-  width: 48px;
-  height: 48px;
-  margin-left: -24px;
-  margin-top: -24px;
-  z-index: 2;
-  animation: splashLogoIn 0.45s cubic-bezier(.2,.8,.2,1) both;
-}
-.splash-logo svg {
-  display: block;
-  border-radius: 10px;
-  box-shadow: 0 6px 18px rgba(24,24,27,0.18);
-  animation: splashBump 2s ease-out both;
-}
-@keyframes splashLogoIn {
-  0%   { opacity: 0; transform: scale(0.7); }
-  100% { opacity: 1; transform: scale(1); }
-}
-/* Har bir fayl kelganda kichik "yutish" bump'i: 0.73 / 0.98 / 1.23 / 1.48s */
-@keyframes splashBump {
-  0%, 35%   { transform: scale(1); }
-  38%       { transform: scale(1.09); }
-  42%       { transform: scale(1); }
-  48%       { transform: scale(1); }
-  51%       { transform: scale(1.09); }
-  55%       { transform: scale(1); }
-  60%       { transform: scale(1); }
-  63%       { transform: scale(1.09); }
-  67%       { transform: scale(1); }
-  73%       { transform: scale(1); }
-  76%       { transform: scale(1.12); }
-  82%, 100% { transform: scale(1); }
-}
-
-/* Logo atrofida halqa — har bump bilan */
-.splash-logo::after {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 16px;
-  border: 1.5px solid var(--accent);
+  left: -170px; top: -170px;
+  width: 340px; height: 340px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 22%,
+    transparent 45%,
+    color-mix(in srgb, #ec4899 45%, transparent) 72%,
+    transparent 100%);
+  -webkit-mask: radial-gradient(circle, transparent 36%, #000 40%, #000 60%, transparent 66%);
+          mask: radial-gradient(circle, transparent 36%, #000 40%, #000 60%, transparent 66%);
   opacity: 0;
-  animation: splashRing 2s ease-out both;
+  animation: spSwirl 3s cubic-bezier(.5,0,.8,.5) both;
 }
-@keyframes splashRing {
-  0%, 36%   { transform: scale(0.9); opacity: 0; }
-  37%       { transform: scale(0.9); opacity: 0.55; }
-  47%       { transform: scale(1.5); opacity: 0; }
-  48.5%     { transform: scale(0.9); opacity: 0; }
-  49.5%     { transform: scale(0.9); opacity: 0.55; }
-  59.5%     { transform: scale(1.5); opacity: 0; }
-  61%       { transform: scale(0.9); opacity: 0; }
-  62%       { transform: scale(0.9); opacity: 0.55; }
-  72%       { transform: scale(1.5); opacity: 0; }
-  73.5%     { transform: scale(0.9); opacity: 0; }
-  74.5%     { transform: scale(0.9); opacity: 0.7; }
-  90%, 100% { transform: scale(1.9); opacity: 0; }
+@keyframes spSwirl {
+  0%, 40%  { opacity: 0; transform: rotate(0deg) scale(1.15); }
+  55%      { opacity: 0.55; transform: rotate(240deg) scale(1); }
+  74%      { opacity: 0.9; transform: rotate(760deg) scale(0.22); }
+  76%, 100%{ opacity: 0; transform: rotate(800deg) scale(0.1); }
 }
 
-/* Uchuvchi fayl pill'lari (chap → markaz) */
-.splash-files {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
+/* --- Orbitadagi elementlar: orb > in > fx > body --- */
+.sp-orb {
+  position: absolute; left: 0; top: 0; width: 0; height: 0;
+  --Rm: min(var(--r), 42vw);
+  z-index: 2;
+  animation: spOrbit 2.1s var(--d) both;
 }
-.splash-file {
-  position: absolute;
-  left: 0;
-  top: 62px;
-  margin-top: -13px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.sp-orb-in {
+  position: absolute; left: 0; top: 0; width: 0; height: 0;
+  animation: spOrbitUp 2.1s var(--d) both;
+}
+.sp-fx {
+  position: absolute; left: 0; top: 0; width: 0; height: 0;
+  animation: spFx 2.1s var(--d) both;
+}
+.sp-body {
+  position: absolute; left: 0; top: 0;
+  transform: translate(-50%, -50%);
+  display: block;
+  will-change: transform;
+}
+
+@keyframes spOrbit {
+  0%   { transform: rotate(calc(var(--a) - var(--dir) * 70deg)) translateX(calc(var(--Rm) * 1.35));
+         animation-timing-function: cubic-bezier(.2,.7,.25,1); }
+  16%  { transform: rotate(var(--a)) translateX(var(--Rm));
+         animation-timing-function: cubic-bezier(.4,.1,.6,.9); }
+  58%  { transform: rotate(calc(var(--a) + var(--dir) * 150deg)) translateX(calc(var(--Rm) * .9));
+         animation-timing-function: cubic-bezier(.55,0,.95,.45); }
+  100% { transform: rotate(calc(var(--a) + var(--dir) * 620deg)) translateX(0px); }
+}
+/* Teskari aylanish — elementlar to'g'ri turib qolishi uchun */
+@keyframes spOrbitUp {
+  0%   { transform: rotate(calc(var(--dir) * 70deg - var(--a)));
+         animation-timing-function: cubic-bezier(.2,.7,.25,1); }
+  16%  { transform: rotate(calc(0deg - var(--a)));
+         animation-timing-function: cubic-bezier(.4,.1,.6,.9); }
+  58%  { transform: rotate(calc(0deg - var(--a) - var(--dir) * 150deg));
+         animation-timing-function: cubic-bezier(.55,0,.95,.45); }
+  100% { transform: rotate(calc(0deg - var(--a) - var(--dir) * 620deg)); }
+}
+@keyframes spFx {
+  0%   { opacity: 0; transform: scale(0.3); animation-timing-function: cubic-bezier(.2,.9,.3,1.2); }
+  14%  { opacity: 1; transform: scale(1); }
+  58%  { opacity: 1; transform: scale(1); animation-timing-function: ease-in; }
+  92%  { opacity: 1; transform: scale(0.35); }
+  100% { opacity: 0; transform: scale(0.05); }
+}
+
+/* Orbita kartalari */
+.sp-icon { width: 44px; height: 44px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.18)); }
+.sp-pill {
+  display: flex; align-items: center; gap: 6px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 5px 10px 5px 7px;
-  font-size: 11px;
-  font-weight: 500;
+  border-radius: 9px;
+  padding: 6px 11px 6px 8px;
+  font-size: 11.5px; font-weight: 550;
   color: var(--text-muted);
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  opacity: 0;
-  animation: splashFly 0.85s cubic-bezier(.45,0,.35,1) both;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
 }
-.splash-file:nth-child(1) { --dy: 50px;  top: 12px;  animation-delay: 0.05s; }
-.splash-file:nth-child(2) { --dy: 16px;  top: 46px;  animation-delay: 0.30s; }
-.splash-file:nth-child(3) { --dy: -18px; top: 80px;  animation-delay: 0.55s; }
-.splash-file:nth-child(4) { --dy: -52px; top: 114px; animation-delay: 0.80s; }
-
-.splash-file-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.sp-pill i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sp-thumb {
+  width: 46px; height: 46px;
+  border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #fff;
+  box-shadow: 0 5px 14px rgba(0,0,0,0.2);
+  overflow: hidden;
 }
+.sp-thumb svg { display: block; }
 .dot-blue  { background: #3b82f6; }
 .dot-green { background: #22c55e; }
 .dot-amber { background: #f59e0b; }
 .dot-pink  { background: #ec4899; }
+.dot-violet{ background: #8b5cf6; }
 
-@keyframes splashFly {
-  0%   { opacity: 0; transform: translate(-12px, 0) scale(0.92); }
-  16%  { opacity: 1; transform: translate(0, 0) scale(1); }
-  80%  { opacity: 1; transform: translate(var(--dx), var(--dy)) scale(0.85); }
-  100% { opacity: 0; transform: translate(calc(var(--dx) + 14px), var(--dy)) scale(0.3); }
+/* --- Logo --- */
+.sp-logo {
+  position: absolute;
+  left: -28px; top: -28px;
+  width: 56px; height: 56px;
+  z-index: 3;
+  animation: spLogo 3s both;
+}
+.sp-logo svg {
+  display: block;
+  width: 56px; height: 56px;
+  border-radius: 13px;
+  box-shadow: 0 8px 24px rgba(24,24,27,0.22);
+}
+@keyframes spLogo {
+  0%   { opacity: 0; transform: scale(0.4) rotate(-14deg); }
+  11%  { opacity: 1; transform: scale(1.1) rotate(2deg); }
+  15%  { transform: scale(1) rotate(0deg); }
+  60%  { transform: scale(1); }
+  70%  { transform: scale(0.95); }
+  74%  { transform: scale(0.88); }
+  75.5%{ transform: scale(1.42); }
+  80%  { transform: scale(0.95); }
+  84%  { transform: scale(1.06); }
+  88%, 100% { transform: scale(1); }
 }
 
-/* Wordmark */
-.splash-word {
+/* --- Zarba effektlari (2.25s) --- */
+.sp-flash {
   position: absolute;
-  left: 0; right: 0;
-  top: 108px;
+  left: -90px; top: -90px; width: 180px; height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, transparent) 0%, transparent 68%);
+  opacity: 0;
+  z-index: 1;
+  animation: spFlash 3s both;
+}
+@keyframes spFlash {
+  0%, 74.5% { opacity: 0; transform: scale(0.3); }
+  76%       { opacity: 1; transform: scale(0.9); }
+  92%, 100% { opacity: 0; transform: scale(3.2); }
+}
+.sp-ring {
+  position: absolute;
+  left: -30px; top: -30px; width: 60px; height: 60px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  z-index: 1;
+  animation: spRing 3s both;
+}
+.sp-ring.r2 { border-color: #ec4899; animation-delay: 0.09s; }
+@keyframes spRing {
+  0%, 74.5% { opacity: 0; transform: scale(0.8); }
+  75.5%     { opacity: 0.8; transform: scale(0.9); }
+  93%, 100% { opacity: 0; transform: scale(5); }
+}
+.sp-spark {
+  position: absolute;
+  left: -3px; top: -3px; width: 6px; height: 6px;
+  border-radius: 50%;
+  opacity: 0;
+  z-index: 1;
+  animation: spSpark 3s both;
+}
+@keyframes spSpark {
+  0%, 74.5% { opacity: 0; transform: rotate(var(--ang)) translateX(20px) scale(1); }
+  75.5%     { opacity: 1; transform: rotate(var(--ang)) translateX(26px) scale(1.2); }
+  92%, 100% { opacity: 0; transform: rotate(var(--ang)) translateX(var(--dist)) scale(0); }
+}
+
+/* --- Wordmark --- */
+.sp-word {
+  position: absolute;
+  left: -100px; width: 200px;
+  top: 46px;
   text-align: center;
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 18px;
+  font-weight: 700;
   letter-spacing: 0.01em;
   color: var(--text);
   opacity: 0;
-  animation: splashWord 0.5s ease-out 0.35s both;
+  animation: spWord 0.5s cubic-bezier(.2,.8,.2,1) 2.28s both;
 }
-@keyframes splashWord {
-  0%   { opacity: 0; transform: translateY(6px); }
-  100% { opacity: 1; transform: translateY(0); }
+@keyframes spWord {
+  0%   { opacity: 0; transform: translateY(10px) scale(0.9); letter-spacing: 0.3em; }
+  100% { opacity: 1; transform: translateY(0) scale(1); letter-spacing: 0.01em; }
 }
 
-/* Progress — aniq 2 soniyada to'ladi */
-.splash-progress {
+/* --- Progress (2.7s) --- */
+.sp-progress {
   position: absolute;
-  left: 50%;
-  top: 146px;
-  width: 96px;
-  height: 3px;
-  margin-left: -48px;
+  left: -48px; top: 84px;
+  width: 96px; height: 3px;
   border-radius: 3px;
   background: var(--border);
   overflow: hidden;
+  opacity: 0;
+  animation: spProgFade 3s both;
 }
-.splash-progress i {
-  display: block;
-  width: 100%;
-  height: 100%;
+.sp-progress i {
+  display: block; width: 100%; height: 100%;
   background: var(--accent);
   border-radius: 3px;
   transform-origin: left center;
   transform: scaleX(0);
-  animation: splashProgress 2s cubic-bezier(.4,0,.2,1) both;
+  animation: spProg 2.7s cubic-bezier(.4,0,.2,1) both;
 }
-@keyframes splashProgress {
-  0%   { transform: scaleX(0); }
-  100% { transform: scaleX(1); }
+@keyframes spProg { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+@keyframes spProgFade {
+  0%, 8% { opacity: 0; }
+  16%    { opacity: 1; }
+  72%    { opacity: 1; }
+  76%, 100% { opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .splash-file, .splash-logo::after { animation: none; opacity: 0; }
-  .splash-logo svg { animation: none; }
+  .sp-orb, .sp-swirl, .sp-flash, .sp-ring, .sp-spark { display: none; }
+  .sp-logo { animation: none; }
+  .sp-word { animation: none; opacity: 1; }
+  .sp-progress, .sp-progress i { animation: none; }
+  .sp-progress { opacity: 1; }
+  .sp-progress i { transform: scaleX(1); }
 }
 
 @keyframes pulse {

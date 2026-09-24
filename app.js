@@ -502,7 +502,7 @@ function setupRealtime(userId) {
 const urlParams = new URLSearchParams(window.location.search);
 const shareToken = urlParams.get("share");
 
-/** Splash (2s) davomida orqa fonda yuklab qo'yiladigan statik narsalar:
+/** Splash (3s) davomida orqa fonda yuklab qo'yiladigan statik narsalar:
  * ikonlar, Claude logo, PDF worker. Fayl ro'yxati va rasm thumbnaillari
  * loadFiles() ichida yuklanadi (prefetchThumbUrls / prefetchDragUrls). */
 function preloadBootAssets() {
