@@ -5520,7 +5520,7 @@ function mountMrAudioPlayer(host, opts) {
 
   function sizeCanvas() {
     const w = waveWrap.clientWidth || 400;
-    const h = 130;
+    const h = 120;
     canvas.style.width = w + "px";
     canvas.style.height = h + "px";
     canvas.width = Math.round(w * dpr);
@@ -5549,25 +5549,24 @@ function mountMrAudioPlayer(host, opts) {
     }
   }
 
-  /* ── 400-thread silk wave, high sensitivity, ultra smooth ── */
-  const BIN_N = 256;
+  /* Optimized silk wave — dense look, 60fps, no freeze */
+  const BIN_N = 128;
   let smoothBins = new Float32Array(BIN_N).fill(0.2);
   let smoothEnergy = 0.25;
-  const SMOOTH = 0.08;
+  const SMOOTH = 0.12;
 
   function envelope(nx) {
     const s = Math.sin(Math.PI * nx);
-    return Math.pow(s, 1.35);
+    return s * s; // fast diamond taper
   }
 
   function sampleFreq(nx) {
     if (!analyser || !freqData) return 0.25;
     const n = freqData.length;
-    const b1 = Math.min(n - 1, (nx * n * 0.55) | 0);
-    const b2 = Math.min(n - 1, ((1 - nx) * n * 0.35) | 0);
-    const b3 = Math.min(n - 1, (nx * n * 0.2) | 0);
-    const raw = (freqData[b1] * 0.5 + freqData[b2] * 0.25 + freqData[b3] * 0.25) / 255;
-    return Math.min(1, Math.pow(raw, 0.72) * 1.45);
+    const b1 = Math.min(n - 1, (nx * n * 0.5) | 0);
+    const b2 = Math.min(n - 1, ((1 - nx) * n * 0.3) | 0);
+    const raw = (freqData[b1] * 0.65 + freqData[b2] * 0.35) / 255;
+    return Math.min(1, Math.pow(raw, 0.75) * 1.4);
   }
 
   function updateSmooth(idle) {
@@ -5575,7 +5574,7 @@ function mountMrAudioPlayer(host, opts) {
     for (let i = 0; i < BIN_N; i++) {
       const nx = i / (BIN_N - 1);
       const target = idle
-        ? 0.18 + 0.08 * Math.sin(nx * Math.PI * 2 + performance.now() / 1800)
+        ? 0.18 + 0.07 * Math.sin(nx * Math.PI * 2 + performance.now() / 1800)
         : sampleFreq(nx);
       smoothBins[i] += (target - smoothBins[i]) * SMOOTH;
     }
@@ -5585,58 +5584,48 @@ function mountMrAudioPlayer(host, opts) {
     const bi = nx * (BIN_N - 1);
     const b0 = bi | 0;
     const b1 = Math.min(BIN_N - 1, b0 + 1);
-    const f = bi - b0;
-    return smoothBins[b0] * (1 - f) + smoothBins[b1] * f;
+    return smoothBins[b0] + (smoothBins[b1] - smoothBins[b0]) * (bi - b0);
   }
 
+  // 48 well-chosen threads (looks dense, runs smooth)
   const THREADS = [];
-  (function buildThreads() {
-    for (let i = 0; i < 40; i++) {
-      const t = i / 39;
-      THREADS.push({
-        amp: 0.45 + t * 0.2, speed: 0.28 + t * 0.25, freq: 1.8 + t * 1.2,
-        phase: t * 6.28 + i * 0.07, thick: 0.5 + t * 0.5,
-        r: 255 - t * 30, g: 250 - t * 20, b: 255, alpha: 0.45 - t * 0.2, kind: 0
-      });
+  (function build() {
+    // 8 bright core
+    for (let i = 0; i < 8; i++) {
+      const t = i / 7;
+      THREADS.push({ amp: 0.5 + t * 0.15, speed: 0.3 + t * 0.2, freq: 2 + t, phase: t * 5, thick: 1.2 + t * 0.4, r: 240, g: 248, b: 255, a: 0.5 - t * 0.15, kind: 0 });
     }
-    for (let i = 0; i < 120; i++) {
-      const t = i / 119;
-      THREADS.push({
-        amp: 0.55 + (i % 7) * 0.05, speed: 0.35 + t * 0.5, freq: 2.0 + t * 2.5,
-        phase: t * 12.5 + i * 0.11, thick: 0.7 + (i % 5) * 0.25,
-        r: 60 + (i % 8) * 12, g: 150 + (i % 6) * 10, b: 245, alpha: 0.22 - t * 0.08, kind: 1
-      });
+    // 16 cyan silk
+    for (let i = 0; i < 16; i++) {
+      const t = i / 15;
+      THREADS.push({ amp: 0.6 + (i % 4) * 0.06, speed: 0.4 + t * 0.35, freq: 2.2 + t * 1.5, phase: t * 8 + 1, thick: 1.4 + (i % 3) * 0.3, r: 70 + (i % 5) * 15, g: 160 + (i % 4) * 12, b: 250, a: 0.28 - t * 0.08, kind: 1 });
     }
-    for (let i = 0; i < 80; i++) {
-      const t = i / 79;
-      THREADS.push({
-        amp: 0.75 + (i % 5) * 0.06, speed: 0.3 + t * 0.35, freq: 1.5 + t * 1.8,
-        phase: t * 9 + i * 0.13, thick: 1.6 + (i % 4) * 0.5,
-        r: 25 + (i % 6) * 15, g: 70 + (i % 5) * 18, b: 200 + (i % 4) * 10,
-        alpha: 0.14 - t * 0.05, kind: 2
-      });
+    // 12 royal membranes
+    for (let i = 0; i < 12; i++) {
+      const t = i / 11;
+      THREADS.push({ amp: 0.8 + (i % 3) * 0.05, speed: 0.32 + t * 0.25, freq: 1.6 + t * 1.2, phase: t * 6 + 3, thick: 2.5 + (i % 3) * 0.5, r: 30 + (i % 4) * 12, g: 80 + (i % 3) * 15, b: 210, a: 0.16 - t * 0.04, kind: 2 });
     }
-    for (let i = 0; i < 160; i++) {
-      const t = i / 159;
-      THREADS.push({
-        amp: 0.3 + (i % 9) * 0.05, speed: 0.55 + t * 0.7, freq: 3.5 + t * 4,
-        phase: t * 18 + i * 0.17, thick: 0.3 + (i % 3) * 0.1,
-        r: 120 + (i % 7) * 15, g: 185 + (i % 5) * 8, b: 255,
-        alpha: 0.09 - t * 0.03, kind: 3
-      });
+    // 12 fine filaments
+    for (let i = 0; i < 12; i++) {
+      const t = i / 11;
+      THREADS.push({ amp: 0.35 + (i % 4) * 0.06, speed: 0.55 + t * 0.4, freq: 3.5 + t * 2, phase: t * 10 + 5, thick: 0.6, r: 140, g: 200, b: 255, a: 0.12, kind: 3 });
     }
   })();
 
-  function strokeThread(pts, width, color) {
-    if (pts.length < 3) return;
+  // Pre-allocated typed buffers — zero GC per frame
+  const STEPS = 80;
+  const xs = new Float32Array(STEPS + 1);
+  const ys = new Float32Array(STEPS + 1);
+  const yTop = new Float32Array(STEPS + 1);
+  const yBot = new Float32Array(STEPS + 1);
+
+  function strokeFromBuf(n, width, color) {
     ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length - 1; i++) {
-      const xc = (pts[i].x + pts[i + 1].x) * 0.5;
-      const yc = (pts[i].y + pts[i + 1].y) * 0.5;
-      ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+    ctx.moveTo(xs[0], ys[0]);
+    for (let i = 1; i < n - 1; i++) {
+      ctx.quadraticCurveTo(xs[i], ys[i], (xs[i] + xs[i + 1]) * 0.5, (ys[i] + ys[i + 1]) * 0.5);
     }
-    ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+    ctx.lineTo(xs[n - 1], ys[n - 1]);
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
     ctx.lineJoin = "round";
@@ -5644,32 +5633,25 @@ function mountMrAudioPlayer(host, opts) {
     ctx.stroke();
   }
 
-  function fillMembrane(top, bot, c0, c1) {
-    if (top.length < 3) return;
+  function fillFromBuf(n, c0, c1) {
     ctx.beginPath();
-    ctx.moveTo(top[0].x, top[0].y);
-    for (let i = 1; i < top.length - 1; i++)
-      ctx.quadraticCurveTo(top[i].x, top[i].y, (top[i].x + top[i + 1].x) * 0.5, (top[i].y + top[i + 1].y) * 0.5);
-    ctx.lineTo(top[top.length - 1].x, top[top.length - 1].y);
-    for (let i = 0; i < bot.length; i++) {
-      if (i === 0) ctx.lineTo(bot[i].x, bot[i].y);
-      else if (i < bot.length - 1)
-        ctx.quadraticCurveTo(bot[i].x, bot[i].y, (bot[i].x + bot[i + 1].x) * 0.5, (bot[i].y + bot[i + 1].y) * 0.5);
-      else ctx.lineTo(bot[i].x, bot[i].y);
-    }
+    ctx.moveTo(xs[0], yTop[0]);
+    for (let i = 1; i < n - 1; i++)
+      ctx.quadraticCurveTo(xs[i], yTop[i], (xs[i] + xs[i + 1]) * 0.5, (yTop[i] + yTop[i + 1]) * 0.5);
+    ctx.lineTo(xs[n - 1], yTop[n - 1]);
+    ctx.lineTo(xs[n - 1], yBot[n - 1]);
+    for (let i = n - 2; i > 0; i--)
+      ctx.quadraticCurveTo(xs[i], yBot[i], (xs[i] + xs[i - 1]) * 0.5, (yBot[i] + yBot[i - 1]) * 0.5);
+    ctx.lineTo(xs[0], yBot[0]);
     ctx.closePath();
-    const mid = (top[top.length >> 1].y + bot[bot.length >> 1].y) * 0.5;
-    const g = ctx.createLinearGradient(0, mid - 50, 0, mid + 50);
+    const mid = (yTop[n >> 1] + yBot[n >> 1]) * 0.5;
+    const g = ctx.createLinearGradient(0, mid - 40, 0, mid + 40);
     g.addColorStop(0, c0);
     g.addColorStop(0.5, c1);
     g.addColorStop(1, c0);
     ctx.fillStyle = g;
     ctx.fill();
   }
-
-  const ptsBuf = [];
-  const topBuf = [];
-  const botBuf = [];
 
   function drawFluidWave(energy, idle) {
     const w = canvas.width / dpr;
@@ -5678,87 +5660,83 @@ function mountMrAudioPlayer(host, opts) {
     ctx.clearRect(0, 0, w, h);
     updateSmooth(idle);
 
-    const targetE = Math.max(0.12, Math.min(1.4, energy));
+    const targetE = energy < 0.12 ? 0.12 : (energy > 1.35 ? 1.35 : energy);
     smoothEnergy += (targetE - smoothEnergy) * SMOOTH;
     const e = smoothEnergy;
 
-    const t = idle ? performance.now() / 1000 * 0.38 : (audio.currentTime || 0);
+    const t = idle ? performance.now() * 0.00038 : (audio.currentTime || 0);
     const midY = h * 0.5;
-    const steps = Math.max(100, (w / 2.4) | 0);
+    const n = STEPS;
+
+    // precompute x + envelope + freq once per frame
+    const envs = new Float32Array(n + 1);
+    const fms = new Float32Array(n + 1);
+    for (let i = 0; i <= n; i++) {
+      const nx = i / n;
+      xs[i] = nx * w;
+      envs[i] = envelope(nx);
+      fms[i] = 0.3 + binAt(nx) * 1.3;
+    }
 
     ctx.save();
 
-    const bloom = ctx.createRadialGradient(w * 0.5, midY, 0, w * 0.5, midY, w * 0.5);
-    bloom.addColorStop(0, "rgba(190,235,255," + (0.22 * e).toFixed(3) + ")");
-    bloom.addColorStop(0.35, "rgba(100,175,255," + (0.1 * e).toFixed(3) + ")");
+    // light bloom (cheap)
+    const bloom = ctx.createRadialGradient(w * 0.5, midY, 0, w * 0.5, midY, w * 0.45);
+    bloom.addColorStop(0, "rgba(180,230,255," + (0.15 * e).toFixed(3) + ")");
     bloom.addColorStop(1, "rgba(40,100,220,0)");
     ctx.fillStyle = bloom;
     ctx.fillRect(0, 0, w, h);
 
+    // membranes
     for (let L = 0; L < THREADS.length; L++) {
       const th = THREADS[L];
       if (th.kind !== 2) continue;
-      topBuf.length = 0;
-      botBuf.length = 0;
-      for (let i = 0; i <= steps; i++) {
-        const nx = i / steps;
-        const env = envelope(nx);
-        const fm = 0.28 + binAt(nx) * 1.35;
-        const phase = t * th.speed + th.phase;
+      const phase = t * th.speed + th.phase;
+      for (let i = 0; i <= n; i++) {
+        const nx = i / n;
         const wave =
-          Math.sin(nx * Math.PI * th.freq + phase) * 0.48 +
-          Math.sin(nx * Math.PI * th.freq * 1.55 + phase * 1.15) * 0.26 +
-          Math.sin(nx * Math.PI * th.freq * 0.45 + phase * 0.7) * 0.16 +
-          Math.sin(nx * Math.PI * 7 + phase * 1.6 + L * 0.2) * 0.05;
-        const amp = h * 0.34 * th.amp * env * fm * e;
+          Math.sin(nx * Math.PI * th.freq + phase) * 0.5 +
+          Math.sin(nx * Math.PI * th.freq * 1.5 + phase * 1.1) * 0.28 +
+          Math.sin(nx * Math.PI * th.freq * 0.5 + phase * 0.7) * 0.14;
+        const amp = h * 0.34 * th.amp * envs[i] * fms[i] * e;
         const y = midY + wave * amp;
-        const half = h * 0.055 * th.thick * env * (0.5 + fm * 0.55) * e;
-        topBuf.push({ x: nx * w, y: y - half });
-        botBuf.push({ x: nx * w, y: y + half });
+        const half = h * 0.05 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
+        yTop[i] = y - half;
+        yBot[i] = y + half;
       }
-      const a = th.alpha * (0.65 + e * 0.45);
-      fillMembrane(
-        topBuf, botBuf.slice().reverse(),
+      const a = th.a * (0.65 + e * 0.4);
+      fillFromBuf(n + 1,
         "rgba(" + th.r + "," + th.g + "," + th.b + "," + (a * 0.1).toFixed(3) + ")",
         "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")"
       );
     }
 
+    // stroke threads
     for (let L = 0; L < THREADS.length; L++) {
       const th = THREADS[L];
       if (th.kind === 2) continue;
-      ptsBuf.length = 0;
-      for (let i = 0; i <= steps; i++) {
-        const nx = i / steps;
-        const env = envelope(nx);
-        const fm = 0.28 + binAt(nx) * 1.35;
-        const phase = t * th.speed + th.phase;
+      const phase = t * th.speed + th.phase;
+      for (let i = 0; i <= n; i++) {
+        const nx = i / n;
         const wave =
           Math.sin(nx * Math.PI * th.freq + phase) * 0.5 +
-          Math.sin(nx * Math.PI * th.freq * 1.7 + phase * 1.2) * 0.26 +
-          Math.sin(nx * Math.PI * th.freq * 0.5 + phase * 0.65) * 0.15 +
-          Math.sin(nx * Math.PI * 9 + phase * 1.9 + L * 0.3) * 0.05;
-        const amp = h * 0.37 * th.amp * env * fm * e;
-        ptsBuf.push({ x: nx * w, y: midY + wave * amp });
+          Math.sin(nx * Math.PI * th.freq * 1.6 + phase * 1.15) * 0.27 +
+          Math.sin(nx * Math.PI * th.freq * 0.5 + phase * 0.65) * 0.14;
+        const amp = h * 0.36 * th.amp * envs[i] * fms[i] * e;
+        ys[i] = midY + wave * amp;
       }
-      const a = th.alpha * (0.7 + e * 0.4);
-      const col = "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")";
-      strokeThread(ptsBuf, th.thick * (0.6 + e * 0.5), col);
+      const a = th.a * (0.7 + e * 0.35);
+      strokeFromBuf(n + 1, th.thick * (0.65 + e * 0.45),
+        "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")"
+      );
     }
 
+    // soft white core (no shadow)
     ctx.globalCompositeOperation = "screen";
-    const core = ctx.createRadialGradient(w * 0.5, midY, 0, w * 0.5, midY, w * 0.14 * e);
-    core.addColorStop(0, "rgba(255,255,255," + (0.65 * e).toFixed(3) + ")");
-    core.addColorStop(0.35, "rgba(200,240,255," + (0.28 * e).toFixed(3) + ")");
-    core.addColorStop(1, "rgba(140,200,255,0)");
+    const core = ctx.createRadialGradient(w * 0.5, midY, 0, w * 0.5, midY, w * 0.12 * e);
+    core.addColorStop(0, "rgba(255,255,255," + (0.45 * e).toFixed(3) + ")");
+    core.addColorStop(1, "rgba(150,210,255,0)");
     ctx.fillStyle = core;
-    ctx.fillRect(0, 0, w, h);
-
-    const veil = ctx.createRadialGradient(w * 0.5, midY, h * 0.03, w * 0.5, midY, w * 0.45);
-    veil.addColorStop(0, "rgba(210,235,255," + (0.14 * e).toFixed(3) + ")");
-    veil.addColorStop(0.5, "rgba(90,160,255," + (0.05 * e).toFixed(3) + ")");
-    veil.addColorStop(1, "rgba(30,80,200,0)");
-    ctx.fillStyle = veil;
     ctx.fillRect(0, 0, w, h);
 
     ctx.restore();
@@ -5766,7 +5744,7 @@ function mountMrAudioPlayer(host, opts) {
 
   function resetWave() {
     sizeCanvas();
-    for (let i = 0; i < smoothBins.length; i++) smoothBins[i] = 0.2;
+    for (let i = 0; i < BIN_N; i++) smoothBins[i] = 0.2;
     smoothEnergy = 0.25;
     drawFluidWave(0.25, true);
   }
@@ -5782,11 +5760,11 @@ function mountMrAudioPlayer(host, opts) {
     if (analyser && freqData) {
       analyser.getByteFrequencyData(freqData);
       let sum = 0;
-      const n = Math.min(freqData.length, 64);
-      for (let i = 0; i < n; i++) sum += freqData[i];
-      energy = 0.2 + Math.pow(sum / (n * 255), 0.7) * 1.55;
+      const lim = Math.min(freqData.length, 48);
+      for (let i = 0; i < lim; i++) sum += freqData[i];
+      energy = 0.2 + Math.pow(sum / (lim * 255), 0.7) * 1.5;
     } else {
-      energy = 0.38 + 0.25 * Math.abs(Math.sin((audio.currentTime || 0) * 1.8));
+      energy = 0.38 + 0.22 * Math.abs(Math.sin((audio.currentTime || 0) * 1.8));
     }
     drawFluidWave(energy, false);
     if (!dragging && audio.duration) fill.style.width = (audio.currentTime / audio.duration) * 100 + "%";
