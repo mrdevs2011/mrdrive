@@ -753,7 +753,7 @@ async function renderPublicPdf(url, previewWrap) {
   previewWrap.appendChild(wrap);
 
   const pdf = await pdfjsLib.getDocument(url).promise;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = dprOverride || Math.min(Math.round(window.devicePixelRatio || 1), 2) || 1;
   const cssWidth = Math.min(900, wrap.clientWidth || window.innerWidth || 800);
   const pages = [];
 
@@ -2433,7 +2433,7 @@ function __dissolveInlineAllStyles(src, dest) {
 }
 
 /** DOM → canvas via SVG foreignObject (demo.html approach, self-contained styles). */
-function __dissolveDomToCanvas(el) {
+function __dissolveDomToCanvas(el, dprOverride) {
   return new Promise((resolve, reject) => {
     const rect = el.getBoundingClientRect();
     const w = Math.ceil(rect.width);
@@ -2509,6 +2509,38 @@ function __dissolveDomToCanvas(el) {
   });
 }
 
+const MAX_GRAINS = 70000;
+
+/** Typed-array grains: one grain per (G x G) device pixels, colour = packed RGBA of that pixel. */
+function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY) {
+  const W = snapCanvas.width, H = snapCanvas.height;
+  const ctx = snapCanvas.getContext("2d", { willReadFrequently: true });
+  const px32 = new Uint32Array(ctx.getImageData(0, 0, W, H).data.buffer);
+  const G = Math.max(1, Math.ceil(Math.sqrt((W * H) / MAX_GRAINS)));
+  const cap = Math.ceil(W / G) * Math.ceil(H / G);
+  const x = new Float32Array(cap), y = new Float32Array(cap), vx = new Float32Array(cap);
+  const g = new Float32Array(cap), delay = new Float32Array(cap), col = new Uint32Array(cap);
+  const maxDist = Math.hypot(cssW, cssH) || 1;
+  let n = 0;
+  for (let yy = 0; yy < H; yy += G) {
+    const sy = Math.min(H - 1, yy + (G >> 1));
+    const cy = yy / dpr;
+    for (let xx = 0; xx < W; xx += G) {
+      const c = px32[sy * W + Math.min(W - 1, xx + (G >> 1))];
+      if ((c >>> 24) < 10) continue;
+      const cx = xx / dpr;
+      const dist = Math.hypot(cx - epX, cy - epY);
+      x[n] = xx; y[n] = yy;
+      vx[n] = Math.random() - 0.5;
+      g[n] = 0.8 + Math.random() * 0.5;                       // each grain falls a bit differently
+      delay[n] = ((cy / cssH) * 0.7 + (dist / maxDist) * 0.3) * SWEEP_DURATION + Math.random() * 500;
+      col[n] = c;
+      n++;
+    }
+  }
+  return { n, G, x, y, vx, g, delay, col };
+}
+
 function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY) {
   const ctx = snapshotCanvas.getContext("2d", { willReadFrequently: true });
   const data = ctx.getImageData(0, 0, snapshotCanvas.width, snapshotCanvas.height).data;
@@ -2517,7 +2549,7 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
   // Keep particle count reasonable on wide cards (still looks dense)
   // Very fine grains: start at TILE_SIZE and only coarsen as much as needed to
   // keep the grain count under MAX_GRAINS (keeps big cards smooth).
-  const MAX_GRAINS = 45000;
+  const MAX_GRAINS = 24000;
   const tile = Math.max(TILE_SIZE, Math.sqrt((cssWidth * cssHeight) / MAX_GRAINS));
 
   for (let y = 0; y < cssHeight; y += tile) {
@@ -2540,7 +2572,7 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
         sx: x * dpr, sy: y * dpr,
         sw: Math.min(tile * dpr, snapshotCanvas.width  - x * dpr),
         sh: Math.min(tile * dpr, snapshotCanvas.height - y * dpr),
-        x, y, tile: tSize,
+        x, y, tile: tSize, base: tile,
         vx,
         vy,
         rot: 0,
@@ -2601,103 +2633,118 @@ async function playDeleteDissolve(card, clickX, clickY) {
   card.style.boxSizing = "border-box";
   card.style.overflow = "hidden";
 
+  const padX = 40, padTop = 24;
+  const padBottom = Math.min(900, Math.max(240, window.innerHeight - startRect.top + 40));
+  let sdpr = Math.min(Math.round(window.devicePixelRatio || 1), 2) || 1;
+  // Big overlays are drawn at 1x so the per-frame pixel buffer stays small (no stutter).
+  if ((startRect.width + padX * 2) * (startRect.height + padTop + padBottom) * sdpr * sdpr > 1.6e6) sdpr = 1;
+
   let snap = null;
   try {
-    snap = await __dissolveDomToCanvas(card);
+    snap = await __dissolveDomToCanvas(card, sdpr);
   } catch (err) {
     console.warn("[dissolve] snapshot failed, using float fallback:", err);
   }
 
   if (snap && snap.canvas) {
     const { canvas: snapshotCanvas, width, height, rect, dpr } = snap;
-    // Epicenter = where the grains start breaking loose first. Use the click
-    // point when we have one (feels like the tap triggered it); otherwise
-    // center-top, since real sand starts trickling from the top and falls.
+    // Epicenter = where the grains start breaking loose first (tap point if known).
     const hasClick = typeof clickX === "number" && typeof clickY === "number";
     const epX = hasClick ? Math.min(Math.max(clickX - rect.left, 0), width) : width * 0.5;
     const epY = hasClick ? Math.min(Math.max(clickY - rect.top, 0), height) : height * 0.3;
-    const tiles = __dissolveBuildTiles(snapshotCanvas, width, height, dpr, epX, epY);
+    const grains = __dissolveBuildGrains(snapshotCanvas, width, height, dpr, epX, epY);
 
-    if (!tiles.length) {
+    if (!grains.n) {
       await __dissolveFloatFallback(card);
     } else {
-      // Horizontal room + extend canvas to bottom of viewport so particles
-      // (esp. folder tabs near the top) fall all the way down, not clipped mid-screen
-      const padX = 280;
-      const padTop = 140;
-      const padBottom = Math.max(320, window.innerHeight - rect.top + 64);
-      const ox = padX;
-      const oy = padTop;
-      const overlayW = width + padX * 2;
-      const overlayH = height + padTop + padBottom;
+      const { n, G, x: gx, y: gy, vx: gvx, g: gg, delay: gdelay, col: gcol } = grains;
+      const ox = Math.round(padX * dpr), oy = Math.round(padTop * dpr);
+      const OW = Math.ceil((width + padX * 2) * dpr);
+      const OH = Math.ceil((height + padTop + padBottom) * dpr);
 
       const overlay = document.createElement("canvas");
       overlay.className = "particle-canvas";
-      overlay.width  = Math.ceil(overlayW * dpr);
-      overlay.height = Math.ceil(overlayH * dpr);
-      overlay.style.width  = overlayW + "px";
-      overlay.style.height = overlayH + "px";
+      overlay.width = OW;
+      overlay.height = OH;
+      overlay.style.width = (OW / dpr) + "px";
+      overlay.style.height = (OH / dpr) + "px";
       overlay.style.left = (rect.left - padX) + "px";
-      overlay.style.top  = (rect.top  - padTop) + "px";
+      overlay.style.top = (rect.top - padTop) + "px";
       document.body.appendChild(overlay);
 
       const octx = overlay.getContext("2d");
-      octx.scale(dpr, dpr);
-      octx.imageSmoothingEnabled = false;
+      // Whole frame = one Uint32 pixel buffer + ONE putImageData (no per-grain draw calls).
+      const img = octx.createImageData(OW, OH);
+      const buf = new Uint32Array(img.data.buffer);
+      const gravDev = GRAVITY * dpr;
+      const driftDev = DRIFT_X * dpr;
+      let started = false;
+      let prevMin = -1, prevMax = -1;
 
       const startT = performance.now();
 
       function paint(elapsed) {
-        octx.clearRect(0, 0, overlayW, overlayH);
-        let anyAlive = false;
+        // Fade-in phase: nothing moves, so the whole card is one cheap drawImage.
+        if (elapsed < FADE_IN_MS) {
+          octx.drawImage(snapshotCanvas, ox, oy);
+          return true;
+        }
+        if (!started) { octx.clearRect(0, 0, OW, OH); started = true; }
 
-        for (let i = 0; i < tiles.length; i++) {
-          const t = tiles[i];
-          const ts = t.tile || TILE_SIZE;
-          const local = elapsed - FADE_IN_MS - t.delay;
+        if (prevMax >= 0) buf.fill(0, prevMin * OW, (prevMax + 1) * OW);
+        let minY = 1e9, maxY = -1, alive = false;
+
+        for (let i = 0; i < n; i++) {
+          const local = elapsed - FADE_IN_MS - gdelay[i];
+          let px, py, c = gcol[i];
 
           if (local < 0) {
-            octx.globalAlpha = 1;
-            octx.drawImage(
-              snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
-              t.x + ox, t.y + oy, ts, ts
-            );
-            anyAlive = true;
-            continue;
+            px = gx[i]; py = gy[i];
+            alive = true;
+          } else {
+            const life = local / ANIM_DURATION;
+            if (life >= 1) continue;
+            alive = true;
+            const tSec = local * 0.55;
+            px = gx[i] + gvx[i] * driftDev * life;
+            py = gy[i] + gravDev * gg[i] * tSec * tSec;
+            // stays solid while falling, fades smoothly near the end
+            if (life > 0.45) {
+              const f = (life - 0.45) / 0.55;
+              const a = 1 - f * f * (3 - 2 * f);
+              if (a <= 0.01) continue;
+              c = (c & 0x00ffffff) | ((((c >>> 24) * a) | 0) << 24);
+            }
           }
 
-          const life = local / ANIM_DURATION;
-          if (life >= 1) continue;
-          anyAlive = true;
-
-          // Real sand: brief lift as the grain breaks free, then it's all gravity —
-          // accelerating straight down, with just a light sideways drift.
-          const ease = 1 - Math.pow(1 - life, 1.6);
-          const tSec = local * 0.55;
-          const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.0) - 0.5) * NOISE_AMP * ease;
-          const px = t.x + t.vx * DRIFT_X * ease + nX;
-          const py = t.y - PUFF_Y * Math.sin(Math.min(life, 0.3) * Math.PI / 0.3) * 0.4
-            + GRAVITY * (t.g || 1) * tSec * tSec;
-
-          // Guaranteed to reach 0 exactly at life=1 (no abrupt cutoff), while
-          // fadeBias still staggers how early each grain starts to vanish.
-          // Grains stay solid while falling, only fade near the very end.
-          const fadeT = Math.min(1, Math.max(0, (life - 0.45) / 0.55));
-          const alpha = 1 - fadeT * fadeT * (3 - 2 * fadeT);
-          if (alpha <= 0.01) continue;
-
-          const scale = 1;
-          octx.globalAlpha = alpha;
-          octx.drawImage(
-            snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
-            px + ox, py + oy, ts, ts
-          );
+          const ix = (px + ox) | 0, iy = (py + oy) | 0;
+          if (iy >= OH || ix < 0 || ix >= OW) continue;
+          if (G === 1) {
+            buf[iy * OW + ix] = c;
+            if (iy < minY) minY = iy;
+            if (iy > maxY) maxY = iy;
+          } else {
+            const ye = Math.min(iy + G, OH), xe = Math.min(ix + G, OW);
+            for (let r = iy; r < ye; r++) {
+              const base = r * OW;
+              for (let q = ix; q < xe; q++) buf[base + q] = c;
+            }
+            if (iy < minY) minY = iy;
+            if (ye - 1 > maxY) maxY = ye - 1;
+          }
         }
-        return anyAlive;
+
+        // Upload only the rows that changed (this frame ∪ previous frame).
+        const top = prevMax >= 0 ? Math.min(prevMin, minY) : minY;
+        const bottom = Math.max(prevMax, maxY);
+        if (bottom >= top && bottom >= 0) {
+          octx.putImageData(img, 0, 0, 0, top, OW, bottom - top + 1);
+        }
+        if (maxY >= 0) { prevMin = minY; prevMax = maxY; } else { prevMin = prevMax = -1; }
+        return alive;
       }
 
-      // Crossfade: the grain canvas fades IN over the still-visible card, so there is
-      // no instant swap ("tiq"). Grains only start moving after FADE_IN_MS.
+      // Crossfade: the canvas fades IN over the still-visible card (no instant swap).
       paint(0);
       overlay.style.opacity = "0";
       overlay.style.transition = "opacity " + FADE_IN_MS + "ms ease-in-out";
@@ -2713,7 +2760,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
       }
       requestAnimationFrame(frame);
 
-      // Demo timing: collapse list row after COLLAPSE_DELAY while particles still fly
+      // Collapse the list row after COLLAPSE_DELAY while grains still fall
       await new Promise((r) => setTimeout(r, COLLAPSE_DELAY));
     }
   } else {
