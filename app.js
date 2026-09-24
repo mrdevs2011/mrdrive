@@ -1949,11 +1949,27 @@ function selectRange(fromId, toId) {
 // Clicks on action buttons are ignored. Non-viewable files still toggle the
 // mobile action row (actions-open). Ctrl/Cmd toggles the file into the
 // multi-selection instead; Shift extends the selection to a range.
+// Remember whether the last input was a finger/pen (touch has no Ctrl/Shift key).
+let lastInputTouch = false;
+document.addEventListener("pointerdown", (e) => {
+  lastInputTouch = e.pointerType === "touch" || e.pointerType === "pen";
+}, true);
+
 fileListEl.addEventListener("click", (e) => {
   if (e.target.closest(".file-actions")) return;
   const card = e.target.closest(".file-card");
   if (!card) return;
   const id = card.dataset.fileId;
+
+  // Touch selection mode (same as Ctrl+click on a computer): once something is
+  // selected, tapping a file adds/removes it instead of opening it. Deselecting
+  // the last one (or tapping empty space) leaves selection mode.
+  if (lastInputTouch && selectedFileIds.size) {
+    if (selectedFileIds.has(id)) selectedFileIds.delete(id); else selectedFileIds.add(id);
+    lastClickedFileId = id;
+    updateSelectionClasses();
+    return;
+  }
 
   if (e.ctrlKey || e.metaKey) {
     if (selectedFileIds.has(id)) selectedFileIds.delete(id); else selectedFileIds.add(id);
@@ -1996,7 +2012,7 @@ const LONG_PRESS_MOVE_TOLERANCE = 12; // px: bigger movement = scrolling, cancel
 let touchHoldActive = false;
 (function initLongPress() {
   let timer = null, hint = null, card = null;
-  let startX = 0, startY = 0, fired = false, releaseTimer = null;
+  let startX = 0, startY = 0, fired = false, releaseTimer = null, dragCard = null;
 
   function clear() {
     clearTimeout(timer); clearTimeout(hint);
@@ -2016,6 +2032,10 @@ let touchHoldActive = false;
     touchHoldActive = true;
     clear();
     card = c;
+    // Native touch drag-and-drop would cancel our long-press; moving files on a
+    // phone is done through the menu ("Move to folder…") instead.
+    c.draggable = false;
+    dragCard = c;
     const t = e.touches[0];
     startX = t.clientX; startY = t.clientY;
 
@@ -2036,6 +2056,10 @@ let touchHoldActive = false;
       clear();
       if (navigator.vibrate) { try { navigator.vibrate(30); } catch (_) {} }
       showFileContextMenu(startX, startY, ids);
+      if (!sessionStorage.getItem("mrdrive_sel_hint")) {
+        try { sessionStorage.setItem("mrdrive_sel_hint", "1"); } catch (_) {}
+        showToast("Selection mode", "success", "Tap files to add or remove them. Tap empty space to cancel.");
+      }
     }, LONG_PRESS_MS);
   }, { passive: true });
 
@@ -2050,7 +2074,10 @@ let touchHoldActive = false;
     // The finger lifting after a long press must not also "click" the card
     // (which would open the preview) or close the menu that just opened.
     if (fired && e.cancelable) e.preventDefault();
-    releaseTimer = setTimeout(() => { touchHoldActive = false; fired = false; }, 600);
+    releaseTimer = setTimeout(() => {
+      touchHoldActive = false; fired = false;
+      if (dragCard) { dragCard.draggable = true; dragCard = null; }
+    }, 700);
   };
   fileListEl.addEventListener("touchend", end, { passive: false });
   fileListEl.addEventListener("touchcancel", end, { passive: false });
@@ -2412,12 +2439,13 @@ async function explainDeleteFailure(id) {
    ============================================================ */
 const ANIM_DURATION  = 3000;   // sand falls fast, doesn't linger
 const SWEEP_DURATION = 1300;   // wave of grains breaking loose
-const COLLAPSE_DELAY = 1500;
-const FADE_IN_MS     = 700;    // canvas crossfades over the live card, grains stay still meanwhile
+const COLLAPSE_DELAY = 1200;
+const FADE_IN_MS     = 120;    // canvas crossfades over the live card, grains stay still meanwhile
 const TILE_SIZE      = 1.0;    // finer grain = reads as sand, not confetti
 const DRIFT_X        = 5;      // gentle sideways scatter as grains fall
 const PUFF_Y         = 0;      // tiny initial lift before gravity takes over
 const GRAVITY        = 0.00085; // strong downward pull — grains fall, not float
+const START_SPEED     = 0.028;  // px/ms: grains are already moving the moment they break loose
 const NOISE_AMP      = 0;      // subtle jitter, not chaotic
 
 function __dissolveHash(n) {
@@ -2712,6 +2740,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
       const buf = new Uint32Array(img.data.buffer);
       const fadeZone = 130 * dpr;            // grains dissolve smoothly before the canvas edge
       const gravDev = GRAVITY * dpr;
+      const v0Dev = START_SPEED * dpr;
       const driftDev = DRIFT_X * dpr;
       let started = false;
       let prevMin = -1, prevMax = -1;
@@ -2742,7 +2771,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
             alive = true;
             const tSec = local * 0.55;
             px = gx[i] + gvx[i] * driftDev * life;
-            py = gy[i] + gravDev * gg[i] * tSec * tSec;
+            py = gy[i] + v0Dev * local + gravDev * gg[i] * tSec * tSec;
             // stays solid while falling, fades smoothly near the end
             let a = 1;
             if (life > 0.45) {
@@ -2914,6 +2943,12 @@ function showFileContextMenu(clientX, clientY, ids) {
     <button type="button" class="ctx-item" role="menuitem" data-action="download">
       ${ICON_DOWNLOAD}<span>${dlLabel}</span>
     </button>
+    <button type="button" class="ctx-item" role="menuitem" data-action="move">
+      ${ICON_FOLDER}<span>${n === 1 ? "Move to folder…" : `Move ${n} files to folder…`}</span>
+    </button>
+    ${getFilteredFiles().length > n ? `<button type="button" class="ctx-item" role="menuitem" data-action="selectall">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg><span>Select all</span>
+    </button>` : ""}
     <button type="button" class="ctx-item ctx-danger" role="menuitem" data-action="delete">
       ${ICON_DELETE}<span>${delLabel}</span>
     </button>
@@ -2941,6 +2976,20 @@ function showFileContextMenu(clientX, clientY, ids) {
     await downloadSelectedZip(ids);
   });
 
+  menu.querySelector('[data-action="move"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    hideFileContextMenu();
+    showFolderPicker(ids);
+  });
+  const selAllBtn = menu.querySelector('[data-action="selectall"]');
+  if (selAllBtn) selAllBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    hideFileContextMenu();
+    selectedFileIds = new Set(getFilteredFiles().map((f) => String(f.id)));
+    updateSelectionClasses();
+    showToast(`${selectedFileIds.size} files selected`);
+  });
+
   menu.querySelector('[data-action="delete"]').addEventListener("click", async (e) => {
     e.stopPropagation();
     hideFileContextMenu();
@@ -2963,6 +3012,57 @@ function showFileContextMenu(clientX, clientY, ids) {
     document.addEventListener("keydown", close, true);
     window.addEventListener("scroll", close, true);
   }, 0);
+}
+
+// Folder chooser sheet: the touch (and keyboard) alternative to dragging files onto a folder tab.
+function showFolderPicker(fileIds) {
+  const ids = (fileIds || []).map(String);
+  if (!ids.length) return;
+  const existing = document.getElementById("folder-picker-modal");
+  if (existing) existing.remove();
+
+  const files = allFiles.filter((f) => ids.includes(String(f.id)));
+  const allIn = (name) => files.length && files.every((f) => (f.folder || null) === name);
+
+  const modal = document.createElement("div");
+  modal.id = "folder-picker-modal";
+  modal.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal-box folder-picker-box">
+        <h3 class="prompt-title"></h3>
+        <div class="folder-picker-list"></div>
+        <button type="button" class="prompt-btn prompt-btn-cancel folder-picker-cancel">Cancel</button>
+      </div>
+    </div>`;
+  modal.querySelector(".prompt-title").textContent =
+    ids.length === 1 ? "Move to folder" : `Move ${ids.length} files to`;
+  const list = modal.querySelector(".folder-picker-list");
+
+  const close = () => { document.removeEventListener("keydown", onKey); modal.remove(); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const addItem = (label, current, onPick, extraClass) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "folder-picker-item" + (current ? " current" : "") + (extraClass ? " " + extraClass : "");
+    const span = document.createElement("span");
+    span.textContent = label;
+    b.innerHTML = ICON_FOLDER;
+    b.appendChild(span);
+    if (current) { const chk = document.createElement("em"); chk.textContent = "✓"; b.appendChild(chk); }
+    b.addEventListener("click", () => { close(); onPick(); });
+    list.appendChild(b);
+  };
+
+  addItem("All (no folder)", allIn(null), () => moveFilesToFolder(ids, null));
+  allFolders.forEach((f) => addItem(f.name, allIn(f.name), () => moveFilesToFolder(ids, f.name)));
+  addItem("+ New folder", false, () => createFolder(ids), "folder-picker-new");
+
+  modal.querySelector(".folder-picker-cancel").addEventListener("click", close);
+  modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
+    if (e.target.classList.contains("modal-backdrop")) close();
+  });
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(modal);
 }
 
 async function deleteSelectedFiles(ids, clickX, clickY) {
