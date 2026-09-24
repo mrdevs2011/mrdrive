@@ -245,6 +245,7 @@ const FAKE_EMAIL_DOMAIN = "gmail.com";
 
 let allFiles = [];
 let allFolders = [];
+let newlyCreatedFolderId = null; // for appear animation
 let currentSearch = "";
 let currentFolder = null;
 let selectedFileIds = new Set(); // ids currently selected via click/marquee
@@ -1881,6 +1882,21 @@ function renderToolbar() {
     renderFiles();
   });
 
+  // Animate newly created folder tab
+  if (newlyCreatedFolderId) {
+    const newWrap = toolbar.querySelector(`.folder-tab-wrap[data-folder-id="${newlyCreatedFolderId}"]`);
+    if (newWrap) {
+      newWrap.classList.add("is-appearing");
+      // Next frame: remove class to trigger transition
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          newWrap.classList.remove("is-appearing");
+        });
+      });
+    }
+    newlyCreatedFolderId = null;
+  }
+
   wireFolderDropTargets(toolbar);
 }
 
@@ -2063,6 +2079,7 @@ async function createFolder(fileIds) {
     created_at: new Date().toISOString()
   };
   allFolders.push(optimisticFolder);
+  newlyCreatedFolderId = optimisticFolder.id;
   
   // Show folder instantly
   renderToolbar();
@@ -3068,7 +3085,7 @@ function __dissolveDomToCanvas(el, dprOverride) {
       clone.style.color = "#18181b";
     }
     clone.style.border = "1px solid #e4e4e7";
-    clone.style.borderRadius = "12px";
+    clone.style.borderRadius = clone.classList.contains("folder-tab-wrap") ? "8px" : "12px";
 
     const markup =
       `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
@@ -3124,7 +3141,7 @@ function dissolveGroupInfo(cards) {
   return { top, span, sweep };
 }
 
-function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY, groupCtx) {
+function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY, groupCtx, tabMode) {
   const W = snapCanvas.width, H = snapCanvas.height;
   const ctx = snapCanvas.getContext("2d", { willReadFrequently: true });
   const px32 = new Uint32Array(ctx.getImageData(0, 0, W, H).data.buffer);
@@ -3147,13 +3164,19 @@ function __dissolveBuildGrains(snapCanvas, cssW, cssH, dpr, epX, epY, groupCtx) 
       // Wide, natural spread: bell-shaped random sideways speed + a push away
       // from the epicenter, so the cloud opens up like a puff of dust.
       const away = (cx - epX) / (cssW || 1);              // -1 … 1
-      vx[n] = groupCtx
+      vx[n] = tabMode
+        ? (Math.random() + Math.random() - 1) * 0.35          // folder tab: crumbles in place, falls almost straight down
+        : groupCtx
         ? (Math.random() + Math.random() - 1) * 0.5           // group: near-vertical streaks
         : (Math.random() + Math.random() - 1) * 1.6 + away * 1.2;
-      lift[n] = 0.4 + Math.random() * 1.3;
+      lift[n] = tabMode ? 0.05 + Math.random() * 0.25 : 0.4 + Math.random() * 1.3;
       ph[n] = Math.random() * 6.2832;
-      g[n] = 0.8 + Math.random() * 0.5;                       // each grain falls a bit differently
-      delay[n] = groupCtx
+      g[n] = tabMode ? 1.1 + Math.random() * 0.7 : 0.8 + Math.random() * 0.5; // each grain falls a bit differently
+      delay[n] = tabMode
+        // Folder tab: the tab itself erodes from the bottom edge and its own grains drop down
+        // (NOT a top-down wave, which reads like sand being poured on it).
+        ? ((1 - cy / cssH) * 0.35) * SWEEP_DURATION * 0.5 + Math.random() * 450
+        : groupCtx
         // One continuous wave: delay depends on the absolute height inside the
         // whole selection, so it runs top -> bottom across ALL cards as one.
         ? ((groupCtx.offsetY + cy) / groupCtx.span) * groupCtx.sweep + Math.random() * 200
@@ -3252,6 +3275,7 @@ function __dissolveFloatFallback(card) {
 async function playDeleteDissolve(card, clickX, clickY, group) {
   if (!card || !card.isConnected) return;
 
+  const tabMode = card.classList.contains("folder-tab-wrap");
   const startRect = card.getBoundingClientRect();
   card.style.maxHeight = startRect.height + "px";
   card.style.boxSizing = "border-box";
@@ -3281,7 +3305,7 @@ async function playDeleteDissolve(card, clickX, clickY, group) {
     const groupCtx = group
       ? { offsetY: startRect.top - group.top, span: group.span, sweep: group.sweep }
       : null;
-    const grains = __dissolveBuildGrains(snapshotCanvas, width, height, dpr, epX, epY, groupCtx);
+    const grains = __dissolveBuildGrains(snapshotCanvas, width, height, dpr, epX, epY, groupCtx, tabMode);
 
     if (!grains.n) {
       await __dissolveFloatFallback(card);
@@ -3309,7 +3333,7 @@ async function playDeleteDissolve(card, clickX, clickY, group) {
       const fadeZoneX = 100 * dpr;           // …and before the left/right edges
       const gravDev = GRAVITY * dpr;
       const v0Dev = START_SPEED * dpr;
-      const driftDev = DRIFT_X * dpr;
+      const driftDev = DRIFT_X * dpr * (tabMode ? 0.2 : 1);
       const puffDev = PUFF_Y * dpr;
       let started = false;
       let prevMin = -1, prevMax = -1;
@@ -3343,7 +3367,7 @@ async function playDeleteDissolve(card, clickX, clickY, group) {
             // sway makes each grain wander instead of travelling in a straight line.
             const inv = 1 - life;
             const driftEase = 1 - inv * inv * inv;
-            const sway = Math.sin(local * 0.0016 + gph[i]) * (groupCtx ? 2 : 7) * dpr * Math.min(1, life * 5);
+            const sway = Math.sin(local * 0.0016 + gph[i]) * (groupCtx || tabMode ? 2 : 7) * dpr * Math.min(1, life * 5);
             px = gx[i] + gvx[i] * driftDev * driftEase + sway;
             // Tiny soft "lift" right as the grain breaks loose (decays in ~150ms),
             // then gravity takes over — reads as a gentle breath, not a hard drop.
