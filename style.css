@@ -298,8 +298,21 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-.folder-tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: stretch; }
+.folder-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+.folder-tabs::-webkit-scrollbar { height: 6px; }
+.folder-tabs::-webkit-scrollbar-track { background: transparent; }
+.folder-tabs::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 .folder-tab {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -311,6 +324,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
   transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .folder-tab:hover { border-color: var(--border-strong); color: var(--text); }
@@ -318,6 +332,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
 .new-folder-btn { color: var(--text); font-weight: 600; }
 
 .folder-tab-wrap {
+  flex-shrink: 0;
   display: flex;
   align-items: stretch;
   border: 1px solid var(--border);
@@ -1275,6 +1290,12 @@ body.is-dragging-file .folder-tab-wrap {
   border: 1px solid var(--primary);
 }
 .confirm-ok:hover { opacity: 0.85; }
+.confirm-discard {
+  background: var(--danger-soft);
+  color: var(--danger-strong);
+  border: 1px solid var(--danger-soft);
+}
+.confirm-discard:hover { opacity: 0.85; }
 
 /* PROMPT (text input) DIALOG */
 .modal-box.prompt-box {
@@ -1343,6 +1364,86 @@ body.is-dragging-file .folder-tab-wrap {
 .prompt-btn-ok:hover {
   opacity: 0.9;
 }
+
+/* FOLDER PICKER ("Move N files to…") */
+.modal-box.folder-picker-box {
+  width: 420px;
+  max-width: 100%;
+  padding: 24px;
+  text-align: left;
+}
+.folder-picker-box .prompt-title { margin-bottom: 16px; }
+.folder-picker-list {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 14px;
+  margin-bottom: 6px;
+  scrollbar-width: thin;
+}
+.folder-picker-list::-webkit-scrollbar { height: 6px; }
+.folder-picker-list::-webkit-scrollbar-track { background: transparent; }
+.folder-picker-list::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+.folder-picker-item {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #e4e4e7);
+  background: var(--surface, #fff);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.folder-picker-item svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--text-muted); }
+.folder-picker-item:hover {
+  background: var(--bg);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+}
+.folder-picker-item.current {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface, #fff));
+  color: var(--primary);
+}
+.folder-picker-item.current svg { color: var(--primary); }
+.folder-picker-item.current em {
+  font-style: normal;
+  margin-left: 1px;
+  color: var(--primary);
+  font-weight: 700;
+}
+.folder-picker-item.folder-picker-new {
+  border-style: dashed;
+  color: var(--text-muted);
+  background: transparent;
+}
+.folder-picker-item.folder-picker-new:hover { color: var(--text); border-color: var(--border-strong); }
+.folder-picker-cancel {
+  width: 100%;
+  padding: 11px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.folder-picker-cancel:hover { background: var(--bg); color: var(--text); }
+
 
 /* RESPONSIVE */
 @media (max-width: 600px) {
@@ -2097,13 +2198,13 @@ img.file-type-icon.file-thumb,
    (transform doesn't affect layout, so nothing else in the row shifts) and
    switches from a cropping fit to a containing one, so the whole photo
    becomes visible at its own proportions instead of the cropped square. */
-.file-card:hover img.file-type-icon.file-thumb {
+img.file-type-icon.file-thumb:hover {
   object-fit: contain;
   transform: scale(4) !important;
   transform-origin: left center;
-  background: var(--surface, #fff);
-  box-shadow: 0 14px 34px rgba(0,0,0,0.28);
-  border-color: var(--border-strong, #d4d4d8);
+  background: transparent;
+  box-shadow: none;
+  border: none;
   z-index: 30;
 }
 

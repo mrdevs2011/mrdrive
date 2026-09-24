@@ -1355,7 +1355,7 @@ function uploadToStorage(path, file, accessToken, onProgress) {
   });
 }
 
-async function uploadFile(file) {
+async function uploadFile(file, folder) {
   const fileId = getFileUniqueId(file);
   if (uploadingFileIds.has(fileId)) {
     notifyDuplicate(file);
@@ -1387,7 +1387,8 @@ async function uploadFile(file) {
       storage_path: path,
       size: file.size
     };
-    if (currentFolder) insertData.folder = currentFolder;
+    const targetFolder = folder !== undefined ? folder : currentFolder;
+    if (targetFolder) insertData.folder = targetFolder;
 
     const { error: dbError } = await sb.from(TABLE).insert(insertData);
     if (dbError) {
@@ -1438,8 +1439,105 @@ dropzone.addEventListener("drop", (e) => {
 window.addEventListener("paste", (e) => {
   if (appScreen.style.display === "none") return;
   const items = e.clipboardData.files;
-  if (items.length) handleFiles(items);
+  if (items.length) { handleFiles(items); return; }
+
+  // No file/image on the clipboard — if it's plain text, let normal paste
+  // happen inside inputs/textareas/prompt boxes, otherwise offer to save
+  // the text as a new file.
+  const active = document.activeElement;
+  const isEditable = active && (
+    active.tagName === "INPUT" ||
+    active.tagName === "TEXTAREA" ||
+    active.isContentEditable
+  );
+  if (isEditable) return;
+  if (annotState.open) return; // don't hijack paste while a file is open
+  if (document.querySelector(".modal-backdrop")) return; // any dialog (confirm/prompt/etc.) already open
+
+  const text = e.clipboardData.getData("text/plain");
+  if (!text || !text.trim()) return;
+
+  e.preventDefault();
+  pasteTextAsFile(text);
 });
+
+// Extension -> MIME type for text pasted from the clipboard as a new file.
+function guessTextMime(filename) {
+  const map = {
+    html: "text/html", htm: "text/html", css: "text/css",
+    js: "text/javascript", mjs: "text/javascript", json: "application/json",
+    md: "text/markdown", xml: "application/xml", csv: "text/csv",
+    yml: "text/yaml", yaml: "text/yaml"
+  };
+  return map[getFileExt(filename)] || "text/plain";
+}
+
+// Creates the folder (if it doesn't already exist) that a pasted text file
+// should be saved into, mirroring createFolder()'s optimistic-then-DB flow
+// but without its own name prompt. Returns the folder name to store on the file.
+async function ensureFolderExists(name) {
+  const existing = allFolders.find(f => f.name.toLowerCase() === name.toLowerCase());
+  if (existing) return existing.name;
+
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return name;
+
+  const optimisticFolder = {
+    id: "temp-" + Date.now(),
+    name,
+    user_id: user.id,
+    created_at: new Date().toISOString()
+  };
+  allFolders.push(optimisticFolder);
+  renderToolbar();
+
+  const { data, error } = await sb.from(FOLDERS_TABLE).insert({
+    user_id: user.id,
+    name
+  }).select().single();
+
+  if (error) {
+    allFolders = allFolders.filter(f => f.id !== optimisticFolder.id);
+    renderToolbar();
+    return name;
+  }
+
+  const idx = allFolders.findIndex(f => f.id === optimisticFolder.id);
+  if (idx !== -1) {
+    allFolders[idx] = data;
+    renderToolbar();
+  }
+  return data.name;
+}
+
+// Ctrl+V with plain text on the clipboard: ask for a filename ("notes.txt",
+// or "folder/index.html" to save straight into — and create if needed — a
+// folder), then upload the text as a new file.
+async function pasteTextAsFile(text) {
+  const raw = await showPrompt("Fayl nomini kiriting", {
+    okLabel: "Saqlash",
+    placeholder: "masalan: notes.txt yoki folder/index.html"
+  });
+  if (raw == null || !String(raw).trim()) return;
+
+  let name = String(raw).trim().replace(/^\/+/, "");
+
+  let folder = null;
+  const slashIdx = name.lastIndexOf("/");
+  if (slashIdx > -1) {
+    folder = name.slice(0, slashIdx).trim() || null;
+    name = name.slice(slashIdx + 1).trim();
+  }
+  if (!name) {
+    showToast("Fayl nomi bo'sh bo'lishi mumkin emas", "error");
+    return;
+  }
+  if (!/\.[a-z0-9]+$/i.test(name)) name += ".txt"; // no extension given
+
+  const targetFolder = folder ? await ensureFolderExists(folder) : currentFolder;
+  const file = new File([text], name, { type: guessTextMime(name) });
+  await uploadFile(file, targetFolder);
+}
 
 // ==========================================
 // LIST + TOOLBAR + FOLDERS
@@ -1845,17 +1943,42 @@ async function deleteFolder(id, name, evt) {
   setTimeout(() => loadFiles(true), 500);
 }
 
-function renderFiles() {
-  let filtered = allFiles;
+// Parses the search box. A leading "/" scopes the search to one specific
+// folder regardless of the active folder tab — "/design/" lists everything
+// inside the "design" folder, and "/design/logo" also filters those files
+// by name.
+function parseSearchQuery(raw) {
+  const q = (raw || "").trim();
+  if (q.startsWith("/")) {
+    const rest = q.slice(1);
+    const slashIdx = rest.indexOf("/");
+    if (slashIdx === -1) return { folder: rest, name: "" };
+    return { folder: rest.slice(0, slashIdx), name: rest.slice(slashIdx + 1) };
+  }
+  return { folder: null, name: q };
+}
 
-  if (currentFolder !== null) {
+function getSearchFilteredFiles() {
+  let filtered = allFiles;
+  const parsed = parseSearchQuery(currentSearch);
+
+  if (parsed.folder !== null && parsed.folder.trim()) {
+    const folderQ = parsed.folder.trim().toLowerCase();
+    filtered = filtered.filter(f => (f.folder || "").toLowerCase() === folderQ);
+  } else if (currentFolder !== null) {
     filtered = filtered.filter(f => f.folder === currentFolder);
   }
 
-  if (currentSearch.trim()) {
-    const q = currentSearch.toLowerCase();
+  if (parsed.name.trim()) {
+    const q = parsed.name.trim().toLowerCase();
     filtered = filtered.filter(f => f.filename.toLowerCase().includes(q));
   }
+
+  return filtered;
+}
+
+function renderFiles() {
+  let filtered = getSearchFilteredFiles();
 
   if (!filtered.length) {
     if (allFiles.length === 0) {
@@ -3763,13 +3886,7 @@ renderFiles = function () {
 };
 
 function getFilteredFiles() {
-  let filtered = allFiles;
-  if (currentFolder !== null) filtered = filtered.filter(f => f.folder === currentFolder);
-  if (currentSearch.trim()) {
-    const q = currentSearch.toLowerCase();
-    filtered = filtered.filter(f => f.filename.toLowerCase().includes(q));
-  }
-  return filtered;
+  return getSearchFilteredFiles();
 }
 
 async function openAnnotationViewer(file, kind, opts) {
@@ -3894,7 +4011,7 @@ async function openAnnotationViewer(file, kind, opts) {
   }
 
   // Wire top buttons
-  document.getElementById("annot-close").onclick = closeAnnotationViewer;
+  document.getElementById("annot-close").onclick = requestCloseAnnotationViewer;
   document.getElementById("annot-fullscreen").onclick = toggleAnnotFullscreen;
 
   // Keyboard
@@ -3930,6 +4047,73 @@ function exitAnnotEditMode(toolbar, editBtn) {
   updateCursor();
 }
 
+// True while there are drawn/edited changes on the currently open image or
+// PDF that haven't been downloaded via the Save button yet.
+function annotHasUnsavedEdits() {
+  return !!(
+    annotState.open &&
+    (annotState.type === "image" || annotState.type === "pdf") &&
+    annotState.historyIdx > 0
+  );
+}
+
+// Ask "save before closing?" when there are unsaved drawings, then act on
+// the user's choice. Used by the X button and the Escape key.
+async function requestCloseAnnotationViewer() {
+  if (!annotHasUnsavedEdits()) {
+    closeAnnotationViewer();
+    return;
+  }
+  const choice = await showSaveBeforeCloseConfirm();
+  if (choice === "cancel") return;
+  if (choice === "save") {
+    await saveAnnotated(); // saveAnnotated() closes the viewer itself once the download succeeds
+    return;
+  }
+  closeAnnotationViewer(); // discard
+}
+
+// 3-way "Save / Discard / Cancel" dialog shown before closing an image/PDF
+// with unsaved drawings.
+function showSaveBeforeCloseConfirm() {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("save-confirm-modal");
+    if (existing) existing.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "save-confirm-modal";
+    modal.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-box">
+          <p class="confirm-msg">Chizganlaringiz saqlanmagan. Yopishdan oldin saqlaysizmi?</p>
+          <div class="confirm-actions">
+            <button type="button" class="confirm-cancel">Bekor qilish</button>
+            <button type="button" class="confirm-discard">Saqlamasdan chiqish</button>
+            <button type="button" class="confirm-ok">Saqlash</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const onKey = (e) => { if (e.key === "Escape") done("cancel"); };
+    const done = (value) => {
+      document.removeEventListener("keydown", onKey);
+      modal.remove();
+      resolve(value);
+    };
+    document.addEventListener("keydown", onKey);
+
+    modal.querySelector(".confirm-cancel").onclick = () => done("cancel");
+    modal.querySelector(".confirm-discard").onclick = () => done("discard");
+    modal.querySelector(".confirm-ok").onclick = () => done("save");
+    modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
+      if (e.target.classList.contains("modal-backdrop")) done("cancel");
+    });
+    modal.querySelector(".confirm-ok").focus();
+  });
+}
+
 function closeAnnotationViewer(opts) {
   const viewer = document.getElementById("annot-viewer");
   const videoEl = viewer.querySelector("#annot-scroll video");
@@ -3956,8 +4140,17 @@ function closeAnnotationViewer(opts) {
 
 function annotKeyHandler(e) {
   if (!annotState.open) return;
-  if (e.key === "Escape") closeAnnotationViewer();
+  if (e.key === "Escape") requestCloseAnnotationViewer();
 }
+
+// Browsers won't let JS intercept Ctrl+W itself, but they will show their
+// own "leave site?" prompt on tab-close / reload / navigation if we flag
+// the page as having unsaved work here — this covers Ctrl+W too.
+window.addEventListener("beforeunload", (e) => {
+  if (!annotHasUnsavedEdits()) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 
 function buildAnnotToolbar(toolbar) {
   toolbar.innerHTML = "";
