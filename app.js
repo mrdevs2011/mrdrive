@@ -1749,7 +1749,12 @@ async function deleteFolder(id, name, evt) {
     syncFolderUrl(null);
   }
   showToast("Folder deleted");
-  loadFiles();
+  // Optimistic: keep classic tab collapse, soft sync after
+  allFolders = allFolders.filter((f) => String(f.id) !== String(id));
+  if (filesInFolder.length > 0) {
+    allFiles = allFiles.map((f) => (f.folder === name ? { ...f, folder: null } : f));
+  }
+  setTimeout(() => loadFiles(true), 500);
 }
 
 function renderFiles() {
@@ -2354,15 +2359,15 @@ async function explainDeleteFailure(id) {
    - Fully inlined computed styles (no fetch dependency)
    - Guaranteed visual effect (never snaps away)
    ============================================================ */
-const ANIM_DURATION  = 1600;
-const SWEEP_DURATION = 380;
-const COLLAPSE_DELAY = 550;
-const TILE_SIZE      = 2.0;
-const DRIFT_X        = 48;
-const DRIFT_Y        = -36;
-const GRAVITY        = 0.00055;  // particles rise then fall like sand/dust
-const FLOAT_UP_FORCE = -0.028;
-const NOISE_AMP      = 18;
+const ANIM_DURATION  = 2600;   // slower, smoother sand
+const SWEEP_DURATION = 520;
+const COLLAPSE_DELAY = 720;
+const TILE_SIZE      = 2.2;
+const DRIFT_X        = 28;     // balanced; avoid rushing left
+const DRIFT_Y        = -22;
+const GRAVITY        = 0.00022;
+const FLOAT_UP_FORCE = -0.014;
+const NOISE_AMP      = 12;
 
 function __dissolveHash(n) {
   const s = Math.sin(n * 127.1) * 43758.5453;
@@ -2502,22 +2507,22 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
       const distToEp = Math.hypot(x - epX, y - epY) || 0.001;
       const seed = (x * 73856) ^ (y * 19349);
       const rnd = (k) => __dissolveHash(seed + k);
-      // Burst outward from click point + slight upward bias
-      const ang = Math.atan2(y - epY, x - epX) + (rnd(1) - 0.5) * 0.9;
-      const speed = 0.45 + rnd(2) * 1.1;
-      const tSize = tile * (0.7 + rnd(8) * 0.9); // varied grain size
+      // Soft upward scatter, balanced L/R (not pulled to one side)
+      const tSize = tile * (0.75 + rnd(8) * 0.7);
+      const vx = (rnd(2) - 0.5) * 1.15;
+      const vy = -0.55 - rnd(3) * 0.65;
 
       tiles.push({
         sx: x * dpr, sy: y * dpr,
         sw: Math.min(tile * dpr, snapshotCanvas.width  - x * dpr),
         sh: Math.min(tile * dpr, snapshotCanvas.height - y * dpr),
         x, y, tile: tSize,
-        vx: Math.cos(ang) * speed,
-        vy: Math.sin(ang) * speed * 0.85 - 0.35 - rnd(3) * 0.4,
-        rot:  (rnd(4) - 0.5) * 2.2,
-        rotV: (rnd(5) - 0.5) * 0.55,
-        delay: (distToEp / maxDist) * SWEEP_DURATION + rnd(6) * 120,
-        fadeBias: 0.45 + rnd(7) * 0.55,
+        vx,
+        vy,
+        rot:  (rnd(4) - 0.5) * 1.2,
+        rotV: (rnd(5) - 0.5) * 0.28,
+        delay: (distToEp / maxDist) * SWEEP_DURATION + rnd(6) * 180,
+        fadeBias: 0.4 + rnd(7) * 0.45,
         seed,
       });
     }
@@ -2579,8 +2584,9 @@ async function playDeleteDissolve(card, clickX, clickY) {
 
   if (snap && snap.canvas) {
     const { canvas: snapshotCanvas, width, height, rect, dpr } = snap;
-    const epX = clickX !== undefined ? clickX - rect.left : width * 0.85;
-    const epY = clickY !== undefined ? clickY - rect.top  : height * 0.5;
+    // Center epicenter so sand doesn't rush to one side (delete btn is on the right)
+    const epX = width * 0.5;
+    const epY = height * 0.5;
     const tiles = __dissolveBuildTiles(snapshotCanvas, width, height, dpr, epX, epY);
 
     if (!tiles.length) {
@@ -2626,25 +2632,26 @@ async function playDeleteDissolve(card, clickX, clickY) {
           if (life >= 1) continue;
           anyAlive = true;
 
-          // Outward burst + gravity (rise then fall) + horizontal noise
-          const tSec = local;
-          const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 3.2) - 0.5) * NOISE_AMP * Math.min(1, life * 1.4);
-          const nY = (__dissolveNoise1D(t.seed * 0.002 + life * 2.1) - 0.5) * NOISE_AMP * 0.35 * life;
-          const px = t.x + t.vx * DRIFT_X * tSec * 0.055 + nX;
-          const py = t.y + t.vy * Math.abs(DRIFT_Y) * tSec * 0.045
+          // Slow ease-out drift + soft gravity (balanced, not left-biased)
+          const ease = 1 - Math.pow(1 - life, 1.6);
+          const tSec = local * 0.55; // damp overall speed
+          const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.0) - 0.5) * NOISE_AMP * ease;
+          const nY = (__dissolveNoise1D(t.seed * 0.002 + life * 1.6) - 0.5) * NOISE_AMP * 0.3 * ease;
+          const px = t.x + t.vx * DRIFT_X * ease + nX;
+          const py = t.y + t.vy * Math.abs(DRIFT_Y) * ease
             + FLOAT_UP_FORCE * tSec
             + GRAVITY * tSec * tSec
             + nY;
 
           const fade = Math.min(1, life * t.fadeBias);
-          const alpha = Math.max(0, 1 - Math.pow(fade, 1.15));
+          const alpha = Math.max(0, 1 - Math.pow(fade, 1.25));
           if (alpha <= 0.01) continue;
 
-          const scale = 1 - life * 0.45;
+          const scale = 1 - life * 0.35;
           octx.globalAlpha = alpha;
           octx.save();
           octx.translate(px + pad + ts * 0.5, py + pad + ts * 0.5);
-          octx.rotate(t.rot + t.rotV * life * 5.5);
+          octx.rotate(t.rot + t.rotV * ease * 3.2);
           octx.scale(scale, scale);
           octx.drawImage(
             snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
@@ -2674,22 +2681,33 @@ async function playDeleteDissolve(card, clickX, clickY) {
     await __dissolveFloatFallback(card);
   }
 
-  // Collapse the list row (demo .collapsing)
+  // Classic list collapse — row closes, siblings ease up into the gap
   return new Promise((resolve) => {
     if (!card.isConnected) {
       resolve();
       return;
     }
     card.style.visibility = "hidden";
+    // Explicit start height so max-height transition interpolates classically
+    const h = card.getBoundingClientRect().height || startRect.height;
+    card.style.maxHeight = h + "px";
+    void card.offsetHeight; // reflow
     card.classList.add("is-deleting");
     let settled = false;
     const done = () => {
       if (settled) return;
       settled = true;
+      if (card.parentNode) card.remove();
       resolve();
     };
-    card.addEventListener("transitionend", done, { once: true });
-    setTimeout(done, 600);
+    const onEnd = (e) => {
+      if (!e || e.propertyName === "max-height" || e.propertyName === "max-width" || e.propertyName === "opacity") {
+        card.removeEventListener("transitionend", onEnd);
+        done();
+      }
+    };
+    card.addEventListener("transitionend", onEnd);
+    setTimeout(done, 480);
   });
 }
 
@@ -2734,7 +2752,11 @@ async function deleteFile(id, path, evt) {
     showToast("File deleted");
   }
 
-  loadFiles();
+  // Keep list in sync without a hard re-render (preserves classic gap-close)
+  allFiles = allFiles.filter((f) => String(f.id) !== String(id));
+  selectedFileIds.delete(String(id));
+  updateSelectionClasses();
+  setTimeout(() => loadFiles(true), 500);
 }
 
 // ==========================================

@@ -224,15 +224,15 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   padding: 44px 20px;
   text-align: center;
   color: var(--text-muted);
-  transition: none;
+  transition: border-color 0.25s ease, background 0.25s ease, color 0.25s ease, transform 0.2s ease;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
 }
-.dz-icon { color: var(--text-muted); }
+.dz-icon { color: var(--text-muted); transition: color 0.25s ease; }
 .dropzone p { font-size: 14px; }
-.dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
 .dropzone.dragover .dz-icon { color: var(--accent); }
 .upload-label {
   color: var(--text);
@@ -261,9 +261,13 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   font-size: 14px;
   background: var(--surface);
   color: var(--text);
-  transition: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-#search-input:focus { outline: none; border-color: var(--accent); }
+#search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
 
 .folder-tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: stretch; }
 .folder-tab {
@@ -278,7 +282,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: none;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .folder-tab:hover { border-color: var(--border-strong); color: var(--text); }
 .folder-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
@@ -293,10 +297,10 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   background: var(--surface);
   max-width: 280px;
   transition:
-    max-width .5s cubic-bezier(.22,.61,.36,1),
-    opacity .5s ease,
-    margin .5s cubic-bezier(.22,.61,.36,1),
-    border-width .4s ease;
+    max-width 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.28s ease,
+    margin 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    border-width 0.3s ease;
 }
 .folder-tab-wrap .folder-tab { border: none; border-radius: 0; }
 .folder-tab-wrap .folder-tab.active { background: var(--primary); color: white; }
@@ -309,7 +313,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: none;
+  transition: background 0.2s ease, color 0.2s ease;
   border-left: 1px solid var(--border);
 }
 .folder-del-btn:hover { background: var(--red-bg); color: var(--red-text); }
@@ -465,18 +469,21 @@ body.is-dragging-file .folder-tab-wrap {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  overflow: hidden;
+  /* Classic ease — gap closes smoothly, rows below slide up */
   transition:
-    border-color 0.35s ease,
-    background 0.35s ease,
-    box-shadow 0.35s ease,
-    max-height .5s cubic-bezier(.22,.61,.36,1),
-    margin .5s cubic-bezier(.22,.61,.36,1),
-    opacity .5s ease,
-    padding .5s ease;
+    border-color 0.3s ease,
+    background 0.3s ease,
+    box-shadow 0.3s ease,
+    max-height 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    margin 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.42s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.28s ease,
+    border-width 0.3s ease;
 }
 .file-card:hover { border-color: var(--border-strong); }
 
-/* Telegram demo .row.collapsing — identical collapse */
+/* Classic list collapse — row closes, items below ease into place */
 .file-card.is-deleting {
   max-height: 0 !important;
   margin-top: -8px; /* cancels .file-list gap: 8px */
@@ -504,11 +511,21 @@ body.is-dragging-file .folder-tab-wrap {
   border-color: color-mix(in srgb, var(--accent) 40%, #fff);
   background: var(--accent-soft);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
-  animation: fileCardNewIn 0.35s ease;
+  animation: fileCardNewIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 @keyframes fileCardNewIn {
-  from { background: var(--accent-soft); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
-  to { background: var(--accent-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); }
+  from {
+    background: color-mix(in srgb, var(--accent) 22%, #fff);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent);
+    transform: translateY(-4px);
+    opacity: 0.85;
+  }
+  to {
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 .file-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .file-name { font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -525,9 +542,10 @@ body.is-dragging-file .folder-tab-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: none;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
 }
 .file-actions button:hover { background: var(--bg); color: var(--text); }
+.file-actions button:active { transform: scale(0.92); }
 .empty { color: var(--text-muted); text-align: center; padding: 30px; font-size: 14px; }
 .file-card { cursor: pointer; }
 .file-card .file-actions-more,
@@ -2046,4 +2064,35 @@ img.file-type-icon.file-thumb,
   .file-type-icon,
   img.file-type-icon.file-thumb,
   .file-thumb { width: 30px; height: 30px; }
+}
+
+
+/* ===== Global smoothness polish ===== */
+button, a, input, .folder-tab, .folder-tab-wrap, .file-card, .dropzone, .toast, .toggle-btn, .link-btn {
+  -webkit-tap-highlight-color: transparent;
+}
+button:not(:disabled), .folder-tab, .link-btn, .toggle-btn {
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.15s ease;
+}
+.file-card.is-dragging {
+  transition: opacity 0.2s ease;
+}
+.selection-fab {
+  transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1), background 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease !important;
+}
+header, .toolbar {
+  transition: opacity 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
