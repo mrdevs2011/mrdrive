@@ -1434,9 +1434,13 @@ function createProgressItem(filename) {
   cancelBtn.className = "upload-item-cancel";
   cancelBtn.title = "Bekor qilish";
   cancelBtn.setAttribute("aria-label", "Bekor qilish");
-  cancelBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+  cancelBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
 
-  top.append(name, status, cancelBtn);
+  const meta = document.createElement("div");
+  meta.className = "upload-item-meta";
+  meta.append(status, cancelBtn);
+
+  top.append(name, meta);
 
   const track = document.createElement("div");
   track.className = "upload-bar";
