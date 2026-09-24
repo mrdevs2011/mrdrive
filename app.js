@@ -2362,7 +2362,7 @@ async function explainDeleteFailure(id) {
 const ANIM_DURATION  = 3000;   // sand falls fast, doesn't linger
 const SWEEP_DURATION = 1300;   // wave of grains breaking loose
 const COLLAPSE_DELAY = 1100;
-const TILE_SIZE      = 1.8;    // finer grain = reads as sand, not confetti
+const TILE_SIZE      = 1.0;    // finer grain = reads as sand, not confetti
 const DRIFT_X        = 5;      // gentle sideways scatter as grains fall
 const PUFF_Y         = 0;      // tiny initial lift before gravity takes over
 const GRAVITY        = 0.00085; // strong downward pull — grains fall, not float
@@ -2495,10 +2495,10 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
   const tiles = [];
   const maxDist = Math.hypot(cssWidth, cssHeight) || 1;
   // Keep particle count reasonable on wide cards (still looks dense)
-  let tile = TILE_SIZE;
-  const est = (cssWidth / tile) * (cssHeight / tile);
-  if (est > 12000) tile = 2.2;
-  if (est > 20000) tile = 2.8;
+  // Very fine grains: start at TILE_SIZE and only coarsen as much as needed to
+  // keep the grain count under MAX_GRAINS (keeps big cards smooth).
+  const MAX_GRAINS = 45000;
+  const tile = Math.max(TILE_SIZE, Math.sqrt((cssWidth * cssHeight) / MAX_GRAINS));
 
   for (let y = 0; y < cssHeight; y += tile) {
     for (let x = 0; x < cssWidth; x += tile) {
@@ -2668,15 +2668,10 @@ async function playDeleteDissolve(card, clickX, clickY) {
 
           const scale = 1;
           octx.globalAlpha = alpha;
-          octx.save();
-          octx.translate(px + ox + ts * 0.5, py + oy + ts * 0.5);
-          octx.rotate(t.rot + t.rotV * ease * 3.2);
-          octx.scale(scale, scale);
           octx.drawImage(
             snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
-            -ts * 0.5, -ts * 0.5, ts, ts
+            px + ox, py + oy, ts, ts
           );
-          octx.restore();
         }
         return anyAlive;
       }
