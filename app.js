@@ -2363,11 +2363,11 @@ const ANIM_DURATION  = 2600;   // slower, smoother sand
 const SWEEP_DURATION = 520;
 const COLLAPSE_DELAY = 720;
 const TILE_SIZE      = 2.2;
-const DRIFT_X        = 28;     // balanced; avoid rushing left
-const DRIFT_Y        = -22;
-const GRAVITY        = 0.00022;
-const FLOAT_UP_FORCE = -0.014;
-const NOISE_AMP      = 12;
+const DRIFT_X        = 72;     // wider horizontal scatter
+const DRIFT_Y        = -48;    // higher upward loft
+const GRAVITY        = 0.00028;
+const FLOAT_UP_FORCE = -0.018;
+const NOISE_AMP      = 28;     // more random spread
 
 function __dissolveHash(n) {
   const s = Math.sin(n * 127.1) * 43758.5453;
@@ -2507,10 +2507,10 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
       const distToEp = Math.hypot(x - epX, y - epY) || 0.001;
       const seed = (x * 73856) ^ (y * 19349);
       const rnd = (k) => __dissolveHash(seed + k);
-      // Soft upward scatter, balanced L/R (not pulled to one side)
-      const tSize = tile * (0.75 + rnd(8) * 0.7);
-      const vx = (rnd(2) - 0.5) * 1.15;
-      const vy = -0.55 - rnd(3) * 0.65;
+      // Wide scatter, balanced L/R
+      const tSize = tile * (0.7 + rnd(8) * 0.85);
+      const vx = (rnd(2) - 0.5) * 2.1;           // stronger left/right
+      const vy = -0.7 - rnd(3) * 1.15;           // varied upward
 
       tiles.push({
         sx: x * dpr, sy: y * dpr,
@@ -2592,15 +2592,24 @@ async function playDeleteDissolve(card, clickX, clickY) {
     if (!tiles.length) {
       await __dissolveFloatFallback(card);
     } else {
-      const pad = 120;
+      // Horizontal room + extend canvas to bottom of viewport so particles
+      // (esp. folder tabs near the top) fall all the way down, not clipped mid-screen
+      const padX = 280;
+      const padTop = 140;
+      const padBottom = Math.max(320, window.innerHeight - rect.top + 64);
+      const ox = padX;
+      const oy = padTop;
+      const overlayW = width + padX * 2;
+      const overlayH = height + padTop + padBottom;
+
       const overlay = document.createElement("canvas");
       overlay.className = "particle-canvas";
-      overlay.width  = Math.ceil((width  + pad * 2) * dpr);
-      overlay.height = Math.ceil((height + pad * 2) * dpr);
-      overlay.style.width  = (width  + pad * 2) + "px";
-      overlay.style.height = (height + pad * 2) + "px";
-      overlay.style.left = (rect.left - pad) + "px";
-      overlay.style.top  = (rect.top  - pad) + "px";
+      overlay.width  = Math.ceil(overlayW * dpr);
+      overlay.height = Math.ceil(overlayH * dpr);
+      overlay.style.width  = overlayW + "px";
+      overlay.style.height = overlayH + "px";
+      overlay.style.left = (rect.left - padX) + "px";
+      overlay.style.top  = (rect.top  - padTop) + "px";
       document.body.appendChild(overlay);
 
       const octx = overlay.getContext("2d");
@@ -2610,7 +2619,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
       const startT = performance.now();
 
       function paint(elapsed) {
-        octx.clearRect(0, 0, overlay.width, overlay.height);
+        octx.clearRect(0, 0, overlayW, overlayH);
         let anyAlive = false;
 
         for (let i = 0; i < tiles.length; i++) {
@@ -2622,7 +2631,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
             octx.globalAlpha = 1;
             octx.drawImage(
               snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
-              t.x + pad, t.y + pad, ts, ts
+              t.x + ox, t.y + oy, ts, ts
             );
             anyAlive = true;
             continue;
@@ -2632,11 +2641,11 @@ async function playDeleteDissolve(card, clickX, clickY) {
           if (life >= 1) continue;
           anyAlive = true;
 
-          // Slow ease-out drift + soft gravity (balanced, not left-biased)
+          // Slow ease-out drift + gravity that reaches the bottom of the screen
           const ease = 1 - Math.pow(1 - life, 1.6);
-          const tSec = local * 0.55; // damp overall speed
+          const tSec = local * 0.55;
           const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.0) - 0.5) * NOISE_AMP * ease;
-          const nY = (__dissolveNoise1D(t.seed * 0.002 + life * 1.6) - 0.5) * NOISE_AMP * 0.3 * ease;
+          const nY = (__dissolveNoise1D(t.seed * 0.002 + life * 1.6) - 0.5) * NOISE_AMP * 0.55 * ease;
           const px = t.x + t.vx * DRIFT_X * ease + nX;
           const py = t.y + t.vy * Math.abs(DRIFT_Y) * ease
             + FLOAT_UP_FORCE * tSec
@@ -2650,7 +2659,7 @@ async function playDeleteDissolve(card, clickX, clickY) {
           const scale = 1 - life * 0.35;
           octx.globalAlpha = alpha;
           octx.save();
-          octx.translate(px + pad + ts * 0.5, py + pad + ts * 0.5);
+          octx.translate(px + ox + ts * 0.5, py + oy + ts * 0.5);
           octx.rotate(t.rot + t.rotV * ease * 3.2);
           octx.scale(scale, scale);
           octx.drawImage(
@@ -2758,6 +2767,153 @@ async function deleteFile(id, path, evt) {
   updateSelectionClasses();
   setTimeout(() => loadFiles(true), 500);
 }
+
+// ==========================================
+// CONTEXT MENU (right-click) — delete selected
+// ==========================================
+function hideFileContextMenu() {
+  const m = document.getElementById("file-context-menu");
+  if (m) m.remove();
+}
+
+function showFileContextMenu(clientX, clientY, ids) {
+  hideFileContextMenu();
+  const n = ids.length;
+  if (!n) return;
+
+  const menu = document.createElement("div");
+  menu.id = "file-context-menu";
+  menu.className = "file-context-menu";
+  menu.setAttribute("role", "menu");
+
+  const delLabel = n === 1 ? "Delete this file" : `Delete these ${n} files`;
+  menu.innerHTML = `
+    <button type="button" class="ctx-item ctx-danger" role="menuitem" data-action="delete">
+      ${ICON_DELETE}<span>${delLabel}</span>
+    </button>
+  `;
+
+  document.body.appendChild(menu);
+
+  // Position, keep inside viewport
+  const pad = 8;
+  const mw = menu.offsetWidth;
+  const mh = menu.offsetHeight;
+  let left = clientX;
+  let top = clientY;
+  if (left + mw > window.innerWidth - pad) left = window.innerWidth - mw - pad;
+  if (top + mh > window.innerHeight - pad) top = window.innerHeight - mh - pad;
+  if (left < pad) left = pad;
+  if (top < pad) top = pad;
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+
+  menu.querySelector('[data-action="delete"]').addEventListener("click", async (e) => {
+    e.stopPropagation();
+    hideFileContextMenu();
+    await deleteSelectedFiles(ids, clientX, clientY);
+  });
+
+  // Close on outside click / escape / scroll
+  const close = (ev) => {
+    if (ev.type === "keydown" && ev.key !== "Escape") return;
+    if (ev.type === "mousedown" && menu.contains(ev.target)) return;
+    hideFileContextMenu();
+    document.removeEventListener("mousedown", close, true);
+    document.removeEventListener("keydown", close, true);
+    window.removeEventListener("scroll", close, true);
+  };
+  setTimeout(() => {
+    document.addEventListener("mousedown", close, true);
+    document.addEventListener("keydown", close, true);
+    window.addEventListener("scroll", close, true);
+  }, 0);
+}
+
+async function deleteSelectedFiles(ids, clickX, clickY) {
+  const list = (ids || []).map(String).filter(Boolean);
+  if (!list.length) return;
+
+  const msg =
+    list.length === 1
+      ? "Delete this file?"
+      : `Delete these ${list.length} files?`;
+  if (!(await showConfirm(msg, "Delete"))) return;
+
+  // Dissolve all visible selected cards in parallel
+  const cards = list
+    .map((id) => fileListEl && fileListEl.querySelector(`.file-card[data-file-id="${id}"]`))
+    .filter(Boolean);
+  if (cards.length) {
+    await Promise.all(cards.map((c) => playDeleteDissolve(c, clickX, clickY)));
+  }
+
+  list.forEach((id) => markLocalDelete(id));
+
+  const files = list
+    .map((id) => allFiles.find((f) => String(f.id) === String(id)))
+    .filter(Boolean);
+
+  // DB delete
+  const { data: deletedRows, error } = await sb
+    .from(TABLE)
+    .delete()
+    .in("id", list.map((id) => {
+      const n = Number(id);
+      return Number.isFinite(n) && String(n) === String(id) ? n : id;
+    }))
+    .select();
+
+  if (error) {
+    showAlert("Error: " + error.message);
+    loadFiles();
+    return;
+  }
+
+  // Storage cleanup (best-effort)
+  const paths = files.map((f) => f.storage_path).filter(Boolean);
+  if (paths.length) {
+    const { error: storageError } = await sb.storage.from(BUCKET).remove(paths);
+    if (storageError) {
+      showToast(
+        list.length === 1 ? "File deleted" : `${list.length} files deleted`,
+        "warning",
+        "Storage cleanup failed: " + storageError.message
+      );
+    } else {
+      showToast(list.length === 1 ? "File deleted" : `${list.length} files deleted`);
+    }
+  } else {
+    showToast(list.length === 1 ? "File deleted" : `${list.length} files deleted`);
+  }
+
+  const gone = new Set((deletedRows || []).map((r) => String(r.id)));
+  if (!gone.size) list.forEach((id) => gone.add(String(id)));
+  allFiles = allFiles.filter((f) => !gone.has(String(f.id)));
+  list.forEach((id) => selectedFileIds.delete(String(id)));
+  updateSelectionClasses();
+  setTimeout(() => loadFiles(true), 500);
+}
+
+fileListEl.addEventListener("contextmenu", (e) => {
+  const card = e.target.closest && e.target.closest(".file-card");
+  if (!card || !card.dataset.fileId) return;
+  e.preventDefault();
+
+  const id = String(card.dataset.fileId);
+  let ids;
+  if (selectedFileIds.has(id) && selectedFileIds.size > 1) {
+    ids = Array.from(selectedFileIds);
+  } else if (selectedFileIds.has(id) && selectedFileIds.size === 1) {
+    ids = [id];
+  } else {
+    // Right-click unselected card → select only it
+    selectedFileIds = new Set([id]);
+    updateSelectionClasses();
+    ids = [id];
+  }
+  showFileContextMenu(e.clientX, e.clientY, ids);
+});
 
 // ==========================================
 // PUBLIC LINK — CREATE / COPY / REFRESH / UNPUBLISH

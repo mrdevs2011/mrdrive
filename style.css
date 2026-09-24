@@ -2096,3 +2096,52 @@ header, .toolbar {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Right-click context menu on file cards */
+.file-context-menu {
+  position: fixed;
+  z-index: 12000;
+  min-width: 200px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06);
+  animation: ctxIn 0.16s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+@keyframes ctxIn {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.file-context-menu .ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.file-context-menu .ctx-item:hover {
+  background: var(--neutral-soft, #f4f4f5);
+}
+.file-context-menu .ctx-item.ctx-danger {
+  color: var(--danger, #dc2626);
+}
+.file-context-menu .ctx-item.ctx-danger:hover {
+  background: var(--danger-soft, #fef2f2);
+  color: var(--danger-strong, #b91c1c);
+}
+.file-context-menu .ctx-item svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
