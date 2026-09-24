@@ -2359,15 +2359,14 @@ async function explainDeleteFailure(id) {
    - Fully inlined computed styles (no fetch dependency)
    - Guaranteed visual effect (never snaps away)
    ============================================================ */
-const ANIM_DURATION  = 2600;   // slower, smoother sand
-const SWEEP_DURATION = 520;
-const COLLAPSE_DELAY = 720;
-const TILE_SIZE      = 2.2;
-const DRIFT_X        = 72;     // wider horizontal scatter
-const DRIFT_Y        = -48;    // higher upward loft
-const GRAVITY        = 0.00028;
-const FLOAT_UP_FORCE = -0.018;
-const NOISE_AMP      = 28;     // more random spread
+const ANIM_DURATION  = 1700;   // sand falls fast, doesn't linger
+const SWEEP_DURATION = 380;    // wave of grains breaking loose
+const COLLAPSE_DELAY = 520;
+const TILE_SIZE      = 1.8;    // finer grain = reads as sand, not confetti
+const DRIFT_X        = 26;     // gentle sideways scatter as grains fall
+const PUFF_Y         = 10;     // tiny initial lift before gravity takes over
+const GRAVITY        = 0.0052; // strong downward pull — grains fall, not float
+const NOISE_AMP      = 10;     // subtle jitter, not chaotic
 
 function __dissolveHash(n) {
   const s = Math.sin(n * 127.1) * 43758.5453;
@@ -2507,10 +2506,11 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
       const distToEp = Math.hypot(x - epX, y - epY) || 0.001;
       const seed = (x * 73856) ^ (y * 19349);
       const rnd = (k) => __dissolveHash(seed + k);
-      // Wide scatter, balanced L/R
-      const tSize = tile * (0.7 + rnd(8) * 0.85);
-      const vx = (rnd(2) - 0.5) * 2.1;           // stronger left/right
-      const vy = -0.7 - rnd(3) * 1.15;           // varied upward
+      // Grains break loose near the epicenter first, drift a little sideways,
+      // then fall — real sand, not floating ash.
+      const tSize = tile * (0.65 + rnd(8) * 0.7);
+      const vx = (rnd(2) - 0.5) * 1.6;            // mild left/right scatter
+      const vy = 0.15 + rnd(3) * 0.5;             // downward from the start
 
       tiles.push({
         sx: x * dpr, sy: y * dpr,
@@ -2584,9 +2584,12 @@ async function playDeleteDissolve(card, clickX, clickY) {
 
   if (snap && snap.canvas) {
     const { canvas: snapshotCanvas, width, height, rect, dpr } = snap;
-    // Center epicenter so sand doesn't rush to one side (delete btn is on the right)
-    const epX = width * 0.5;
-    const epY = height * 0.5;
+    // Epicenter = where the grains start breaking loose first. Use the click
+    // point when we have one (feels like the tap triggered it); otherwise
+    // center-top, since real sand starts trickling from the top and falls.
+    const hasClick = typeof clickX === "number" && typeof clickY === "number";
+    const epX = hasClick ? Math.min(Math.max(clickX - rect.left, 0), width) : width * 0.5;
+    const epY = hasClick ? Math.min(Math.max(clickY - rect.top, 0), height) : height * 0.3;
     const tiles = __dissolveBuildTiles(snapshotCanvas, width, height, dpr, epX, epY);
 
     if (!tiles.length) {
@@ -2641,19 +2644,19 @@ async function playDeleteDissolve(card, clickX, clickY) {
           if (life >= 1) continue;
           anyAlive = true;
 
-          // Slow ease-out drift + gravity that reaches the bottom of the screen
+          // Real sand: brief lift as the grain breaks free, then it's all gravity —
+          // accelerating straight down, with just a light sideways drift.
           const ease = 1 - Math.pow(1 - life, 1.6);
           const tSec = local * 0.55;
           const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.0) - 0.5) * NOISE_AMP * ease;
-          const nY = (__dissolveNoise1D(t.seed * 0.002 + life * 1.6) - 0.5) * NOISE_AMP * 0.55 * ease;
           const px = t.x + t.vx * DRIFT_X * ease + nX;
-          const py = t.y + t.vy * Math.abs(DRIFT_Y) * ease
-            + FLOAT_UP_FORCE * tSec
-            + GRAVITY * tSec * tSec
-            + nY;
+          const py = t.y - PUFF_Y * Math.sin(Math.min(life, 0.3) * Math.PI / 0.3) * 0.4
+            + t.vy * 14 * ease
+            + GRAVITY * tSec * tSec;
 
-          const fade = Math.min(1, life * t.fadeBias);
-          const alpha = Math.max(0, 1 - Math.pow(fade, 1.25));
+          // Guaranteed to reach 0 exactly at life=1 (no abrupt cutoff), while
+          // fadeBias still staggers how early each grain starts to vanish.
+          const alpha = Math.pow(Math.max(0, 1 - life), 0.7 + t.fadeBias * 0.7);
           if (alpha <= 0.01) continue;
 
           const scale = 1 - life * 0.35;
