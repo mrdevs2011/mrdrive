@@ -5680,13 +5680,6 @@ function mountMrAudioPlayer(host, opts) {
 
     ctx.save();
 
-    // light bloom (cheap)
-    const bloom = ctx.createRadialGradient(w * 0.5, midY, 0, w * 0.5, midY, w * 0.45);
-    bloom.addColorStop(0, "rgba(180,230,255," + (0.15 * e).toFixed(3) + ")");
-    bloom.addColorStop(1, "rgba(40,100,220,0)");
-    ctx.fillStyle = bloom;
-    ctx.fillRect(0, 0, w, h);
-
     // membranes
     for (let L = 0; L < THREADS.length; L++) {
       const th = THREADS[L];
@@ -5730,14 +5723,6 @@ function mountMrAudioPlayer(host, opts) {
         "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")"
       );
     }
-
-    // soft white core (no shadow)
-    ctx.globalCompositeOperation = "screen";
-    const core = ctx.createRadialGradient(w * 0.5, midY, 0, w * 0.5, midY, w * 0.12 * e);
-    core.addColorStop(0, "rgba(255,255,255," + (0.45 * e).toFixed(3) + ")");
-    core.addColorStop(1, "rgba(150,210,255,0)");
-    ctx.fillStyle = core;
-    ctx.fillRect(0, 0, w, h);
 
     ctx.restore();
   }
