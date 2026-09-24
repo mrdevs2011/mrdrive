@@ -429,7 +429,16 @@ function applyPathAfterLoad(opts) {
   }
   if (!parsed.filename) return;
   const file = findFileFromPath(parsed);
-  if (!file) return;
+  if (!file) {
+    // Bunday fayl yo'q -> root ga qaytamiz (faqat ro'yxat haqiqatan yuklangan bo'lsa)
+    if (filesListReady) {
+      currentFolder = null;
+      history.replaceState({ folder: null, filename: null, dateKey: null }, "", "/" + (window.location.search || "") + (window.location.hash || ""));
+      renderToolbar();
+      renderFiles();
+    }
+    return;
+  }
   const kind = isViewable(file.filename);
   if (!kind) return;
   if (annotState.open && annotState.file && annotState.file.id === file.id) return;
