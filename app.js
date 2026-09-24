@@ -6145,30 +6145,75 @@ function annotSiblings() {
 }
 
 function updateAnnotNavButtons() {
-  const off = annotSiblings().length < 2;
-  ["annot-prev", "annot-next"].forEach((id) => {
-    const b = document.getElementById(id);
-    if (b) b.disabled = off;
-  });
+  const list = annotSiblings();
+  const f = annotState.file;
+  let i = -1;
+  if (f) i = list.findIndex((x) => String(x.id) === String(f.id));
+  const prevBtn = document.getElementById("annot-prev");
+  const nextBtn = document.getElementById("annot-next");
+  if (prevBtn) prevBtn.disabled = i <= 0;
+  if (nextBtn) nextBtn.disabled = i < 0 || i >= list.length - 1;
 }
 
-async function annotNavigate(dir) {
-  if (!annotState.open || !annotState.file || annotNavBusy) return;
+async function annotNavigate(dir, opts) {
+  if (!annotState.open || !annotState.file || annotNavBusy) return false;
   const list = annotSiblings();
-  if (list.length < 2) return;
+  if (list.length < 2) return false;
   if (annotHasUnsavedEdits()) {
     showToast("Saqlanmagan chizmalar bor", "warning", "Avval saqlang yoki yopib bekor qiling.");
-    return;
+    return false;
   }
   const i = list.findIndex((x) => String(x.id) === String(annotState.file.id));
-  const next = list[(i + dir + list.length) % list.length];
-  if (!next) return;
+  if (i < 0) return false;
+  // Linear neighbors (no wrap) — swipe feels physical at the ends
+  const nextIdx = i + dir;
+  if (nextIdx < 0 || nextIdx >= list.length) return false;
+  const next = list[nextIdx];
+  if (!next) return false;
+
   annotNavBusy = true;
+  const scroll = document.getElementById("annot-scroll");
+  const workspace = document.getElementById("annot-workspace");
+  const skipSlide = opts && opts.skipSlide;
+  const fromSwipe = opts && opts.fromSwipe;
+
   try {
+    // Slide out current content (unless swipe already finished the motion)
+    if (!skipSlide && !fromSwipe && scroll && workspace) {
+      const w = workspace.clientWidth || window.innerWidth;
+      const target = dir > 0 ? -w : w;
+      scroll.style.transition = "transform 0.28s cubic-bezier(0.22, 1, 0.36, 1)";
+      scroll.style.transform = `translate3d(${target}px,0,0)`;
+      await new Promise((r) => setTimeout(r, 280));
+    }
+
     const v = document.querySelector("#annot-scroll video, #annot-scroll audio");
     if (v) { v.pause(); v.removeAttribute("src"); v.load(); }
     if (window.__mrAudioDestroy) { try { window.__mrAudioDestroy(); } catch (_) {} }
+
+    // Prepare incoming slide from the opposite edge
+    if (scroll) {
+      scroll.style.transition = "none";
+      const w = (workspace && workspace.clientWidth) || window.innerWidth;
+      scroll.style.transform = `translate3d(${dir > 0 ? w : -w}px,0,0)`;
+      scroll.style.opacity = "0.001";
+    }
+
     await openAnnotationViewer(next, isViewable(next.filename));
+
+    // Animate new content into place
+    if (scroll) {
+      // force reflow so transition applies from off-screen position
+      void scroll.offsetWidth;
+      scroll.style.transition = "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease";
+      scroll.style.transform = "translate3d(0,0,0)";
+      scroll.style.opacity = "1";
+      await new Promise((r) => setTimeout(r, 320));
+      scroll.style.transition = "";
+      scroll.style.transform = "";
+      scroll.style.opacity = "";
+    }
+    return true;
   } finally {
     annotNavBusy = false;
   }
@@ -6176,6 +6221,174 @@ async function annotNavigate(dir) {
 
 document.getElementById("annot-prev")?.addEventListener("click", () => annotNavigate(-1));
 document.getElementById("annot-next")?.addEventListener("click", () => annotNavigate(1));
+
+// Physical left/right swipe between files (mobile, tablet, desktop).
+// Horizontal-dominant drag on the workspace; springs back or commits with velocity.
+(function setupAnnotSwipe() {
+  const workspace = document.getElementById("annot-workspace");
+  if (!workspace) return;
+
+  let tracking = false;
+  let decided = false;
+  let isHoriz = false;
+  let startX = 0;
+  let startY = 0;
+  let lastX = 0;
+  let lastT = 0;
+  let velocity = 0;
+  let pointerId = null;
+  let canPrev = false;
+  let canNext = false;
+
+  const SCROLL_SEL = "#annot-scroll";
+  const INTERACTIVE = "button, a, input, textarea, select, video, audio, .mr-audio-player, .mr-audio-progress, .mr-audio-controls, .annot-btn, .annot-tool";
+
+  function scrollEl() {
+    return document.getElementById("annot-scroll");
+  }
+
+  function resetTransform(el, animate) {
+    if (!el) return;
+    if (animate) {
+      el.style.transition = "transform 0.38s cubic-bezier(0.22, 1, 0.36, 1)";
+      el.style.transform = "translate3d(0,0,0)";
+      const done = () => {
+        el.style.transition = "";
+        el.style.transform = "";
+        el.removeEventListener("transitionend", done);
+      };
+      el.addEventListener("transitionend", done);
+      setTimeout(done, 420);
+    } else {
+      el.style.transition = "";
+      el.style.transform = "";
+    }
+  }
+
+  function rubber(dx, width) {
+    // Resist past the end when no sibling in that direction
+    if (dx > 0 && !canPrev) return dx * 0.22;
+    if (dx < 0 && !canNext) return dx * 0.22;
+    // Slight ease so it feels heavy
+    const t = Math.min(Math.abs(dx) / width, 1.4);
+    const eased = Math.sin((Math.min(t, 1) * Math.PI) / 2);
+    const mag = Math.min(Math.abs(dx), width) * (0.55 + 0.45 * eased) + Math.max(0, Math.abs(dx) - width) * 0.15;
+    return (dx < 0 ? -1 : 1) * mag;
+  }
+
+  function refreshNeighbors() {
+    const list = annotSiblings();
+    const f = annotState.file;
+    if (!f || list.length < 2) {
+      canPrev = canNext = false;
+      return;
+    }
+    const i = list.findIndex((x) => String(x.id) === String(f.id));
+    canPrev = i > 0;
+    canNext = i >= 0 && i < list.length - 1;
+  }
+
+  workspace.addEventListener("pointerdown", (e) => {
+    if (!annotState.open || annotNavBusy || annotState.editMode) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (e.target.closest && e.target.closest(INTERACTIVE)) return;
+    // Don't steal two-finger pan / pinch
+    if (annotState.touches && annotState.touches.size >= 2) return;
+    if (annotState.isPanning) return;
+
+    refreshNeighbors();
+    if (!canPrev && !canNext) return;
+
+    tracking = true;
+    decided = false;
+    isHoriz = false;
+    startX = lastX = e.clientX;
+    startY = e.clientY;
+    lastT = performance.now();
+    velocity = 0;
+    pointerId = e.pointerId;
+
+    const sc = scrollEl();
+    if (sc) {
+      sc.style.transition = "none";
+      sc.style.willChange = "transform";
+    }
+  }, { passive: true });
+
+  workspace.addEventListener("pointermove", (e) => {
+    if (!tracking || e.pointerId !== pointerId) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const now = performance.now();
+    const dt = Math.max(1, now - lastT);
+    velocity = (e.clientX - lastX) / dt; // px/ms
+    lastX = e.clientX;
+    lastT = now;
+
+    if (!decided) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      decided = true;
+      isHoriz = Math.abs(dx) > Math.abs(dy) * 1.15;
+      if (!isHoriz) {
+        tracking = false;
+        resetTransform(scrollEl(), false);
+        return;
+      }
+      try { workspace.setPointerCapture(pointerId); } catch (_) {}
+    }
+    if (!isHoriz) return;
+
+    e.preventDefault();
+    const sc = scrollEl();
+    if (!sc) return;
+    const w = workspace.clientWidth || window.innerWidth;
+    const x = rubber(dx, w);
+    sc.style.transform = `translate3d(${x}px,0,0)`;
+  }, { passive: false });
+
+  async function endSwipe(e) {
+    if (!tracking || (e && e.pointerId !== pointerId)) return;
+    tracking = false;
+    const sc = scrollEl();
+    if (!isHoriz || !sc) {
+      resetTransform(sc, false);
+      isHoriz = false;
+      return;
+    }
+
+    const dx = (e ? e.clientX : lastX) - startX;
+    const w = workspace.clientWidth || window.innerWidth;
+    const threshold = Math.min(120, w * 0.22);
+    const fling = Math.abs(velocity) > 0.55; // ~550 px/s
+    let dir = 0;
+    if ((dx < -threshold || (fling && velocity < -0.35)) && canNext) dir = 1;
+    else if ((dx > threshold || (fling && velocity > 0.35)) && canPrev) dir = -1;
+
+    if (dir === 0) {
+      resetTransform(sc, true);
+      isHoriz = false;
+      return;
+    }
+
+    // Finish the slide off-screen, then swap file
+    const target = dir > 0 ? -w : w;
+    sc.style.transition = "transform 0.24s cubic-bezier(0.22, 1, 0.36, 1)";
+    sc.style.transform = `translate3d(${target}px,0,0)`;
+    isHoriz = false;
+    pointerId = null;
+
+    await new Promise((r) => setTimeout(r, 240));
+    await annotNavigate(dir, { fromSwipe: true, skipSlide: true });
+  }
+
+  workspace.addEventListener("pointerup", endSwipe);
+  workspace.addEventListener("pointercancel", (e) => {
+    if (!tracking || e.pointerId !== pointerId) return;
+    tracking = false;
+    isHoriz = false;
+    resetTransform(scrollEl(), true);
+  });
+})();
 
 // ---- help dialog (also opened from the settings menu) ----
 // Help page is for computers only: phones and tablets (narrow screens) don't get it.

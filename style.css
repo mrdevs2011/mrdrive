@@ -1914,6 +1914,11 @@ body.is-dragging-file .folder-tab-wrap {
   position: relative;
   background: radial-gradient(ellipse at top, #111117 0%, #09090b 70%);
   transition: background 0.15s ease;
+  touch-action: pan-y;
+}
+.annot-workspace .annot-scroll {
+  will-change: transform;
+  backface-visibility: hidden;
 }
 /* Image/video previews: near-white workspace instead of the dark default. */
 .annot-workspace.kind-image,
