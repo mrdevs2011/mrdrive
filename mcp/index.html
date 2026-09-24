@@ -207,6 +207,12 @@
   }
   .agent-tabs {
     display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap;
+    max-height: none;
+  }
+  .agent-tab.dark-icon img {
+    background: #0a0a0a;
+    border-radius: 5px;
+    padding: 2px;
   }
   .agent-tab {
     display: inline-flex; align-items: center; gap: 7px;
@@ -230,11 +236,7 @@
     width: 20px; height: 20px; object-fit: contain; border-radius: 4px;
     flex-shrink: 0;
   }
-  .agent-tab.grok img {
-    background: #0a0a0a;
-    border-radius: 5px;
-    padding: 2px;
-  }
+
   .agent-tab.claude.active {
     border-color: #d97706;
     background: #fff7ed;
@@ -354,13 +356,41 @@
             <img src="/assets/tab-claude.png" alt="Claude">
             Claude
           </button>
-          <button type="button" class="agent-tab grok" data-agent="grok" role="tab" aria-selected="false">
+          <button type="button" class="agent-tab grok dark-icon" data-agent="grok" role="tab" aria-selected="false">
             <img src="/assets/tab-grok.png" alt="Grok">
             Grok
           </button>
           <button type="button" class="agent-tab cursor" data-agent="cursor" role="tab" aria-selected="false">
             <img src="/assets/cursor-tab.png" alt="Cursor">
             Cursor
+          </button>
+          <button type="button" class="agent-tab" data-agent="vscode" role="tab" aria-selected="false">
+            <img src="/assets/vscode.png" alt="VS Code">
+            VS Code
+          </button>
+          <button type="button" class="agent-tab dark-icon" data-agent="windsurf" role="tab" aria-selected="false">
+            <img src="/assets/windsurf-tab.png" alt="Windsurf">
+            Windsurf
+          </button>
+          <button type="button" class="agent-tab dark-icon" data-agent="zed" role="tab" aria-selected="false">
+            <img src="/assets/zed-editor-tab.png" alt="Zed">
+            Zed
+          </button>
+          <button type="button" class="agent-tab dark-icon" data-agent="goose" role="tab" aria-selected="false">
+            <img src="/assets/goose.png" alt="Goose">
+            Goose
+          </button>
+          <button type="button" class="agent-tab" data-agent="librechat" role="tab" aria-selected="false">
+            <img src="/assets/librechat.png" alt="LibreChat">
+            LibreChat
+          </button>
+          <button type="button" class="agent-tab dark-icon" data-agent="langgraph" role="tab" aria-selected="false">
+            <img src="/assets/langgraph.png" alt="LangGraph">
+            LangGraph
+          </button>
+          <button type="button" class="agent-tab dark-icon" data-agent="llamaindex" role="tab" aria-selected="false">
+            <img src="/assets/llamaindex.png" alt="LlamaIndex">
+            LlamaIndex
           </button>
         </div>
 
@@ -389,6 +419,75 @@
             <li>Saqlang, agentni qayta ishga tushiring</li>
           </ol>
           <p class="note">Cursor IDE da MCP server sifatida qo‘shiladi.</p>
+        </div>
+
+        <div class="agent-panel" data-panel="vscode" role="tabpanel">
+          <ol>
+            <li>VS Code da MCP qo‘llab-quvvatlovchi extension o‘rnating (masalan <b>Continue</b>, <b>Cline</b> yoki Copilot agent)</li>
+            <li>Extension sozlamalarida MCP servers → Add server</li>
+            <li>Type: URL, value: yuqoridagi MCP havola</li>
+            <li>Saqlang va chat/agent paneldan foydalaning</li>
+          </ol>
+          <p class="note">Oddiy VS Code o‘zi MCP bilmaydi — extension kerak.</p>
+        </div>
+
+        <div class="agent-panel" data-panel="windsurf" role="tabpanel">
+          <ol>
+            <li>Windsurf → Settings → Cascade / MCP</li>
+            <li>«Add MCP server» → URL ni qo‘ying</li>
+            <li>Saqlang va Cascade agent bilan sinab ko‘ring</li>
+          </ol>
+          <p class="note">Windsurf (Codeium) Cascade MCP ulanishini qo‘llab-quvvatlaydi.</p>
+        </div>
+
+        <div class="agent-panel" data-panel="zed" role="tabpanel">
+          <ol>
+            <li>Zed → Settings (settings.json)</li>
+            <li><code>context_servers</code> yoki MCP bo‘limiga server qo‘shing</li>
+            <li>URL sifatida yuqoridagi MCP havolani yozing</li>
+            <li>Zed ni qayta oching</li>
+          </ol>
+          <p class="note">Zed agent / context server orqali MCP ulanadi.</p>
+        </div>
+
+        <div class="agent-panel" data-panel="goose" role="tabpanel">
+          <ol>
+            <li><a href="https://block.github.io/goose/" target="_blank" rel="noopener">Goose</a> ni o‘rnating (Block)</li>
+            <li><code>goose configure</code> yoki config faylida MCP server qo‘shing</li>
+            <li>Type: sse/http, URL: yuqoridagi MCP havola</li>
+            <li><code>goose</code> ni ishga tushirib sinab ko‘ring</li>
+          </ol>
+          <p class="note">Goose CLI agent — MCP orqali tool chaqiradi.</p>
+        </div>
+
+        <div class="agent-panel" data-panel="librechat" role="tabpanel">
+          <ol>
+            <li>LibreChat <code>librechat.yaml</code> (yoki Admin → MCP) ni oching</li>
+            <li>mcpServers bo‘limiga yangi server qo‘shing</li>
+            <li>type: sse yoki streamable-http, url: MCP havola</li>
+            <li>LibreChat ni qayta ishga tushiring</li>
+          </ol>
+          <p class="note">Self-hosted LibreChat MCP serverlarni config orqali ulaydi.</p>
+        </div>
+
+        <div class="agent-panel" data-panel="langgraph" role="tabpanel">
+          <ol>
+            <li>Python loyihada <code>langchain-mcp-adapters</code> o‘rnating</li>
+            <li>MultiServerMCPClient yoki SSE client bilan URL ni ulang</li>
+            <li>Tool’larni LangGraph node’lariga ulang</li>
+            <li>Graph ni ishga tushirib sinab ko‘ring</li>
+          </ol>
+          <p class="note">LangGraph — kod orqali MCP client; UI tab emas.</p>
+        </div>
+
+        <div class="agent-panel" data-panel="llamaindex" role="tabpanel">
+          <ol>
+            <li><code>llama-index</code> + MCP integratsiya paketini o‘rnating</li>
+            <li>BasicMCPClient yoki shunga o‘xshash client bilan URL ni bering</li>
+            <li>Tool’larni agent / workflow ga ulang</li>
+            <li>Skriptni ishga tushirib sinab ko‘ring</li>
+          </ol>
+          <p class="note">LlamaIndex — dasturiy MCP client; agent framework ichida ishlatiladi.</p>
         </div>
       </div>
     </div>
