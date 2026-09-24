@@ -2102,106 +2102,132 @@ function endMarquee() {
 document.addEventListener("mouseup", endMarquee);
 window.addEventListener("blur", endMarquee);
 
-// Small floating file-icon used as the drag image instead of the full
-// card. When several files are dragged together, a few icons are stacked
-// behind the front one with a count badge.
+// Drag ghost: paint onto a CANVAS (setDragImage is reliable with canvas;
+// opacity:0 DOM nodes and half-loaded <img> often produce a blank/default icon).
 function dragIconKeyFor(fileId) {
   const f = allFiles.find((x) => String(x.id) === String(fileId));
   return fileIconKeyForName((f && f.filename) || "");
 }
 
-function dragIconEl(fileIdOrKey) {
-  const size = DRAG_ICON_SIZE;
-  const boxCss =
-    `display:block; width:${size}px; height:${size}px; object-fit:cover; ` +
-    `border-radius:8px; background:#f4f4f5; border:1px solid #e4e4e7;`;
-
-  // Real image thumbnail for image files (same square crop as list)
-  const isFileId = allFiles.some((f) => String(f.id) === String(fileIdOrKey));
-  if (isFileId) {
-    const f = allFiles.find((x) => String(x.id) === String(fileIdOrKey));
-    if (f && isImageFileName(f.filename)) {
-      const url = thumbUrlFor(f.id);
-      // Prefer already-decoded list thumb so setDragImage has pixels
-      const existing = fileListEl && fileListEl.querySelector(
-        `.file-card[data-file-id="${f.id}"] img.file-thumb`
-      );
-      if (existing && existing.complete && existing.naturalWidth > 0) {
-        const img = existing.cloneNode(true);
-        img.width = size;
-        img.height = size;
-        img.draggable = false;
-        img.style.cssText = boxCss;
-        return img;
-      }
-      if (url) {
-        const img = new Image();
-        img.width = size;
-        img.height = size;
-        img.draggable = false;
-        img.style.cssText = boxCss;
-        img.src = url;
-        return img;
-      }
-    }
+/** Return an HTMLImageElement that is already decoded, or null */
+function resolvedDragBitmap(fileId) {
+  const f = allFiles.find((x) => String(x.id) === String(fileId));
+  if (f && isImageFileName(f.filename)) {
+    const existing = fileListEl && fileListEl.querySelector(
+      `.file-card[data-file-id="${f.id}"] img.file-thumb`
+    );
+    if (existing && existing.complete && existing.naturalWidth > 0) return existing;
   }
-
-  // Fallback: type SVG rasterized to PNG
-  let key = isFileId ? dragIconKeyFor(fileIdOrKey) : fileIdOrKey;
+  const key = dragIconKeyFor(fileId);
   const ready = dragIconReady[key] || dragIconReady.file;
-  if (ready && ready.complete && ready.naturalWidth > 0) {
-    const img = ready.cloneNode(true);
-    img.width = size;
-    img.height = size;
-    img.draggable = false;
-    img.style.cssText = `display:block; width:${size}px; height:${size}px;`;
-    return img;
-  }
-  const img = new Image();
-  img.width = size;
-  img.height = size;
-  img.draggable = false;
-  img.style.cssText = `display:block; width:${size}px; height:${size}px;`;
-  img.src = dragIconPngUrl[key] || dragIconPngUrl.file || "";
-  return img;
+  if (ready && ready.complete && ready.naturalWidth > 0) return ready;
+  return null;
 }
 
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function paintIconOnto(ctx, fileId, x, y, size) {
+  // White rounded card
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.18)";
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 1;
+  drawRoundedRect(ctx, x, y, size, size, 8);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.strokeStyle = "#e4e4e7";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.clip();
+
+  const bmp = resolvedDragBitmap(fileId);
+  if (bmp) {
+    // Cover-fit draw
+    const iw = bmp.naturalWidth || bmp.width;
+    const ih = bmp.naturalHeight || bmp.height;
+    const scale = Math.max(size / iw, size / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    const dx = x + (size - dw) / 2;
+    const dy = y + (size - dh) / 2;
+    ctx.drawImage(bmp, dx, dy, dw, dh);
+  } else {
+    // Minimal fallback glyph (document shape) so something always shows
+    ctx.strokeStyle = "#52525b";
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    const p = size * 0.22;
+    ctx.moveTo(x + p, y + p);
+    ctx.lineTo(x + size * 0.55, y + p);
+    ctx.lineTo(x + size - p, y + size * 0.38);
+    ctx.lineTo(x + size - p, y + size - p);
+    ctx.lineTo(x + p, y + size - p);
+    ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Build a canvas drag image (always has pixels). Returns { canvas, hotX, hotY }. */
 function buildDragGhost(ids, frontId) {
   const count = ids.length;
-  const ghost = document.createElement("div");
-  // Keep on-screen (opacity 0) so Chromium paints the bitmap for setDragImage
-  ghost.style.cssText =
-    "position:fixed; top:0; left:0; width:56px; height:56px; pointer-events:none; " +
-    "opacity:0; z-index:99999;";
+  const size = DRAG_ICON_SIZE;
+  const stack = Math.min(2, Math.max(0, count - 1));
+  const pad = 8;
+  const badgeExtra = count > 1 ? 10 : 0;
+  const cssW = size + stack * 4 + pad * 2 + badgeExtra;
+  const cssH = size + stack * 4 + pad * 2 + badgeExtra;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-  // Front icon = the file you grabbed; the (up to 2) layers behind it = other dragged files.
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(cssW * dpr);
+  canvas.height = Math.ceil(cssH * dpr);
+  canvas.style.width = cssW + "px";
+  canvas.style.height = cssH + "px";
+  // Must be in the document for some browsers
+  canvas.style.cssText += ";position:fixed;left:-9999px;top:0;pointer-events:none;";
+  document.body.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+
   const rest = ids.filter((id) => String(id) !== String(frontId)).slice(0, 2);
+  // Back layers first
   for (let i = rest.length; i >= 1; i--) {
-    const layer = document.createElement("div");
-    layer.style.cssText = `position:absolute; top:${i * 4}px; left:${i * 4}px; filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));`;
-    layer.appendChild(dragIconEl(rest[i - 1]));
-    ghost.appendChild(layer);
+    paintIconOnto(ctx, rest[i - 1], pad + i * 4, pad + i * 4, size);
   }
-  const front = document.createElement("div");
-  front.style.cssText = "position:absolute; top:0; left:0; filter:drop-shadow(0 2px 5px rgba(0,0,0,.3));";
-  front.appendChild(dragIconEl(frontId));
-  ghost.appendChild(front);
+  // Front
+  paintIconOnto(ctx, frontId, pad, pad, size);
 
   if (count > 1) {
-    const badge = document.createElement("div");
-    badge.textContent = String(count);
-    badge.style.cssText =
-      "position:absolute; top:-6px; right:-6px; background:#ef4444; color:#fff; " +
-      "font:700 11px/1 -apple-system,system-ui,sans-serif; min-width:17px; height:17px; " +
-      "padding:0 4px; border-radius:9px; display:flex; align-items:center; justify-content:center; " +
-      "box-shadow:0 1px 3px rgba(0,0,0,.3);";
-    ghost.appendChild(badge);
+    const bx = pad + size - 6;
+    const by = pad - 6;
+    const label = String(count);
+    ctx.font = "700 11px -apple-system, system-ui, sans-serif";
+    const tw = Math.max(17, ctx.measureText(label).width + 8);
+    const th = 17;
+    ctx.fillStyle = "#ef4444";
+    drawRoundedRect(ctx, bx, by, tw, th, 9);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, bx + tw / 2, by + th / 2 + 0.5);
   }
 
-  document.body.appendChild(ghost);
-  // Force layout/paint so the browser has pixels before setDragImage
-  void ghost.offsetWidth;
-  return ghost;
+  // Hotspot: icon sits slightly to the right of the cursor
+  return { canvas, hotX: -8, hotY: pad + 6 };
 }
 
 // Drag file cards onto folder tabs to move them. Dragging a card that's
@@ -2249,8 +2275,11 @@ fileListEl.addEventListener("dragstart", (e) => {
   if (lines.length) e.dataTransfer.setData("DownloadURL", lines[0]);
 
   const ghost = buildDragGhost(idsToMove, id);
-  e.dataTransfer.setDragImage(ghost, -16, 6); // negative x: icon sits to the RIGHT of the cursor, not under it
-  setTimeout(() => ghost.remove(), 0); // browser has already snapshotted it by now
+  try {
+    e.dataTransfer.setDragImage(ghost.canvas, ghost.hotX, ghost.hotY);
+  } catch (_) { /* some browsers reject exotic drag images */ }
+  // Keep canvas in DOM briefly so the browser can snapshot it
+  setTimeout(() => { if (ghost.canvas && ghost.canvas.parentNode) ghost.canvas.remove(); }, 50);
 
   fileListEl.querySelectorAll(".file-card").forEach((c) => {
     if (idsToMove.includes(c.dataset.fileId)) c.classList.add("is-dragging");
@@ -2325,14 +2354,15 @@ async function explainDeleteFailure(id) {
    - Fully inlined computed styles (no fetch dependency)
    - Guaranteed visual effect (never snaps away)
    ============================================================ */
-const ANIM_DURATION  = 1800;
-const SWEEP_DURATION = 450;
-const COLLAPSE_DELAY = 700;
-const TILE_SIZE      = 1.6;
-const DRIFT_X        = 20;
-const DRIFT_Y        = -70;
-const FLOAT_UP_FORCE = -0.04;
-const NOISE_AMP      = 10;
+const ANIM_DURATION  = 1600;
+const SWEEP_DURATION = 380;
+const COLLAPSE_DELAY = 550;
+const TILE_SIZE      = 2.0;
+const DRIFT_X        = 48;
+const DRIFT_Y        = -36;
+const GRAVITY        = 0.00055;  // particles rise then fall like sand/dust
+const FLOAT_UP_FORCE = -0.028;
+const NOISE_AMP      = 18;
 
 function __dissolveHash(n) {
   const s = Math.sin(n * 127.1) * 43758.5453;
@@ -2472,18 +2502,22 @@ function __dissolveBuildTiles(snapshotCanvas, cssWidth, cssHeight, dpr, epX, epY
       const distToEp = Math.hypot(x - epX, y - epY) || 0.001;
       const seed = (x * 73856) ^ (y * 19349);
       const rnd = (k) => __dissolveHash(seed + k);
+      // Burst outward from click point + slight upward bias
+      const ang = Math.atan2(y - epY, x - epX) + (rnd(1) - 0.5) * 0.9;
+      const speed = 0.45 + rnd(2) * 1.1;
+      const tSize = tile * (0.7 + rnd(8) * 0.9); // varied grain size
 
       tiles.push({
         sx: x * dpr, sy: y * dpr,
         sw: Math.min(tile * dpr, snapshotCanvas.width  - x * dpr),
         sh: Math.min(tile * dpr, snapshotCanvas.height - y * dpr),
-        x, y, tile,
-        vx: (rnd(2) - 0.5) * 0.8,
-        vy: -0.3 - rnd(3) * 0.5,
-        rot:  (rnd(4) - 0.5) * 1.5,
-        rotV: (rnd(5) - 0.5) * 0.2,
-        delay: (distToEp / maxDist) * SWEEP_DURATION + rnd(6) * 150,
-        fadeBias: 0.5 + rnd(7) * 0.5,
+        x, y, tile: tSize,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed * 0.85 - 0.35 - rnd(3) * 0.4,
+        rot:  (rnd(4) - 0.5) * 2.2,
+        rotV: (rnd(5) - 0.5) * 0.55,
+        delay: (distToEp / maxDist) * SWEEP_DURATION + rnd(6) * 120,
+        fadeBias: 0.45 + rnd(7) * 0.55,
         seed,
       });
     }
@@ -2592,20 +2626,25 @@ async function playDeleteDissolve(card, clickX, clickY) {
           if (life >= 1) continue;
           anyAlive = true;
 
-          const moveEase = 1 - Math.pow(1 - life, 2.2);
-          const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 2.5) - 0.5) * NOISE_AMP * life;
-          const px = t.x + t.vx * moveEase * DRIFT_X + nX;
-          const py = t.y + t.vy * moveEase * Math.abs(DRIFT_Y) + (FLOAT_UP_FORCE * local);
+          // Outward burst + gravity (rise then fall) + horizontal noise
+          const tSec = local;
+          const nX = (__dissolveNoise1D(t.seed * 0.001 + life * 3.2) - 0.5) * NOISE_AMP * Math.min(1, life * 1.4);
+          const nY = (__dissolveNoise1D(t.seed * 0.002 + life * 2.1) - 0.5) * NOISE_AMP * 0.35 * life;
+          const px = t.x + t.vx * DRIFT_X * tSec * 0.055 + nX;
+          const py = t.y + t.vy * Math.abs(DRIFT_Y) * tSec * 0.045
+            + FLOAT_UP_FORCE * tSec
+            + GRAVITY * tSec * tSec
+            + nY;
 
           const fade = Math.min(1, life * t.fadeBias);
-          const alpha = Math.max(0, 1 - Math.pow(fade, 1.4));
+          const alpha = Math.max(0, 1 - Math.pow(fade, 1.15));
           if (alpha <= 0.01) continue;
 
-          const scale = 1 - life * 0.3;
+          const scale = 1 - life * 0.45;
           octx.globalAlpha = alpha;
           octx.save();
           octx.translate(px + pad + ts * 0.5, py + pad + ts * 0.5);
-          octx.rotate(t.rot + t.rotV * moveEase * 3);
+          octx.rotate(t.rot + t.rotV * life * 5.5);
           octx.scale(scale, scale);
           octx.drawImage(
             snapshotCanvas, t.sx, t.sy, t.sw, t.sh,
@@ -3049,12 +3088,16 @@ function showToast(msg, type = "success", detail = "") {
   toast.querySelector(".toast-title").textContent = msg;
   if (detail) toast.querySelector(".toast-detail").textContent = detail;
   stack.appendChild(toast);
-  // Instant show — 0ms delay
-  toast.classList.add("show");
+  // Next frame so CSS transition runs (enter from below)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => toast.classList.add("show"));
+  });
 
   const hide = () => {
     clearTimeout(timer);
-    toast.remove();
+    toast.classList.remove("show");
+    toast.classList.add("hide");
+    setTimeout(() => toast.remove(), 240);
   };
   const timer = setTimeout(hide, detail || type !== "success" ? 6000 : 2500);
   toast.addEventListener("click", hide);
