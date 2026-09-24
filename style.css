@@ -2721,11 +2721,6 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
-.mr-audio-time.is-pop { animation: mrAudioTimePop 0.3s ease-out; }
-@keyframes mrAudioTimePop {
-  0% { opacity: 0.7; transform: translateY(2px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
 .mr-audio-progress {
   position: relative;
   width: 100%;
@@ -2799,7 +2794,6 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .annot-viewer.kind-audio .annot-toolbar { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .mr-audio-bar { transition: none; }
-  .mr-audio-time.is-pop { animation: none; }
   .mr-audio-spin { animation: none; border-top-color: var(--accent); }
 }
 @media (max-width: 480px) {

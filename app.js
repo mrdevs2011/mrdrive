@@ -5132,12 +5132,8 @@ function mountMrAudioPlayer(host, opts) {
   const setTime = () => {
     const t = formatAudioClock(audio.currentTime);
     const d = formatAudioClock(audio.duration);
-    if (timeEl.textContent !== t + " / " + d) {
-      timeEl.textContent = t + " / " + d;
-      timeEl.classList.remove("is-pop");
-      void timeEl.offsetWidth;
-      timeEl.classList.add("is-pop");
-    }
+    const label = t + " / " + d;
+    if (timeEl.textContent !== label) timeEl.textContent = label;
   };
 
   function showSpin(on) {
