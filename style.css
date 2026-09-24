@@ -2462,7 +2462,31 @@ body.is-dragging-file .selection-fab { animation: fab-invite 1s ease-in-out infi
 }
 @keyframes fab-invite { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.08); } }
 
-.folder-icon { display: block; flex-shrink: 0; width: 16px; height: 16px; pointer-events: none; color: var(--text-muted); }
+.folder-icon {
+  display: block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  color: inherit;
+}
+.folder-tab { color: var(--text-muted); }
+.folder-tab:hover { color: var(--text); }
+.folder-tab.active,
+.folder-tab.active .folder-icon {
+  color: #fff;
+}
+/* Primary-filled controls: icons/text stay light */
+button[style*="var(--primary)"],
+.auth-box button,
+.confirm-ok,
+.annot-btn.is-save {
+  color: #fff;
+}
+.auth-box button svg,
+.annot-btn.is-save svg {
+  color: #fff;
+}
 
 /* File-type icon at the left of each row (inline SVG or real image thumb) */
 .file-lead { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
