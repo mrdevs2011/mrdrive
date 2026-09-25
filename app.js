@@ -5524,7 +5524,8 @@ function mountMrAudioPlayer(host, opts) {
   // the track instead of one uniform bulge. Falls back to the plain taper
   // if decoding isn't possible (CORS, format, etc.) — never blocks playback.
   const SHAPE_BUCKETS = 48;
-  let trackShape = null;
+  let trackShapeTop = null;
+  let trackShapeBot = null;
   (async function loadTrackShape() {
     try {
       const res = await fetch(opts.url);
@@ -5534,40 +5535,53 @@ function mountMrAudioPlayer(host, opts) {
       if (!AC) return;
       const decodeCtx = new AC();
       const audioBuf = await decodeCtx.decodeAudioData(buf);
-      const ch = audioBuf.getChannelData(0);
-      const bucketSize = Math.max(1, Math.floor(ch.length / SHAPE_BUCKETS));
-      const peaks = new Float32Array(SHAPE_BUCKETS);
-      let maxPeak = 0;
-      for (let b = 0; b < SHAPE_BUCKETS; b++) {
-        const start = b * bucketSize;
-        const end = Math.min(ch.length, start + bucketSize);
-        let sum = 0;
-        for (let i = start; i < end; i++) sum += Math.abs(ch[i]);
-        const avg = end > start ? sum / (end - start) : 0;
-        peaks[b] = avg;
-        if (avg > maxPeak) maxPeak = avg;
+      const chTop = audioBuf.getChannelData(0);
+      // real stereo files: bottom follows the actual right channel, so top
+      // and bottom are two genuinely different contours, not a mirror copy.
+      // mono files: no second channel exists, so fake one by resampling the
+      // same channel at a shifted window — still not a mirror.
+      const chBot = audioBuf.numberOfChannels >= 2 ? audioBuf.getChannelData(1) : chTop;
+      const monoShift = audioBuf.numberOfChannels >= 2 ? 0 : Math.floor(chTop.length * 0.037);
+      function bucketize(ch, shift) {
+        const len = ch.length;
+        const bucketSize = Math.max(1, Math.floor(len / SHAPE_BUCKETS));
+        const peaks = new Float32Array(SHAPE_BUCKETS);
+        let maxPeak = 0;
+        for (let b = 0; b < SHAPE_BUCKETS; b++) {
+          const start = (b * bucketSize + shift) % len;
+          const end = Math.min(len, start + bucketSize);
+          let sum = 0;
+          for (let i = start; i < end; i++) sum += Math.abs(ch[i]);
+          const avg = end > start ? sum / (end - start) : 0;
+          peaks[b] = avg;
+          if (avg > maxPeak) maxPeak = avg;
+        }
+        if (maxPeak > 0) for (let b = 0; b < SHAPE_BUCKETS; b++) peaks[b] = Math.pow(peaks[b] / maxPeak, 0.6);
+        return peaks;
       }
-      if (maxPeak > 0) {
-        for (let b = 0; b < SHAPE_BUCKETS; b++) peaks[b] = Math.pow(peaks[b] / maxPeak, 0.6);
-      }
-      if (alive) trackShape = peaks;
+      const topPeaks = bucketize(chTop, 0);
+      const botPeaks = bucketize(chBot, monoShift);
+      if (alive) { trackShapeTop = topPeaks; trackShapeBot = botPeaks; }
       try { decodeCtx.close(); } catch (_) {}
     } catch (_) {
-      trackShape = null; // stays a plain taper — no crash, no stuck loading state
+      trackShapeTop = null;
+      trackShapeBot = null; // stays a plain taper — no crash, no stuck loading state
     }
   })();
 
-  function shapeAt(nx) {
-    if (!trackShape) return 1;
-    const n = trackShape.length;
+  function sampleShape(arr, nx) {
+    if (!arr) return 1;
+    const n = arr.length;
     const bi = nx * (n - 1);
     const b0 = bi | 0;
     const b1 = Math.min(n - 1, b0 + 1);
-    const v = trackShape[b0] + (trackShape[b1] - trackShape[b0]) * (bi - b0);
+    const v = arr[b0] + (arr[b1] - arr[b0]) * (bi - b0);
     // keep a visible floor so genuinely silent stretches don't vanish to a
     // flat line — real contrast, but the bundle never fully disappears
     return 0.4 + v * 0.7;
   }
+  const shapeTopAt = (nx) => sampleShape(trackShapeTop, nx);
+  const shapeBotAt = (nx) => sampleShape(trackShapeBot, nx);
 
   function sizeCanvas() {
     const w = waveWrap.clientWidth || 400;
@@ -5720,6 +5734,7 @@ function mountMrAudioPlayer(host, opts) {
         a: 0.30 + (1 - edge) * 0.26,
         kind: 1,
         baseOffset: spread * 0.30,             // lane's own vertical position before the wave bends it
+        side: spread < 0 ? -1 : 1,             // which independent contour (top/bottom) this lane follows
       });
     }
   })();
@@ -5730,7 +5745,8 @@ function mountMrAudioPlayer(host, opts) {
   const ys = new Float32Array(STEPS + 1);
   const yTop = new Float32Array(STEPS + 1);
   const yBot = new Float32Array(STEPS + 1);
-  const envs = new Float32Array(STEPS + 1);
+  const envsTop = new Float32Array(STEPS + 1);
+  const envsBot = new Float32Array(STEPS + 1);
   const fms = new Float32Array(STEPS + 1);
 
   function strokeFromBuf(n, width, color) {
@@ -5809,7 +5825,8 @@ function mountMrAudioPlayer(host, opts) {
     for (let i = 0; i <= n; i++) {
       const nx = i / n;
       xs[i] = pad + nx * drawW;
-      envs[i] = envelope(nx) * shapeAt(nx);
+      envsTop[i] = envelope(nx) * shapeTopAt(nx);
+      envsBot[i] = envelope(nx) * shapeBotAt(nx);
       fms[i] = 0.2 + binAt(nx) * 2.1;
     }
 
@@ -5828,10 +5845,11 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq * 1.6 - phase * 1.4 + 1.1) * 0.26 +
           Math.sin(nx * Math.PI * th.freq * 0.55 - phase * 0.9 + 2.3) * 0.18 +
           Math.sin(nx * Math.PI * 5.5 - phase * 3.1 + L * 0.7) * 0.09;
-        const amp = h * 0.16 * th.amp * envs[i] * fms[i] * e;
+        const envHereM = th.side < 0 ? envsTop[i] : envsBot[i];
+        const amp = h * 0.16 * th.amp * envHereM * fms[i] * e;
         let y = midY + wave * amp;
         // no clamp — waves are free to run past the box in any direction
-        let half = h * 0.032 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
+        let half = h * 0.032 * th.thick * envHereM * (0.5 + fms[i] * 0.5) * e;
         yTop[i] = y - half;
         yBot[i] = y + half;
       }
@@ -5856,10 +5874,13 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq * 1.7 - phase * (1.5 + drift * 0.5) + 0.8) * 0.27 +
           Math.sin(nx * Math.PI * th.freq * 0.5 - phase * 1.1 + 2.1) * 0.18 +
           Math.sin(nx * Math.PI * 6.2 - phase * (2.8 + drift) + L * 0.55) * 0.10;
-        const amp = h * 0.17 * th.amp * envs[i] * fms[i] * e;
+        // each lane reads its own side's real contour — top and bottom
+        // are two different shapes now, not a mirror of one another
+        const envHere = th.side < 0 ? envsTop[i] : envsBot[i];
+        const amp = h * 0.17 * th.amp * envHere * fms[i] * e;
         // "open" eases 0→1 (or back) over 2s — at 0 every lane collapses onto
         // midY, i.e. one flat resting line; at 1 it's the full spread wave.
-        const rawY = midY + open * (th.baseOffset * h * 0.5 * envs[i] + wave * amp);
+        const rawY = midY + open * (th.baseOffset * h * 0.5 * envHere + wave * amp);
         let off = rawY - midY;
         // smooth, asymptotic taper both ways instead of a hard cut — gets
         // close to the limit but never actually touches it
