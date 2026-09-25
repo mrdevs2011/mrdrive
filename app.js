@@ -934,6 +934,15 @@ async function renderPublicMarkdown(url, previewWrap, filename) {
     body.textContent = mdText;
   }
   sanitizeMdHtml(body);
+  // No second header: drop leading H1 if it repeats the filename (topbar already shows it).
+  const first = body.firstElementChild;
+  if (first && /^H1$/i.test(first.tagName) && filename) {
+    const base = String(filename).replace(/\.(md|markdown)$/i, "").trim().toLowerCase();
+    const ht = (first.textContent || "").trim().toLowerCase();
+    if (base && (ht === base || ht === String(filename).trim().toLowerCase())) {
+      first.remove();
+    }
+  }
   wrap.appendChild(body);
   Array.from(previewWrap.children).forEach((c) => {
     if (!c.classList.contains("public-loading")) c.remove();

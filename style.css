@@ -3006,14 +3006,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   box-sizing: border-box;
 }
 .annot-md-wrap .md-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: rgba(15, 20, 25, 0.92);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  margin: 0 -16px 20px;
-  padding: 12px 16px;
+  display: none !important;
 }
 
 /* MD controls in the single top annot-topbar */
@@ -3201,26 +3194,37 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   background: #0b0e14;
 }
 
-/* Public share markdown — dark mode */
+/* Public share markdown — dark mode, single top header only (no sub-header) */
 .public-preview.is-markdown {
   width: 100%;
-  max-width: 820px;
-  margin: 0 auto;
-  padding: 8px 16px 32px;
+  max-width: none;
+  margin: 0;
+  padding: 20px 24px 48px;
   box-sizing: border-box;
   overflow: auto;
-  max-height: min(78vh, 900px);
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
   align-items: stretch;
   justify-content: flex-start;
   display: block;
   height: auto;
+  background: #0b0e14;
 }
 .public-preview.is-markdown .md-preview {
   color: #e6edf3;
+  max-width: 860px;
+  margin: 0 auto;
+}
+/* Never show a second chrome bar inside public MD */
+.public-preview.is-markdown .md-header,
+.public-preview.is-markdown .code-header,
+.public-preview.is-markdown .public-code-meta {
+  display: none !important;
 }
 .public-modal-box.has-preview .public-preview.is-markdown {
   background: #0b0e14;
-  border-radius: 12px;
+  border-radius: 0;
 }
 .public-modal-box.has-preview:has(.public-preview.is-markdown) {
   background: #0f1419 !important;
@@ -3229,15 +3233,24 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .public-modal-box.has-preview:has(.public-preview.is-markdown) #public-info {
   background: #0f1419 !important;
   border-bottom-color: rgba(255,255,255,0.08) !important;
+  flex-shrink: 0;
+}
+/* One-line topbar: hide size/date + brand under the filename */
+.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-meta,
+.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-topbar-text .public-brand-link {
+  display: none !important;
 }
 .public-modal-box.has-preview:has(.public-preview.is-markdown) .public-topbar h2,
 .public-modal-box.has-preview:has(.public-preview.is-markdown) #public-filename,
-.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-meta,
 .public-modal-box.has-preview:has(.public-preview.is-markdown) .public-status {
   color: #e2e8f0 !important;
 }
 .public-modal-box.has-preview:has(.public-preview.is-markdown) #public-preview-wrap {
   background: #0b0e14 !important;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 .public-modal-box.has-preview:has(.public-preview.is-markdown) .public-download-btn,
 .public-modal-box.has-preview:has(.public-preview.is-markdown) .public-fs-btn,
