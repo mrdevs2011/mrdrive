@@ -242,7 +242,7 @@ function buildServer(name, token) {
 
   server.tool(
     "pull",
-    "Ochiq share linkini qaytaradi. Chatga faylning o'zini olib kelish uchun `get` ishlat — CMC shart emas, to'g'ridan-to'g'ri va tez.",
+    "Ochiq share linkini qaytaradi. Faylning O'ZINI chatga/~/Claude/ ga olib kelish uchun `get` ishlat, keyin download URL ni yukla. Faqat URL yetarli emas.",
     {
       filename: z.string().describe("Yuklab olinadigan fayl nomi"),
       expires_in: z
@@ -261,7 +261,7 @@ function buildServer(name, token) {
 
   server.tool(
     "get",
-    "Faylni chatga tez olib kelish. CMC shart emas. Signed download URL qaytaradi; kichik matn/kod fayllarining mazmunini ham qaytaradi. Foydalanuvchi 'shu chatga olib kel' / 'faylni ko\'rsat' desa shu toolni chaqir, URL ni darhol yuklab chatga qo'y.",
+    "Faylni chatga HAQIQIY fayl sifatida olib kelish (faqat URL emas). CMC shart emas. Share link + signed download URL + kichik matn mazmunini qaytaradi. Foydalanuvchi fayl so'rasa: 1) shu tool, 2) download URL dan faylni DARHOL yukla, 3) chatga haqiqiy faylni qo'y (matnni yoz, rasmni ko'rsat, boshqasini biriktir), 4) CMC bor bo'lsa shu faylni ~/Claude/ NOM ga ham saqla. Faqat link berib qolma.",
     {
       filename: z.string().describe("MRdrive'dagi fayl nomi"),
     },
@@ -277,6 +277,8 @@ function buildServer(name, token) {
         .from(BUCKET)
         .createSignedUrl(row.storage_path, 300, { download: row.filename });
       if (sErr || !signed?.signedUrl) throw new Error(sErr?.message || "signed url failed");
+      let shareUrl = "";
+      try { shareUrl = await getOrCreateShareUrl(sb, row, null); } catch (_) {}
       const mime = getContentType(row.filename);
       const ext = (row.filename.split(".").pop() || "").toLowerCase();
       const TEXT = new Set([
@@ -289,6 +291,7 @@ function buildServer(name, token) {
         `filename: ${row.filename}`,
         `size: ${row.size || 0}`,
         `mime: ${mime}`,
+        `link: ${shareUrl || ""}`,
         `download: ${signed.signedUrl}`,
       ].join("\n");
       if (TEXT.has(ext) && (row.size || 0) <= 200000) {

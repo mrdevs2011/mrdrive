@@ -16,7 +16,7 @@ doimiy MCP havolasiga ega. Bitta domen, bitta deploy:
 ## Tool'lar
 
 - **push** — AI chaqirmaydi. CMC yo'q + push: yumshoq javob — tool yo'q, lekin list/pull/folder/delete/move bor.
-- **get** — faylni chatga: signed URL + kichik matn mazmuni. CMC shart emas.
+- **get** — faylni chatga HAQIQIY fayl + share link. Download URL ni yukla, ~/Claude/ ga saqla (CMC bor bo'lsa). Faqat URL yetarli emas.
 - **pull** — fayl uchun ochiq (`?share=...`) link qaytaradi
 - **list** — fayllar ro'yxati
 - **delete** — faylni o'chiradi
