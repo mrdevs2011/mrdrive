@@ -906,7 +906,7 @@ async function renderPublicMarkdown(url, previewWrap, filename) {
   } catch (e) {
     body.textContent = mdText;
   }
-  body.querySelectorAll("script").forEach((s) => s.remove());
+  sanitizeMdHtml(body);
   wrap.appendChild(body);
   Array.from(previewWrap.children).forEach((c) => {
     if (!c.classList.contains("public-loading")) c.remove();
@@ -6242,6 +6242,23 @@ async function loadCodeForAnnot(url, scroll, loader, filename) {
   }
 }
 
+
+function sanitizeMdHtml(root) {
+  if (!root) return;
+  root.querySelectorAll("script, iframe, object, embed, form, link[rel=import]").forEach((el) => el.remove());
+  root.querySelectorAll("*").forEach((el) => {
+    // strip event handlers and dangerous URLs
+    for (const attr of Array.from(el.attributes || [])) {
+      const n = attr.name.toLowerCase();
+      const v = (attr.value || "").trim();
+      if (n.startsWith("on")) el.removeAttribute(attr.name);
+      if ((n === "href" || n === "src" || n === "xlink:href") && /^\s*javascript:/i.test(v)) {
+        el.removeAttribute(attr.name);
+      }
+    }
+  });
+}
+
 async function loadMarkdownForAnnot(url, scroll, loader, filename) {
   const res = await fetch(url);
   const text = await res.text();
@@ -6276,7 +6293,7 @@ async function loadMarkdownForAnnot(url, scroll, loader, filename) {
     preview.textContent = text;
   }
   // Soften raw HTML risk: strip script tags if any slipped through
-  preview.querySelectorAll("script").forEach((s) => s.remove());
+  sanitizeMdHtml(preview);
 
   const sourceWrap = document.createElement("div");
   sourceWrap.className = "annot-code-wrap md-source";
