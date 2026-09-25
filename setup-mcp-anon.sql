@@ -183,3 +183,13 @@ create policy "users update own folder"
       )
     )
   );
+
+-- ============================================================
+-- 4) Index for resolve_mcp_user (O(1) token lookup)
+-- Run as postgres/supabase SQL editor. Safe to re-run.
+-- ============================================================
+create index if not exists idx_auth_users_mcp_token
+  on auth.users ((lower(raw_user_meta_data->>'mcp_token')));
+
+create index if not exists idx_auth_users_mcp_name
+  on auth.users ((raw_user_meta_data->>'name'));

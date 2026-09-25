@@ -48,89 +48,83 @@ function generateToken() {
 }
 
 /**
- * ?name= + ?token= orqali foydalanuvchini topadi.
- * - token: user_metadata.mcp_token bilan mos kelishi shart (48 hex)
- * - name:  user_metadata.name bilan ANIQ (case-sensitive) mos kelishi shart
+ * Auth: Authorization: Bearer <mcp_token> (preferred) + X-MCP-Name,
+ * or ?name=&token= for MCP clients that only support URL.
+ * User resolution: Postgres RPC public.resolve_mcp_user (indexed DB lookup).
+ * listUsers is NEVER used.
  */
-// Token -> user cache (warm serverless). Avoids listUsers on every request.
-const USER_CACHE = new Map();
-const USER_CACHE_TTL_MS = 5 * 60 * 1000;
-const USER_CACHE_MAX = 500;
+const RATE = new Map(); // key -> { count, resetAt }
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX_PER_WINDOW = 60;
 
-function cacheGet(tokenLower) {
-  const hit = USER_CACHE.get(tokenLower);
-  if (!hit) return null;
-  if (Date.now() > hit.exp) { USER_CACHE.delete(tokenLower); return null; }
-  return hit.user;
+function rateKey(req, token) {
+  const fwd = (req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  const ip = fwd || req.socket?.remoteAddress || "unknown";
+  const tok = (token || "").slice(0, 16);
+  return ip + "|" + tok;
 }
-function cacheSet(tokenLower, user) {
-  if (USER_CACHE.size >= USER_CACHE_MAX) {
-    const first = USER_CACHE.keys().next().value;
-    if (first !== undefined) USER_CACHE.delete(first);
+
+function checkRateLimit(req, token) {
+  const key = rateKey(req, token);
+  const now = Date.now();
+  let rec = RATE.get(key);
+  if (!rec || now > rec.resetAt) {
+    rec = { count: 0, resetAt: now + RATE_WINDOW_MS };
+    RATE.set(key, rec);
   }
-  USER_CACHE.set(tokenLower, { user, exp: Date.now() + USER_CACHE_TTL_MS });
+  rec.count += 1;
+  if (rec.count > RATE_MAX_PER_WINDOW) {
+    return { blocked: true, retryAfterMs: rec.resetAt - now };
+  }
+  return { blocked: false };
 }
-function tokensEqual(a, b) {
-  const aa = String(a || "").toLowerCase();
-  const bb = String(b || "").toLowerCase();
-  if (aa.length !== bb.length || !aa.length) return false;
-  try { return crypto.timingSafeEqual(Buffer.from(aa, "utf8"), Buffer.from(bb, "utf8")); }
-  catch { return aa === bb; }
+
+function extractAuth(req) {
+  const params = new URL(req.url, "http://localhost").searchParams;
+  const auth = req.headers["authorization"] || "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  const headerToken = (req.headers["x-mcp-token"] || "").toString().trim();
+  const headerName = (req.headers["x-mcp-name"] || "").toString().trim();
+  // Prefer header credentials; URL query is secondary (legacy MCP URL field).
+  const token = bearer || headerToken || params.get("token") || "";
+  const name = headerName || params.get("name") || "";
+  return { name, token, via: bearer ? "bearer" : headerToken ? "x-mcp-token" : "query" };
 }
 
 async function resolveUserFromNameAndToken(name, token) {
   if (!name || typeof name !== "string") {
-    throw new Error("MCP havolasida ?name= yo'q yoki bo'sh.");
+    throw new Error("MCP auth: name required (X-MCP-Name header or ?name=).");
   }
   if (!/^[0-9a-f]{48}$/i.test(token || "")) {
-    throw new Error("MCP havolasi noto'g'ri — token topilmadi yoki formati xato (48 hex belgi kerak).");
+    throw new Error("MCP auth: token must be 48 hex chars (Bearer or ?token=).");
   }
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error("SUPABASE_URL yoki SUPABASE_SERVICE_ROLE_KEY environment variable topilmadi.");
+    throw new Error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing.");
   }
 
-  const tokenLower = token.toLowerCase();
-  let matchedByToken = cacheGet(tokenLower);
+  const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 
-  if (!matchedByToken) {
-    const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-    let page = 1;
-    const perPage = 200;
-    for (;;) {
-      const { data, error } = await sbAdmin.auth.admin.listUsers({ page, perPage });
-      if (error) throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
-      const users = data?.users || [];
-      if (users.length === 0) break;
-      for (const u of users) {
-        const storedToken = (u.user_metadata || {}).mcp_token || "";
-        if (storedToken && tokensEqual(storedToken, tokenLower)) { matchedByToken = u; break; }
-      }
-      if (matchedByToken) break;
-      if (users.length < perPage) break;
-      page += 1;
-      if (page > 50) break;
-    }
-    if (matchedByToken) cacheSet(tokenLower, matchedByToken);
+  // Direct DB lookup via security-definer RPC (see setup-mcp-anon.sql).
+  // Single SQL query — no auth.admin.listUsers pagination.
+  const { data: uid, error } = await sb.rpc("resolve_mcp_user", {
+    p_name: name,
+    p_token: token.toLowerCase(),
+  });
+
+  if (error) {
+    throw new Error("Auth lookup failed: " + error.message);
   }
-
-  if (!matchedByToken) {
-    throw new Error("MCP havolasi yaroqsiz — token topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling.");
-  }
-
-  const storedName = matchedByToken.user_metadata?.name || "";
-  if (storedName !== name) {
+  if (!uid) {
     throw new Error(
-      `Name mos kelmadi: havolada "${name}", hisobda "${storedName}". ` +
-        `Katta/kichik harflar ham bir xil bo'lishi shart. /mcp sahifasidan to'g'ri havolani oling.`
+      "MCP auth invalid — token/name not found. Re-login and copy link from /mcp."
     );
   }
-  return { id: matchedByToken.id, name: storedName };
+
+  return { id: uid, name };
 }
 
-// name + token orqali user topiladi; service_role klient bilan ishlaymiz
-// va HAR BIR so'rovda aniq user_id bilan filtrlaymiz.
 async function getAuthedClient(name, token) {
   const user = await resolveUserFromNameAndToken(name, token);
   const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -186,7 +180,7 @@ async function findFileRow(sb, userId, filename, columns) {
 }
 
 function buildServer(name, token) {
-  const server = new McpServer({ name: "mrdrive", version: "1.2.0" });
+  const server = new McpServer({ name: "mrdrive", version: "1.3.0" });
 
   // ---------------------------------------------------------------
   // FAYLLAR
@@ -507,15 +501,22 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Ko'p foydalanuvchi: ?name= (identifikatsiya, case-sensitive) + ?token=
-  // (username+parol dan ikki marta hash, 48 hex). Server siri yo'q.
-  const params = new URL(req.url, "http://localhost").searchParams;
-  const name = params.get("name");
-  const token = params.get("token");
+  const { name, token, via } = extractAuth(req);
   if (!token || !name) {
     res.status(401).json({
       error:
-        "MCP havolasida ?name= va ?token= kerak. /mcp sahifasidan o'z shaxsiy havolangizni oling.",
+        "MCP auth required: Authorization: Bearer <token> + X-MCP-Name, " +
+        "or legacy ?name=&token=. Get credentials from /mcp page.",
+    });
+    return;
+  }
+
+  const rl = checkRateLimit(req, token);
+  if (rl.blocked) {
+    res.status(429).json({
+      error: "rate_limited",
+      retryAfterMs: rl.retryAfterMs,
+      message: "Too many MCP requests. Retry later.",
     });
     return;
   }
