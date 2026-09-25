@@ -5518,6 +5518,57 @@ function mountMrAudioPlayer(host, opts) {
   let alive = true;
   let dpr = Math.min(window.devicePixelRatio || 1, 2);
 
+  // Real per-track loudness contour (like an actual audio-file waveform,
+  // not a live spectrum) — decoded once in the background and blended into
+  // the envelope below so the overall silhouette has real peaks/dips across
+  // the track instead of one uniform bulge. Falls back to the plain taper
+  // if decoding isn't possible (CORS, format, etc.) — never blocks playback.
+  const SHAPE_BUCKETS = 48;
+  let trackShape = null;
+  (async function loadTrackShape() {
+    try {
+      const res = await fetch(opts.url);
+      const buf = await res.arrayBuffer();
+      if (!alive) return;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const decodeCtx = new AC();
+      const audioBuf = await decodeCtx.decodeAudioData(buf);
+      const ch = audioBuf.getChannelData(0);
+      const bucketSize = Math.max(1, Math.floor(ch.length / SHAPE_BUCKETS));
+      const peaks = new Float32Array(SHAPE_BUCKETS);
+      let maxPeak = 0;
+      for (let b = 0; b < SHAPE_BUCKETS; b++) {
+        const start = b * bucketSize;
+        const end = Math.min(ch.length, start + bucketSize);
+        let sum = 0;
+        for (let i = start; i < end; i++) sum += Math.abs(ch[i]);
+        const avg = end > start ? sum / (end - start) : 0;
+        peaks[b] = avg;
+        if (avg > maxPeak) maxPeak = avg;
+      }
+      if (maxPeak > 0) {
+        for (let b = 0; b < SHAPE_BUCKETS; b++) peaks[b] = Math.pow(peaks[b] / maxPeak, 0.6);
+      }
+      if (alive) trackShape = peaks;
+      try { decodeCtx.close(); } catch (_) {}
+    } catch (_) {
+      trackShape = null; // stays a plain taper — no crash, no stuck loading state
+    }
+  })();
+
+  function shapeAt(nx) {
+    if (!trackShape) return 1;
+    const n = trackShape.length;
+    const bi = nx * (n - 1);
+    const b0 = bi | 0;
+    const b1 = Math.min(n - 1, b0 + 1);
+    const v = trackShape[b0] + (trackShape[b1] - trackShape[b0]) * (bi - b0);
+    // keep a visible floor so genuinely silent stretches don't vanish to a
+    // flat line — real contrast, but the bundle never fully disappears
+    return 0.4 + v * 0.7;
+  }
+
   function sizeCanvas() {
     const w = waveWrap.clientWidth || 400;
     // Draw area is much taller than the visible wave slot on purpose —
@@ -5758,7 +5809,7 @@ function mountMrAudioPlayer(host, opts) {
     for (let i = 0; i <= n; i++) {
       const nx = i / n;
       xs[i] = pad + nx * drawW;
-      envs[i] = envelope(nx);
+      envs[i] = envelope(nx) * shapeAt(nx);
       fms[i] = 0.2 + binAt(nx) * 2.1;
     }
 
