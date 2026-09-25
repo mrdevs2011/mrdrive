@@ -5661,10 +5661,12 @@ function mountMrAudioPlayer(host, opts) {
         freq: 1.65 + (i % 3) * 0.16,           // close freqs → lanes cross, don't scatter
         phase: spread * 2.3 + (i % 5) * 0.14,
         thick: 0.85 + (1 - edge) * 0.55,       // slightly bolder near the core
-        // single blue family: lighter/cooler at the edges, deeper toward the center
-        r: 60 + edge * 70,
-        g: 130 + edge * 55,
-        b: 246,
+        // deep blue at the core, drifting toward violet/cyan at the outer
+        // lanes — and the hue itself breathes warmer with loudness at
+        // render time (see the stroke loop) for a shimmering, alive feel
+        hue: 214 + edge * 48,
+        sat: 86 - edge * 8,
+        light: 56 + edge * 14,
         a: 0.30 + (1 - edge) * 0.26,
         kind: 1,
         baseOffset: spread * 0.30,             // lane's own vertical position before the wave bends it
@@ -5784,9 +5786,10 @@ function mountMrAudioPlayer(host, opts) {
         yBot[i] = y + half;
       }
       const a = th.a * (0.65 + e * 0.4) * open; // fade fully to 0 when idle/paused instead of leaving a static resting line
+      const mHue = th.hue + e * 26;
       fillFromBuf(n + 1,
-        "rgba(" + th.r + "," + th.g + "," + th.b + "," + (a * 0.1).toFixed(3) + ")",
-        "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")"
+        "hsla(" + mHue.toFixed(1) + "," + th.sat.toFixed(0) + "%," + th.light.toFixed(0) + "%," + (a * 0.1).toFixed(3) + ")",
+        "hsla(" + mHue.toFixed(1) + "," + th.sat.toFixed(0) + "%," + th.light.toFixed(0) + "%," + a.toFixed(3) + ")"
       );
     }
 
@@ -5815,9 +5818,17 @@ function mountMrAudioPlayer(host, opts) {
         ys[i] = midY + off;
       }
       const a = th.a * (0.7 + e * 0.35) * open; // fade fully to 0 when idle/paused instead of leaving a static resting line
-      strokeFromBuf(n + 1, th.thick * (0.65 + e * 0.45),
-        "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")"
-      );
+      // hue drifts warmer (blue → violet) and lifts brighter as loudness
+      // rises — a living shimmer instead of one flat static color
+      const hue = th.hue + e * 26;
+      const light = Math.min(80, th.light + e * 10);
+      const color = "hsla(" + hue.toFixed(1) + "," + th.sat.toFixed(0) + "%," + light.toFixed(0) + "%," + a.toFixed(3) + ")";
+      // soft glow that blooms with the music's energy — the "wow" polish
+      ctx.save();
+      ctx.shadowBlur = (3 + e * 8) * open;
+      ctx.shadowColor = "hsla(" + hue.toFixed(1) + ",92%,68%," + Math.min(0.6, a + 0.18).toFixed(3) + ")";
+      strokeFromBuf(n + 1, th.thick * (0.65 + e * 0.45), color);
+      ctx.restore();
     }
 
     ctx.restore();
