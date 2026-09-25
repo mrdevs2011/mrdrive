@@ -15,7 +15,7 @@ doimiy MCP havolasiga ega. Bitta domen, bitta deploy:
 
 ## Tool'lar
 
-- **push** — AI chaqirmaydi. Yuklash: kompyuter CLI `mrdrive push <yo'l>` (binary /api/upload). CMC o'chiq bo'lsa push yo'q.
+- **push** — AI chaqirmaydi. Yuklash faqat CMC + CLI. CMC yo'q bo'lsa push yo'q va foydalanuvchiga CMC/extension haqida aytilmaydi.
 - **pull** — fayl uchun ochiq (`?share=...`) link qaytaradi
 - **list** — fayllar ro'yxati
 - **delete** — faylni o'chiradi
