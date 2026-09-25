@@ -67,52 +67,26 @@ async function resolveUserFromNameAndToken(name, token) {
     );
   }
 
-  const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const tokenLower = token.toLowerCase();
-  let page = 1;
-  const perPage = 200;
-  let matchedByToken = null;
+  // Security-definer RPC (setup-mcp-anon.sql) — no admin Auth API pagination.
+  const { data: uid, error } = await sb.rpc("resolve_mcp_user", {
+    p_name: name,
+    p_token: token.toLowerCase(),
+  });
 
-  // Barcha foydalanuvchilarni sahifalab qidiramiz (mcp_token unique bo'lishi kutiladi).
-  for (;;) {
-    const { data, error } = await sbAdmin.auth.admin.listUsers({ page, perPage });
-    if (error) throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
-    const users = data?.users || [];
-    if (users.length === 0) break;
-
-    for (const u of users) {
-      const meta = u.user_metadata || {};
-      const storedToken = (meta.mcp_token || "").toLowerCase();
-      if (storedToken && storedToken === tokenLower) {
-        matchedByToken = u;
-        break;
-      }
-    }
-    if (matchedByToken) break;
-    if (users.length < perPage) break;
-    page += 1;
-    if (page > 50) break; // himoya
+  if (error) {
+    throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
   }
-
-  if (!matchedByToken) {
+  if (!uid) {
     throw new Error(
-      "MCP havolasi yaroqsiz — token topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling."
+      "MCP havolasi yaroqsiz — token/name topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling."
     );
   }
 
-  const storedName = matchedByToken.user_metadata?.name || "";
-  // Name case-sensitive: "Muhammadrasul" ≠ "muhammadrasul"
-  if (storedName !== name) {
-    throw new Error(
-      `Name mos kelmadi: havolada "${name}", hisobda "${storedName}". ` +
-        `Katta/kichik harflar ham bir xil bo'lishi shart. /mcp sahifasidan to'g'ri havolani oling.`
-    );
-  }
-
-  return { id: matchedByToken.id, name: storedName };
+  return { id: uid, name };
 }
 
 // name + token orqali user topiladi; service_role klient bilan ishlaymiz

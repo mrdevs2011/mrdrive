@@ -49,8 +49,7 @@ token = sha256(uHash + pHash)[:48] # 48 hex — ikki marta hash
 3. Bo'lmasa (eski hisob) — username + parol so'raladi, brauzerda hash
    qilinadi, metadata ga yoziladi, URL chiqadi.
 4. Claude shu havolaga ulanganda server:
-   - `token` bo'yicha foydalanuvchini topadi (service_role + listUsers)
-   - `name` ni metadata dagi name bilan **aniq** (katta/kichik harf) solishtiradi
+   - `resolve_mcp_user` RPC orqali `name` + `token` bo'yicha user_id topadi
    - Mos kelmasa xato; mos kelsa faqat shu user_id fayllari bilan ishlaydi
 
 ### Nega parol hash, UID emas?

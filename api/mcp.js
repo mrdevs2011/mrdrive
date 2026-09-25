@@ -50,8 +50,7 @@ function generateToken() {
 /**
  * Auth: Authorization: Bearer <mcp_token> (preferred) + X-MCP-Name,
  * or ?name=&token= for MCP clients that only support URL.
- * User resolution: Postgres RPC public.resolve_mcp_user (indexed DB lookup).
- * listUsers is NEVER used.
+ * User resolution: Postgres RPC public.resolve_mcp_user (security-definer).
  */
 const RATE = new Map(); // key -> { count, resetAt }
 const RATE_WINDOW_MS = 60_000;
@@ -107,7 +106,6 @@ async function resolveUserFromNameAndToken(name, token) {
   });
 
   // Direct DB lookup via security-definer RPC (see setup-mcp-anon.sql).
-  // Single SQL query — no auth.admin.listUsers pagination.
   const { data: uid, error } = await sb.rpc("resolve_mcp_user", {
     p_name: name,
     p_token: token.toLowerCase(),
