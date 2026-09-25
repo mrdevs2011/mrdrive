@@ -5736,7 +5736,14 @@ function mountMrAudioPlayer(host, opts) {
     const open = updateOpenness();
 
     const t = idle ? performance.now() * 0.00028 : (audio.currentTime || 0) * 0.55;
-    const midY = h * 0.5;
+    // The canvas is much taller than the visible wave slot (h ~220 vs an
+    // ~84px box) so the open wave's peaks can spill freely above/below it.
+    // But that means the canvas's own geometric center (h*0.5) lands well
+    // below the slot — right on top of the progress bar underneath. So the
+    // resting/collapsed line docks higher up (REST_Y, inside the slot) and
+    // only eases down to the true canvas center as the wave opens up.
+    const REST_Y = h * 0.16;
+    const midY = REST_Y + (h * 0.5 - REST_Y) * open;
     const n = STEPS;
 
     // precompute x + envelope + freq once per frame (buffers pre-allocated above — no GC per frame)
