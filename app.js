@@ -5523,7 +5523,7 @@ function mountMrAudioPlayer(host, opts) {
     // Draw area is much taller than the visible wave slot on purpose —
     // no boundary/clamp anymore, so peaks are free to spill up over the
     // title and down over the controls instead of being fenced in.
-    const h = 260;
+    const h = 220;
     canvas.style.width = w + "px";
     canvas.style.height = h + "px";
     canvas.width = Math.round(w * dpr);
