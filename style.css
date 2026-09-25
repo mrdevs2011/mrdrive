@@ -2854,6 +2854,9 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   color: var(--text, #000);
   font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
+.mr-audio-card-meta {
+  transition: opacity 1.1s ease;
+}
 .mr-audio-card-meta h4,
 .mr-audio-title {
   margin: 0;
@@ -2867,6 +2870,9 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   margin: 4px 0 0;
   color: #8e8e93;
   font-size: 13px;
+}
+.mr-audio-player.is-playing .mr-audio-card-meta {
+  opacity: 0;
 }
 .mr-audio-wave {
   width: 100%;
@@ -2888,6 +2894,11 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   top: 6px; /* starts right at the top of the wave slot, only grows downward — never reaches the title above */
   pointer-events: none;
   z-index: 0;
+  opacity: 0; /* hidden at rest/paused — no leftover flat line */
+  transition: opacity 1.1s ease;
+}
+.mr-audio-player.is-playing .mr-audio-wave-canvas {
+  opacity: 1;
 }
 /* legacy bar classes kept inert in case any residual markup appears */
 .mr-audio-bar { display: none; }
@@ -2898,6 +2909,10 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   margin-bottom: 8px;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
+  transition: opacity 1.1s ease;
+}
+.mr-audio-player.is-playing .mr-audio-time {
+  opacity: 0;
 }
 .mr-audio-progress {
   position: relative;
@@ -2919,8 +2934,6 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   height: 100%;
   /* same blue family as the wave lines, not a generic accent gradient */
   background: linear-gradient(90deg, #2563eb, #60a5fa 50%, #93c5fd);
-  background-size: 220% 100%;
-  background-position: 0% 0;
   width: 0%;
   border-radius: 999px;
   position: relative;
@@ -2935,14 +2948,6 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
    the fill tracks the finger with zero lag (no springy delay while held) */
 .mr-audio-progress.is-dragging .mr-audio-progress-fill {
   transition: none;
-}
-/* a slow light travels along the played portion, echoing the flowing wave —
-   only runs while actually playing, so a paused bar stays calm */
-.mr-audio-progress.is-playing .mr-audio-progress-fill {
-  animation: mrProgressFlow 2.6s linear infinite;
-}
-@keyframes mrProgressFlow {
-  to { background-position: -220% 0; }
 }
 .mr-audio-progress-fill::after {
   content: "";

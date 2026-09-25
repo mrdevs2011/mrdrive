@@ -5743,7 +5743,7 @@ function mountMrAudioPlayer(host, opts) {
     // resting/collapsed line docks higher up (REST_Y, inside the slot) and
     // only eases down to the true canvas center as the wave opens up.
     const REST_Y = h * 0.16;
-    const midY = REST_Y + (h * 0.5 - REST_Y) * open;
+    const midY = REST_Y; // always dock at the top of the wave slot — never drift down toward the progress bar, playing or idle
     const n = STEPS;
 
     // precompute x + envelope + freq once per frame (buffers pre-allocated above — no GC per frame)
@@ -5779,7 +5779,7 @@ function mountMrAudioPlayer(host, opts) {
         yTop[i] = y - half;
         yBot[i] = y + half;
       }
-      const a = th.a * (0.65 + e * 0.4);
+      const a = th.a * (0.65 + e * 0.4) * open; // fade fully to 0 when idle/paused instead of leaving a static resting line
       fillFromBuf(n + 1,
         "rgba(" + th.r + "," + th.g + "," + th.b + "," + (a * 0.1).toFixed(3) + ")",
         "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")"
@@ -5804,10 +5804,14 @@ function mountMrAudioPlayer(host, opts) {
         // "open" eases 0→1 (or back) over 2s — at 0 every lane collapses onto
         // midY, i.e. one flat resting line; at 1 it's the full spread wave.
         let y = midY + open * (th.baseOffset * h * 0.5 * envs[i] + wave * amp);
-        // no clamp — waves are free to run past the box in any direction
+        // clamp downward spill only — the wave must always stay docked near
+        // the top and never dip down onto the progress bar below; upward
+        // spill over the title is still free, unclamped, as before
+        const maxDownY = midY + h * 0.22;
+        if (y > maxDownY) y = maxDownY;
         ys[i] = y;
       }
-      const a = th.a * (0.7 + e * 0.35);
+      const a = th.a * (0.7 + e * 0.35) * open; // fade fully to 0 when idle/paused instead of leaving a static resting line
       strokeFromBuf(n + 1, th.thick * (0.65 + e * 0.45),
         "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")"
       );
@@ -5932,10 +5936,11 @@ function mountMrAudioPlayer(host, opts) {
     if (sizeLabel) subEl.textContent = sizeLabel;
     if (typeof opts.onReady === "function") opts.onReady();
   });
-  audio.addEventListener("play", () => { setIcon(MR_AUDIO_ICONS.pause); pbox.classList.add("is-playing"); setOpenness(1); draw(); });
+  audio.addEventListener("play", () => { setIcon(MR_AUDIO_ICONS.pause); pbox.classList.add("is-playing"); root.classList.add("is-playing"); setOpenness(1); draw(); });
   audio.addEventListener("pause", () => {
     if (!audio.ended) setIcon(MR_AUDIO_ICONS.play);
     pbox.classList.remove("is-playing");
+    root.classList.remove("is-playing");
     pbox.style.setProperty("--e", "0");
     setOpenness(0);
   });
@@ -5944,6 +5949,7 @@ function mountMrAudioPlayer(host, opts) {
     setIcon(MR_AUDIO_ICONS.play);
     fill.style.width = "0%";
     pbox.classList.remove("is-playing");
+    root.classList.remove("is-playing");
     pbox.style.setProperty("--e", "0");
     setOpenness(0);
     setTime();
