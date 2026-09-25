@@ -52,66 +52,80 @@ function generateToken() {
  * - token: user_metadata.mcp_token bilan mos kelishi shart (48 hex)
  * - name:  user_metadata.name bilan ANIQ (case-sensitive) mos kelishi shart
  */
+// Token -> user cache (warm serverless). Avoids listUsers on every request.
+const USER_CACHE = new Map();
+const USER_CACHE_TTL_MS = 5 * 60 * 1000;
+const USER_CACHE_MAX = 500;
+
+function cacheGet(tokenLower) {
+  const hit = USER_CACHE.get(tokenLower);
+  if (!hit) return null;
+  if (Date.now() > hit.exp) { USER_CACHE.delete(tokenLower); return null; }
+  return hit.user;
+}
+function cacheSet(tokenLower, user) {
+  if (USER_CACHE.size >= USER_CACHE_MAX) {
+    const first = USER_CACHE.keys().next().value;
+    if (first !== undefined) USER_CACHE.delete(first);
+  }
+  USER_CACHE.set(tokenLower, { user, exp: Date.now() + USER_CACHE_TTL_MS });
+}
+function tokensEqual(a, b) {
+  const aa = String(a || "").toLowerCase();
+  const bb = String(b || "").toLowerCase();
+  if (aa.length !== bb.length || !aa.length) return false;
+  try { return crypto.timingSafeEqual(Buffer.from(aa, "utf8"), Buffer.from(bb, "utf8")); }
+  catch { return aa === bb; }
+}
+
 async function resolveUserFromNameAndToken(name, token) {
   if (!name || typeof name !== "string") {
     throw new Error("MCP havolasida ?name= yo'q yoki bo'sh.");
   }
   if (!/^[0-9a-f]{48}$/i.test(token || "")) {
-    throw new Error(
-      "MCP havolasi noto'g'ri — token topilmadi yoki formati xato (48 hex belgi kerak)."
-    );
+    throw new Error("MCP havolasi noto'g'ri — token topilmadi yoki formati xato (48 hex belgi kerak).");
   }
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error(
-      "SUPABASE_URL yoki SUPABASE_SERVICE_ROLE_KEY environment variable topilmadi."
-    );
+    throw new Error("SUPABASE_URL yoki SUPABASE_SERVICE_ROLE_KEY environment variable topilmadi.");
   }
 
-  const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
   const tokenLower = token.toLowerCase();
-  let page = 1;
-  const perPage = 200;
-  let matchedByToken = null;
+  let matchedByToken = cacheGet(tokenLower);
 
-  // Barcha foydalanuvchilarni sahifalab qidiramiz (mcp_token unique bo'lishi kutiladi).
-  for (;;) {
-    const { data, error } = await sbAdmin.auth.admin.listUsers({ page, perPage });
-    if (error) throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
-    const users = data?.users || [];
-    if (users.length === 0) break;
-
-    for (const u of users) {
-      const meta = u.user_metadata || {};
-      const storedToken = (meta.mcp_token || "").toLowerCase();
-      if (storedToken && storedToken === tokenLower) {
-        matchedByToken = u;
-        break;
+  if (!matchedByToken) {
+    const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    let page = 1;
+    const perPage = 200;
+    for (;;) {
+      const { data, error } = await sbAdmin.auth.admin.listUsers({ page, perPage });
+      if (error) throw new Error("Foydalanuvchini topib bo'lmadi: " + error.message);
+      const users = data?.users || [];
+      if (users.length === 0) break;
+      for (const u of users) {
+        const storedToken = (u.user_metadata || {}).mcp_token || "";
+        if (storedToken && tokensEqual(storedToken, tokenLower)) { matchedByToken = u; break; }
       }
+      if (matchedByToken) break;
+      if (users.length < perPage) break;
+      page += 1;
+      if (page > 50) break;
     }
-    if (matchedByToken) break;
-    if (users.length < perPage) break;
-    page += 1;
-    if (page > 50) break; // himoya
+    if (matchedByToken) cacheSet(tokenLower, matchedByToken);
   }
 
   if (!matchedByToken) {
-    throw new Error(
-      "MCP havolasi yaroqsiz — token topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling."
-    );
+    throw new Error("MCP havolasi yaroqsiz — token topilmadi. /mcp sahifasidan qayta oling yoki qayta login qiling.");
   }
 
   const storedName = matchedByToken.user_metadata?.name || "";
-  // Name case-sensitive: "Muhammadrasul" ≠ "muhammadrasul"
   if (storedName !== name) {
     throw new Error(
       `Name mos kelmadi: havolada "${name}", hisobda "${storedName}". ` +
         `Katta/kichik harflar ham bir xil bo'lishi shart. /mcp sahifasidan to'g'ri havolani oling.`
     );
   }
-
   return { id: matchedByToken.id, name: storedName };
 }
 
