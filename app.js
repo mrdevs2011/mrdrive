@@ -5523,7 +5523,7 @@ function mountMrAudioPlayer(host, opts) {
     // Draw area is much taller than the visible wave slot on purpose —
     // no boundary/clamp anymore, so peaks are free to spill up over the
     // title and down over the controls instead of being fenced in.
-    const h = 220;
+    const h = 320; // taller draw surface — generous headroom so the wave never has to hit an edge
     canvas.style.width = w + "px";
     canvas.style.height = h + "px";
     canvas.width = Math.round(w * dpr);
@@ -5742,8 +5742,12 @@ function mountMrAudioPlayer(host, opts) {
     // below the slot — right on top of the progress bar underneath. So the
     // resting/collapsed line docks higher up (REST_Y, inside the slot) and
     // only eases down to the true canvas center as the wave opens up.
-    const REST_Y = h * 0.16;
+    const REST_Y = h * 0.18;
     const midY = REST_Y; // always dock at the top of the wave slot — never drift down toward the progress bar, playing or idle
+    // soft ceilings the wave eases toward but never reaches — replaces any
+    // hard clamp, so peaks taper away smoothly instead of cutting flat
+    const UP_MAX = REST_Y * 0.82;   // stays short of the canvas's own top edge
+    const DOWN_MAX = h * 0.105;     // stays well clear of the progress bar underneath
     const n = STEPS;
 
     // precompute x + envelope + freq once per frame (buffers pre-allocated above — no GC per frame)
@@ -5803,13 +5807,12 @@ function mountMrAudioPlayer(host, opts) {
         const amp = h * 0.17 * th.amp * envs[i] * fms[i] * e;
         // "open" eases 0→1 (or back) over 2s — at 0 every lane collapses onto
         // midY, i.e. one flat resting line; at 1 it's the full spread wave.
-        let y = midY + open * (th.baseOffset * h * 0.5 * envs[i] + wave * amp);
-        // clamp downward spill only — the wave must always stay docked near
-        // the top and never dip down onto the progress bar below; upward
-        // spill over the title is still free, unclamped, as before
-        const maxDownY = midY + h * 0.22;
-        if (y > maxDownY) y = maxDownY;
-        ys[i] = y;
+        const rawY = midY + open * (th.baseOffset * h * 0.5 * envs[i] + wave * amp);
+        let off = rawY - midY;
+        // smooth, asymptotic taper both ways instead of a hard cut — gets
+        // close to the limit but never actually touches it
+        off = off >= 0 ? DOWN_MAX * Math.tanh(off / DOWN_MAX) : -UP_MAX * Math.tanh(-off / UP_MAX);
+        ys[i] = midY + off;
       }
       const a = th.a * (0.7 + e * 0.35) * open; // fade fully to 0 when idle/paused instead of leaving a static resting line
       strokeFromBuf(n + 1, th.thick * (0.65 + e * 0.45),
