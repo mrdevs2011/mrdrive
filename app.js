@@ -5700,8 +5700,10 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * 5.5 - phase * 3.1 + L * 0.7) * 0.09;
         const amp = h * 0.28 * th.amp * envs[i] * fms[i] * e;
         let y = midY + wave * amp;
-        let half = h * 0.032 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
         const yPad = h * 0.08;
+        if (y < yPad) y = yPad;
+        if (y > h - yPad) y = h - yPad;
+        let half = h * 0.032 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
         if (y - half < yPad) half = Math.max(0.5, y - yPad);
         if (y + half > h - yPad) half = Math.max(0.5, h - yPad - y);
         yTop[i] = y - half;
