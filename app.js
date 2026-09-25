@@ -5555,8 +5555,20 @@ function mountMrAudioPlayer(host, opts) {
   /* Optimized silk wave — dense look, 60fps, no freeze */
   const BIN_N = 128;
   let smoothBins = new Float32Array(BIN_N).fill(0.2);
+  let smoothBinVel = new Float32Array(BIN_N).fill(0);
   let smoothEnergy = 0.25;
-  const SMOOTH = 0.06;
+  let energyVel = 0;
+  let lastFrameT = 0;
+  // iOS-style spring (mass-spring-damper) instead of a flat lerp — values
+  // overshoot their target a touch and settle with a gentle bounce, same
+  // feel as UIKit's spring animations, rather than sliding in flatly.
+  const SPRING_K = 210;   // stiffness
+  const SPRING_D = 21;    // damping (lower = bouncier)
+  function springTo(value, vel, target, dt) {
+    const accel = (target - value) * SPRING_K - vel * SPRING_D;
+    const nvel = vel + accel * dt;
+    return [value + nvel * dt, nvel];
+  }
 
   function envelope(nx) {
     // full amplitude across almost the whole width; only fade in the last
@@ -5586,14 +5598,16 @@ function mountMrAudioPlayer(host, opts) {
     return Math.min(1.25, Math.pow(raw, 0.5) * 2.0);
   }
 
-  function updateSmooth(idle) {
+  function updateSmooth(idle, dt) {
     if (analyser && freqData && !idle) analyser.getByteFrequencyData(freqData);
     for (let i = 0; i < BIN_N; i++) {
       const nx = i / (BIN_N - 1);
       const target = idle
         ? 0.18 + 0.07 * Math.sin(nx * Math.PI * 2 + performance.now() / 1800)
         : sampleFreq(nx);
-      smoothBins[i] += (target - smoothBins[i]) * SMOOTH;
+      const [v, nv] = springTo(smoothBins[i], smoothBinVel[i], target, dt);
+      smoothBins[i] = v;
+      smoothBinVel[i] = nv;
     }
   }
 
@@ -5675,10 +5689,18 @@ function mountMrAudioPlayer(host, opts) {
     const h = canvas.height / dpr;
     if (w < 4 || h < 4) return;
     ctx.clearRect(0, 0, w, h);
-    updateSmooth(idle);
+
+    const now = performance.now();
+    // clamp dt so a tab switch / dropped frame doesn't fling the spring
+    const dt = Math.min(0.05, lastFrameT ? (now - lastFrameT) / 1000 : 1 / 60);
+    lastFrameT = now;
+
+    updateSmooth(idle, dt);
 
     const targetE = energy < 0.12 ? 0.12 : (energy > 1.35 ? 1.35 : energy);
-    smoothEnergy += (targetE - smoothEnergy) * SMOOTH;
+    const [ev, evel] = springTo(smoothEnergy, energyVel, targetE, dt);
+    smoothEnergy = ev;
+    energyVel = evel;
     const e = smoothEnergy;
 
     const t = idle ? performance.now() * 0.00028 : (audio.currentTime || 0) * 0.55;
@@ -5756,8 +5778,10 @@ function mountMrAudioPlayer(host, opts) {
 
   function resetWave() {
     sizeCanvas();
-    for (let i = 0; i < BIN_N; i++) smoothBins[i] = 0.2;
+    for (let i = 0; i < BIN_N; i++) { smoothBins[i] = 0.2; smoothBinVel[i] = 0; }
     smoothEnergy = 0.25;
+    energyVel = 0;
+    lastFrameT = 0;
     drawFluidWave(0.25, true);
   }
 
