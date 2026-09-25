@@ -154,7 +154,7 @@ function buildServer(name, token) {
 
   server.tool(
     "push",
-    "AI/Claude MUST NOT call this tool and MUST NEVER send file bytes or base64. MRdrive upload is ONLY allowed via CMC: CMMGH uploads -> CMC ~/.uploads-pull.sh NOM -> `mrdrive push PATH [folder]`. If CMC/run_command is missing and the user asked to push to MRdrive, do not upload. Reply in the user's language, friendly, like: 'bunday tool mavjud emas ekan. Lekin papka yarata olaman, MRdrive'dan fayllarni ko'ra olaman, yuklab olish linkini bera olaman, ko'chira olaman va o'chira olaman.' Do not mention CMC, the computer being off, or missing extensions. Still allowed without CMC: list, list_folders, pull, delete, move_file, rename, create_folder.",
+    "AI/Claude MUST NOT call this tool and MUST NEVER send file bytes or base64. MRdrive upload is ONLY allowed via CMC: CMMGH uploads -> CMC ~/.uploads-pull.sh NOM -> `mrdrive push PATH [folder]`. If CMC/run_command is missing and the user asked to push to MRdrive, do not upload. Reply in the user's language, friendly, like: 'bunday tool mavjud emas ekan. Lekin papka yarata olaman, MRdrive'dan fayllarni ko'ra olaman, yuklab olish linkini bera olaman, ko'chira olaman va o'chira olaman.' Do not mention CMC, the computer being off, or missing extensions. Still allowed without CMC: get, list, list_folders, pull, delete, move_file, rename, create_folder.",
     {
       filename: z.string().describe("Fayl nomi, masalan mrstatus.zip"),
       content_base64: z.string().describe("Fayl kontenti base64 formatida"),
@@ -210,7 +210,7 @@ function buildServer(name, token) {
 
   server.tool(
     "pull",
-    "MRdrive'dagi fayl uchun ochiq (mrdrive.vercel.app/?share=...) linkini qaytaradi. Nom bo'yicha eng oxirgi mos faylni topadi. Fayl allaqachon ochiq bo'lsa mavjud linkni qaytaradi.",
+    "Ochiq share linkini qaytaradi. Chatga faylning o'zini olib kelish uchun `get` ishlat — CMC shart emas, to'g'ridan-to'g'ri va tez.",
     {
       filename: z.string().describe("Yuklab olinadigan fayl nomi"),
       expires_in: z
@@ -223,6 +223,50 @@ function buildServer(name, token) {
       const row = await findFileRow(sb, user.id, filename, "id, is_public, public_token, expires_at");
       const shareUrl = await getOrCreateShareUrl(sb, row, expires_in || null);
       return { content: [{ type: "text", text: shareUrl }] };
+    }
+  );
+
+
+  server.tool(
+    "get",
+    "Faylni chatga tez olib kelish. CMC shart emas. Signed download URL qaytaradi; kichik matn/kod fayllarining mazmunini ham qaytaradi. Foydalanuvchi 'shu chatga olib kel' / 'faylni ko\'rsat' desa shu toolni chaqir, URL ni darhol yuklab chatga qo'y.",
+    {
+      filename: z.string().describe("MRdrive'dagi fayl nomi"),
+    },
+    async ({ filename }) => {
+      const { sb, user } = await getAuthedClient(name, token);
+      const row = await findFileRow(
+        sb,
+        user.id,
+        filename,
+        "id, filename, size, storage_path, is_public, public_token, expires_at"
+      );
+      const { data: signed, error: sErr } = await sb.storage
+        .from(BUCKET)
+        .createSignedUrl(row.storage_path, 300, { download: row.filename });
+      if (sErr || !signed?.signedUrl) throw new Error(sErr?.message || "signed url failed");
+      const mime = getContentType(row.filename);
+      const ext = (row.filename.split(".").pop() || "").toLowerCase();
+      const TEXT = new Set([
+        "txt","md","markdown","csv","json","html","css","xml","log",
+        "py","js","mjs","ts","tsx","jsx","c","h","cpp","rs","go",
+        "java","kt","swift","rb","php","sql","yml","yaml","toml",
+        "ini","env","sh","bash","zsh","conf","cfg","svg",
+      ]);
+      let body = [
+        `filename: ${row.filename}`,
+        `size: ${row.size || 0}`,
+        `mime: ${mime}`,
+        `download: ${signed.signedUrl}`,
+      ].join("\n");
+      if (TEXT.has(ext) && (row.size || 0) <= 200000) {
+        const { data: blob, error: dErr } = await sb.storage.from(BUCKET).download(row.storage_path);
+        if (!dErr && blob) {
+          const buf = Buffer.from(await blob.arrayBuffer());
+          body += "\n\n--- content ---\n" + buf.toString("utf8");
+        }
+      }
+      return { content: [{ type: "text", text: body }] };
     }
   );
 
