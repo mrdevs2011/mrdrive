@@ -5552,10 +5552,11 @@ function mountMrAudioPlayer(host, opts) {
     }
   }
 
-  /* Optimized silk wave — dense look, 60fps, no freeze */
-  const BIN_N = 128;
-  let smoothBins = new Float32Array(BIN_N).fill(0.2);
-  let smoothBinVel = new Float32Array(BIN_N).fill(0);
+  /* 12-bar equalizer — iOS spring physics, each bar reacts to its own
+     frequency band instead of one flowing line across the whole width */
+  const BAR_N = 12;
+  let barVal = new Float32Array(BAR_N).fill(0.22);
+  let barVel = new Float32Array(BAR_N).fill(0);
   let smoothEnergy = 0.25;
   let energyVel = 0;
   let lastFrameT = 0;
@@ -5570,23 +5571,6 @@ function mountMrAudioPlayer(host, opts) {
     return [value + nvel * dt, nvel];
   }
 
-  function envelope(nx) {
-    // full amplitude across almost the whole width; only fade in the last
-    // sliver at each edge so tips don't hard-clip against the canvas border
-    // (previously faded across the ENTIRE width, which made the wave taper
-    // to a point and look "cut off" instead of filling the player)
-    const EDGE = 0.05;
-    if (nx < EDGE) {
-      const t = nx / EDGE;
-      return t * t * (3 - 2 * t);
-    }
-    if (nx > 1 - EDGE) {
-      const t = (1 - nx) / EDGE;
-      return t * t * (3 - 2 * t);
-    }
-    return 1;
-  }
-
   function sampleFreq(nx) {
     if (!analyser || !freqData) return 0.25;
     const n = freqData.length;
@@ -5598,90 +5582,19 @@ function mountMrAudioPlayer(host, opts) {
     return Math.min(1.25, Math.pow(raw, 0.5) * 2.0);
   }
 
-  function updateSmooth(idle, dt) {
-    if (analyser && freqData && !idle) analyser.getByteFrequencyData(freqData);
-    for (let i = 0; i < BIN_N; i++) {
-      const nx = i / (BIN_N - 1);
-      const target = idle
-        ? 0.18 + 0.07 * Math.sin(nx * Math.PI * 2 + performance.now() / 1800)
-        : sampleFreq(nx);
-      const [v, nv] = springTo(smoothBins[i], smoothBinVel[i], target, dt);
-      smoothBins[i] = v;
-      smoothBinVel[i] = nv;
-    }
-  }
-
-  function binAt(nx) {
-    const bi = nx * (BIN_N - 1);
-    const b0 = bi | 0;
-    const b1 = Math.min(BIN_N - 1, b0 + 1);
-    return smoothBins[b0] + (smoothBins[b1] - smoothBins[b0]) * (bi - b0);
-  }
-
-  // 48 well-chosen threads (looks dense, runs smooth)
-  const THREADS = [];
-  (function build() {
-    // 8 bright core
-    for (let i = 0; i < 8; i++) {
-      const t = i / 7;
-      THREADS.push({ amp: 0.5 + t * 0.15, speed: 0.12 + t * 0.08, freq: 2 + t, phase: t * 5, thick: 1.2 + t * 0.4, r: 240, g: 248, b: 255, a: 0.5 - t * 0.15, kind: 0 });
-    }
-    // 16 cyan silk
-    for (let i = 0; i < 16; i++) {
-      const t = i / 15;
-      THREADS.push({ amp: 0.6 + (i % 4) * 0.06, speed: 0.15 + t * 0.12, freq: 2.2 + t * 1.5, phase: t * 8 + 1, thick: 1.4 + (i % 3) * 0.3, r: 70 + (i % 5) * 15, g: 160 + (i % 4) * 12, b: 250, a: 0.28 - t * 0.08, kind: 1 });
-    }
-    // 12 royal membranes
-    for (let i = 0; i < 12; i++) {
-      const t = i / 11;
-      THREADS.push({ amp: 0.8 + (i % 3) * 0.05, speed: 0.12 + t * 0.1, freq: 1.6 + t * 1.2, phase: t * 6 + 3, thick: 2.5 + (i % 3) * 0.5, r: 30 + (i % 4) * 12, g: 80 + (i % 3) * 15, b: 210, a: 0.16 - t * 0.04, kind: 2 });
-    }
-    // 12 fine filaments
-    for (let i = 0; i < 12; i++) {
-      const t = i / 11;
-      THREADS.push({ amp: 0.35 + (i % 4) * 0.06, speed: 0.2 + t * 0.15, freq: 3.5 + t * 2, phase: t * 10 + 5, thick: 0.6, r: 140, g: 200, b: 255, a: 0.12, kind: 3 });
-    }
-  })();
-
-  // Pre-allocated typed buffers — zero GC per frame
-  const STEPS = 80;
-  const xs = new Float32Array(STEPS + 1);
-  const ys = new Float32Array(STEPS + 1);
-  const yTop = new Float32Array(STEPS + 1);
-  const yBot = new Float32Array(STEPS + 1);
-
-  function strokeFromBuf(n, width, color) {
+  function roundedBarPath(x, y, w, hgt, r) {
+    const rr = Math.min(r, w / 2, hgt / 2);
     ctx.beginPath();
-    ctx.moveTo(xs[0], ys[0]);
-    for (let i = 1; i < n - 1; i++) {
-      ctx.quadraticCurveTo(xs[i], ys[i], (xs[i] + xs[i + 1]) * 0.5, (ys[i] + ys[i + 1]) * 0.5);
+    if (ctx.roundRect) {
+      ctx.roundRect(x, y, w, hgt, rr);
+    } else {
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + hgt, rr);
+      ctx.arcTo(x + w, y + hgt, x, y + hgt, rr);
+      ctx.arcTo(x, y + hgt, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
     }
-    ctx.lineTo(xs[n - 1], ys[n - 1]);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.stroke();
-  }
-
-  function fillFromBuf(n, c0, c1) {
-    ctx.beginPath();
-    ctx.moveTo(xs[0], yTop[0]);
-    for (let i = 1; i < n - 1; i++)
-      ctx.quadraticCurveTo(xs[i], yTop[i], (xs[i] + xs[i + 1]) * 0.5, (yTop[i] + yTop[i + 1]) * 0.5);
-    ctx.lineTo(xs[n - 1], yTop[n - 1]);
-    ctx.lineTo(xs[n - 1], yBot[n - 1]);
-    for (let i = n - 2; i > 0; i--)
-      ctx.quadraticCurveTo(xs[i], yBot[i], (xs[i] + xs[i - 1]) * 0.5, (yBot[i] + yBot[i - 1]) * 0.5);
-    ctx.lineTo(xs[0], yBot[0]);
-    ctx.closePath();
-    const mid = (yTop[n >> 1] + yBot[n >> 1]) * 0.5;
-    const g = ctx.createLinearGradient(0, mid - 40, 0, mid + 40);
-    g.addColorStop(0, c0);
-    g.addColorStop(0.5, c1);
-    g.addColorStop(1, c0);
-    ctx.fillStyle = g;
-    ctx.fill();
   }
 
   function drawFluidWave(energy, idle) {
@@ -5695,7 +5608,7 @@ function mountMrAudioPlayer(host, opts) {
     const dt = Math.min(0.05, lastFrameT ? (now - lastFrameT) / 1000 : 1 / 60);
     lastFrameT = now;
 
-    updateSmooth(idle, dt);
+    if (analyser && freqData && !idle) analyser.getByteFrequencyData(freqData);
 
     const targetE = energy < 0.12 ? 0.12 : (energy > 1.35 ? 1.35 : energy);
     const [ev, evel] = springTo(smoothEnergy, energyVel, targetE, dt);
@@ -5703,82 +5616,46 @@ function mountMrAudioPlayer(host, opts) {
     energyVel = evel;
     const e = smoothEnergy;
 
-    const t = idle ? performance.now() * 0.00028 : (audio.currentTime || 0) * 0.55;
+    const t = idle ? now * 0.0012 : (audio.currentTime || 0) * 1.15;
     const midY = h * 0.5;
-    const n = STEPS;
-
-    // precompute x + envelope + freq once per frame
-    const envs = new Float32Array(n + 1);
-    const fms = new Float32Array(n + 1);
-    const pad = w * 0.04; // keep tips inside canvas — no hard clip
-    const drawW = w - pad * 2;
-    for (let i = 0; i <= n; i++) {
-      const nx = i / n;
-      xs[i] = pad + nx * drawW;
-      envs[i] = envelope(nx);
-      fms[i] = 0.25 + binAt(nx) * 1.55;
-    }
+    const gapFrac = 0.32; // fraction of each slot left as a gap between bars
+    const slot = w / BAR_N;
+    const barW = Math.max(2, slot * (1 - gapFrac));
+    const radius = barW / 2; // fully rounded, pill-shaped bars
 
     ctx.save();
+    for (let i = 0; i < BAR_N; i++) {
+      const nx = (i + 0.5) / BAR_N;
+      // each bar tracks its own slice of the spectrum — a real per-band
+      // reading, not one shape stretched across the width
+      const target = idle
+        ? 0.22 + 0.14 * Math.abs(Math.sin(t + i * 0.6))
+        : sampleFreq(nx);
+      const [v, vel] = springTo(barVal[i], barVel[i], target, dt);
+      barVal[i] = v;
+      barVel[i] = vel;
 
-    // membranes
-    for (let L = 0; L < THREADS.length; L++) {
-      const th = THREADS[L];
-      if (th.kind !== 2) continue;
-      const phase = t * th.speed + th.phase;
-      for (let i = 0; i <= n; i++) {
-        const nx = i / n;
-        // left→right traveling + organic disorder
-        const wave =
-          Math.sin(nx * Math.PI * th.freq - phase * 2.2) * 0.42 +
-          Math.sin(nx * Math.PI * th.freq * 1.6 - phase * 1.4 + 1.1) * 0.26 +
-          Math.sin(nx * Math.PI * th.freq * 0.55 - phase * 0.9 + 2.3) * 0.18 +
-          Math.sin(nx * Math.PI * 5.5 - phase * 3.1 + L * 0.7) * 0.09;
-        const amp = h * 0.16 * th.amp * envs[i] * fms[i] * e;
-        let y = midY + wave * amp;
-        // no clamp — waves are free to run past the box in any direction
-        let half = h * 0.032 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
-        yTop[i] = y - half;
-        yBot[i] = y + half;
-      }
-      const a = th.a * (0.65 + e * 0.4);
-      fillFromBuf(n + 1,
-        "rgba(" + th.r + "," + th.g + "," + th.b + "," + (a * 0.1).toFixed(3) + ")",
-        "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")"
-      );
+      const amp = Math.max(3, h * 0.40 * barVal[i] * e);
+      const x = i * slot + (slot - barW) / 2;
+      const barTop = midY - amp;
+      const barH = amp * 2;
+
+      ctx.shadowColor = "rgba(59,130,246,0.45)";
+      ctx.shadowBlur = 10 * (0.5 + e * 0.5);
+      const g = ctx.createLinearGradient(0, barTop, 0, barTop + barH);
+      g.addColorStop(0, "rgba(191,219,254,0.92)");
+      g.addColorStop(0.5, "rgba(59,130,246,0.98)");
+      g.addColorStop(1, "rgba(96,165,250,0.92)");
+      ctx.fillStyle = g;
+      roundedBarPath(x, barTop, barW, barH, radius);
+      ctx.fill();
     }
-
-    // stroke threads
-    for (let L = 0; L < THREADS.length; L++) {
-      const th = THREADS[L];
-      if (th.kind === 2) continue;
-      const phase = t * th.speed + th.phase;
-      for (let i = 0; i <= n; i++) {
-        const nx = i / n;
-        // left→right flow, each thread slightly different drift
-        const drift = (L % 7) * 0.15;
-        const wave =
-          Math.sin(nx * Math.PI * th.freq - phase * (2.0 + drift)) * 0.40 +
-          Math.sin(nx * Math.PI * th.freq * 1.7 - phase * (1.5 + drift * 0.5) + 0.8) * 0.27 +
-          Math.sin(nx * Math.PI * th.freq * 0.5 - phase * 1.1 + 2.1) * 0.18 +
-          Math.sin(nx * Math.PI * 6.2 - phase * (2.8 + drift) + L * 0.55) * 0.10;
-        const amp = h * 0.17 * th.amp * envs[i] * fms[i] * e;
-        let y = midY + wave * amp;
-        // no clamp — waves are free to run past the box in any direction
-        ys[i] = y;
-      }
-      const a = th.a * (0.7 + e * 0.35);
-      strokeFromBuf(n + 1, th.thick * (0.65 + e * 0.45),
-        "rgba(" + th.r + "," + th.g + "," + th.b + "," + a.toFixed(3) + ")"
-      );
-    }
-
     ctx.restore();
   }
 
   function resetWave() {
     sizeCanvas();
-    for (let i = 0; i < BIN_N; i++) { smoothBins[i] = 0.2; smoothBinVel[i] = 0; }
+    for (let i = 0; i < BAR_N; i++) { barVal[i] = 0.22; barVel[i] = 0; }
     smoothEnergy = 0.25;
     energyVel = 0;
     lastFrameT = 0;
