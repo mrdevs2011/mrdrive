@@ -5589,8 +5589,8 @@ function mountMrAudioPlayer(host, opts) {
   // iOS-style spring (mass-spring-damper) instead of a flat lerp — values
   // overshoot their target a touch and settle with a gentle bounce, same
   // feel as UIKit's spring animations, rather than sliding in flatly.
-  const SPRING_K = 210;   // stiffness
-  const SPRING_D = 21;    // damping (lower = bouncier)
+  const SPRING_K = 380;   // stiffness — snaps to the target fast
+  const SPRING_D = 30;    // damping (lower = bouncier), scaled to keep the same feel at the new stiffness
   function springTo(value, vel, target, dt) {
     const accel = (target - value) * SPRING_K - vel * SPRING_D;
     const nvel = vel + accel * dt;
@@ -5622,7 +5622,7 @@ function mountMrAudioPlayer(host, opts) {
     const b2 = Math.min(n - 1, ((0.15 + nx * 0.7) * n) | 0);
     const b3 = Math.min(n - 1, (Math.abs(nx - 0.5) * 2 * n * 0.4) | 0);
     const raw = (freqData[b1] * 0.45 + freqData[b2] * 0.35 + freqData[b3] * 0.2) / 255;
-    return Math.min(1.25, Math.pow(raw, 0.5) * 2.0);
+    return Math.min(1.4, Math.pow(raw, 0.4) * 2.5); // lower exponent = quiet parts register too, not just peaks
   }
 
   function updateSmooth(idle, dt) {
@@ -5728,7 +5728,7 @@ function mountMrAudioPlayer(host, opts) {
 
     updateSmooth(idle, dt);
 
-    const targetE = energy < 0.12 ? 0.12 : (energy > 1.35 ? 1.35 : energy);
+    const targetE = energy < 0.1 ? 0.1 : (energy > 1.8 ? 1.8 : energy); // raised cap so loud hits actually get through
     const [ev, evel] = springTo(smoothEnergy, energyVel, targetE, dt);
     smoothEnergy = ev;
     energyVel = evel;
@@ -5754,7 +5754,7 @@ function mountMrAudioPlayer(host, opts) {
       const nx = i / n;
       xs[i] = pad + nx * drawW;
       envs[i] = envelope(nx);
-      fms[i] = 0.25 + binAt(nx) * 1.55;
+      fms[i] = 0.2 + binAt(nx) * 2.1;
     }
 
     ctx.save();
@@ -5838,7 +5838,7 @@ function mountMrAudioPlayer(host, opts) {
       let sum = 0;
       const lim = Math.min(freqData.length, 48);
       for (let i = 0; i < lim; i++) sum += freqData[i];
-      energy = 0.15 + Math.pow(sum / (lim * 255), 0.5) * 2.1;
+      energy = 0.12 + Math.pow(sum / (lim * 255), 0.42) * 2.7;
     } else {
       energy = 0.38 + 0.22 * Math.abs(Math.sin((audio.currentTime || 0) * 1.8));
     }
@@ -5861,7 +5861,8 @@ function mountMrAudioPlayer(host, opts) {
       if (mrAudioCtx.state === "suspended") await mrAudioCtx.resume();
       sourceNode = mrAudioCtx.createMediaElementSource(audio);
       analyser = mrAudioCtx.createAnalyser();
-      analyser.fftSize = 128;
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.15; // default 0.8 is sluggish; low value = reacts instantly to each hit
       sourceNode.connect(analyser);
       analyser.connect(mrAudioCtx.destination);
       freqData = new Uint8Array(analyser.frequencyBinCount);
