@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TOKEN_FILE="$HOME/.config/mrdrive/token"
+NAME="Muhammadrasul"
+
+print_help() {
+  cat << 'USAGE'
+mrdrive — MRdrive'ni terminaldan boshqarish (mrdrive.vercel.app)
+
+Ishlatish:
+  mrdrive push <fayl> [papka]         Faylni binary yuklaydi (base64 yo'q)
+  mrdrive list [papka]                Fayllar ro'yxati ("" = papkasizlar)
+  mrdrive list-folders                Papkalar ro'yxati
+  mrdrive pull <fayl>                 Ochiq linkni qaytaradi
+  mrdrive create-folder <nom>         Yangi papka
+  mrdrive move <fayl> <papka>         Ko'chirish ("" = papkadan chiqarish)
+  mrdrive delete <fayl>               Faylni butunlay o'chiradi
+  mrdrive delete-folder <nom>         Papkani o'chiradi
+  mrdrive unpublish <fayl>            Ochiq linkni bekor qiladi
+  mrdrive refresh-link <fayl>         Eski linkni bekor qilib, yangi yaratadi
+  mrdrive help, h                    Shu yordamni ko'rsatadi
+
+Token: ~/.config/mrdrive/token faylida (bitta qatorda, faqat token matni).
+USAGE
+}
+
+usage() {
+  print_help >&2
+  exit 1
+}
+
+require_token() {
+  if [ ! -s "$TOKEN_FILE" ]; then
+    echo "Token fayli yo'q yoki bo'sh: $TOKEN_FILE" >&2
+    echo "echo 'TOKENING' > $TOKEN_FILE && chmod 600 $TOKEN_FILE" >&2
+    exit 1
+  fi
+}
+
+read_token() {
+  require_token
+  tr -d '\n\r ' < "$TOKEN_FILE"
+}
+
+call_mcp() {
+  local tool="$1" args="$2"
+  local token endpoint body resp json_line
+  token=$(read_token)
+  endpoint="https://mrdrive.vercel.app/api/mcp?name=${NAME}&token=${token}"
+  body=$(jq -n --arg t "$tool" --argjson a "$args" \
+    '{jsonrpc:"2.0", id:1, method:"tools/call", params:{name:$t, arguments:$a}}')
+  resp=$(curl -sS -X POST "$endpoint" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    --data "$body")
+  json_line=$(printf '%s' "$resp" | grep -m1 '^data: ' | sed 's/^data: //') || true
+  if [ -n "${json_line:-}" ]; then
+    printf '%s\n' "$json_line" | jq -r '.result.content[0].text // .'
+  else
+    printf '%s\n' "$resp" | jq -r '.result.content[0].text // .' 2>/dev/null || printf '%s\n' "$resp"
+  fi
+}
+
+if [ "$#" -eq 0 ]; then
+  print_help
+  exit 0
+fi
+
+CMD="$1"; shift || true
+
+case "$CMD" in
+  help|h)
+    print_help
+    ;;
+  push)
+    [ "$#" -ge 1 ] || usage
+    FILE="$1"; FOLDER="${2:-}"
+    [ -f "$FILE" ] || { echo "Fayl topilmadi: $FILE" >&2; exit 1; }
+    FILENAME=$(basename "$FILE")
+    token=$(read_token)
+    resp=$(curl -sS -X POST "https://mrdrive.vercel.app/api/upload" \
+      -H "Authorization: Bearer ${token}" \
+      -H "X-MCP-Name: ${NAME}" \
+      -H "X-Filename: ${FILENAME}" \
+      -H "X-Folder: ${FOLDER}" \
+      -H "Content-Type: application/octet-stream" \
+      --data-binary @"$FILE")
+    if echo "$resp" | jq -e .ok >/dev/null 2>&1; then
+      echo "$resp" | jq -r '"Yuklandi: " + .filename + " (" + (.bytes|tostring) + " bayt)" + (if .folder then " [" + .folder + "]" else "" end) + "\nLink: " + .link'
+    else
+      echo "$resp" | jq -r '.error // .' 2>/dev/null || echo "$resp"
+      exit 1
+    fi
+    ;;
+  list)
+    FOLDER="${1-__ALL__}"
+    if [ "$FOLDER" = "__ALL__" ]; then ARGS='{}'; else ARGS=$(jq -n --arg f "$FOLDER" '{folder:$f}'); fi
+    call_mcp "list" "$ARGS"
+    ;;
+  list-folders)
+    call_mcp "list_folders" '{}'
+    ;;
+  pull)
+    [ "$#" -ge 1 ] || usage
+    call_mcp "pull" "$(jq -n --arg fn "$1" '{filename:$fn}')"
+    ;;
+  create-folder)
+    [ "$#" -ge 1 ] || usage
+    call_mcp "create_folder" "$(jq -n --arg n "$1" '{name:$n}')"
+    ;;
+  move)
+    [ "$#" -ge 2 ] || usage
+    call_mcp "move_file" "$(jq -n --arg fn "$1" --arg fo "$2" '{filename:$fn, folder:$fo}')"
+    ;;
+  delete)
+    [ "$#" -ge 1 ] || usage
+    call_mcp "delete" "$(jq -n --arg fn "$1" '{filename:$fn}')"
+    ;;
+  delete-folder)
+    [ "$#" -ge 1 ] || usage
+    call_mcp "delete_folder" "$(jq -n --arg n "$1" '{name:$n}')"
+    ;;
+  unpublish)
+    [ "$#" -ge 1 ] || usage
+    call_mcp "unpublish" "$(jq -n --arg fn "$1" '{filename:$fn}')"
+    ;;
+  refresh-link)
+    [ "$#" -ge 1 ] || usage
+    call_mcp "refresh_link" "$(jq -n --arg fn "$1" '{filename:$fn}')"
+    ;;
+  *)
+    usage
+    ;;
+esac

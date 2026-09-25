@@ -186,7 +186,7 @@ function buildServer(name, token) {
 
   server.tool(
     "push",
-    "Faylni MRdrive'ga yuklaydi (asl Supabase 'files' bucket). Kontent base64 formatida bo'lishi kerak. Fayl web ilovada ham darhol ko'rinadi. Xavfsizlik uchun ba'zi kengaytmalar (.exe, .bat, .sh va h.k.) bloklangan.",
+    "AI/Claude MUST NOT call this tool. Never send file bytes or base64. Required path: CMMGH uploads repo -> CMC ~/.uploads-pull.sh NOM -> computer `mrdrive push PATH [folder]`. If CMC/run_command is unavailable (computer off or cmc off), STOP and tell the user — do not self-push. This endpoint is not for assistants.",
     {
       filename: z.string().describe("Fayl nomi, masalan mrstatus.zip"),
       content_base64: z.string().describe("Fayl kontenti base64 formatida"),

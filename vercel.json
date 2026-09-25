@@ -2,6 +2,9 @@
   "functions": {
     "api/mcp.js": {
       "maxDuration": 60
+    },
+    "api/upload.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [

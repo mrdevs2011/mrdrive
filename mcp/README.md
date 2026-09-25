@@ -15,7 +15,7 @@ doimiy MCP havolasiga ega. Bitta domen, bitta deploy:
 
 ## Tool'lar
 
-- **push** — faylni (base64) MRdrive'ga yuklaydi (ixtiyoriy: papkaga)
+- **push** — AI chaqirmaydi. Yuklash: kompyuter CLI `mrdrive push <yo'l>` (binary /api/upload). CMC o'chiq bo'lsa push yo'q.
 - **pull** — fayl uchun ochiq (`?share=...`) link qaytaradi
 - **list** — fayllar ro'yxati
 - **delete** — faylni o'chiradi
