@@ -2902,30 +2902,44 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .mr-audio-progress {
   position: relative;
   width: 100%;
-  height: 6px;
-  background: #eeeeee;
-  border-radius: 3px;
-  margin-bottom: 25px;
+  height: 4px;
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  margin-bottom: 28px;
   cursor: pointer;
+  z-index: 1;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+  transition: height 0.15s ease;
+}
+.mr-audio-progress:hover,
+.mr-audio-progress:active {
+  height: 6px;
 }
 .mr-audio-progress-fill {
   height: 100%;
-  background: var(--accent);
+  background: linear-gradient(90deg, #60a5fa, var(--accent) 55%, #7c9bff);
   width: 0%;
-  border-radius: 3px;
+  border-radius: 999px;
   position: relative;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.55);
 }
 .mr-audio-progress-fill::after {
   content: "";
   position: absolute;
-  right: -7px;
-  top: -5px;
-  width: 16px;
-  height: 16px;
-  background: #fff;
-  border: 3px solid var(--accent);
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  background: radial-gradient(circle at 32% 28%, #ffffff, #eef4ff 55%, #cfe0ff 100%);
   border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18), 0 2px 8px rgba(15, 23, 42, 0.25);
+  transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.15s ease;
+}
+.mr-audio-progress:hover .mr-audio-progress-fill::after,
+.mr-audio-progress:active .mr-audio-progress-fill::after {
+  transform: translateY(-50%) scale(1.2);
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.25), 0 2px 10px rgba(15, 23, 42, 0.3);
 }
 .mr-audio-controls {
   display: flex;
