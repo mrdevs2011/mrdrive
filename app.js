@@ -5541,7 +5541,7 @@ function mountMrAudioPlayer(host, opts) {
       // mono files: no second channel exists, so fake one by resampling the
       // same channel at a shifted window — still not a mirror.
       const chBot = audioBuf.numberOfChannels >= 2 ? audioBuf.getChannelData(1) : chTop;
-      const monoShift = audioBuf.numberOfChannels >= 2 ? 0 : Math.floor(chTop.length * 0.037);
+      const monoShift = audioBuf.numberOfChannels >= 2 ? 0 : Math.floor(chTop.length * 0.29);
       function bucketize(ch, shift) {
         const len = ch.length;
         const bucketSize = Math.max(1, Math.floor(len / SHAPE_BUCKETS));
@@ -5556,7 +5556,7 @@ function mountMrAudioPlayer(host, opts) {
           peaks[b] = avg;
           if (avg > maxPeak) maxPeak = avg;
         }
-        if (maxPeak > 0) for (let b = 0; b < SHAPE_BUCKETS; b++) peaks[b] = Math.pow(peaks[b] / maxPeak, 0.6);
+        if (maxPeak > 0) for (let b = 0; b < SHAPE_BUCKETS; b++) peaks[b] = Math.pow(peaks[b] / maxPeak, 1.35);
         return peaks;
       }
       const topPeaks = bucketize(chTop, 0);
@@ -5570,18 +5570,40 @@ function mountMrAudioPlayer(host, opts) {
   })();
 
   function sampleShape(arr, nx) {
-    if (!arr) return 1;
+    if (!arr) return 0.5; // no data yet — neutral, macro hill still carries the look
     const n = arr.length;
     const bi = nx * (n - 1);
     const b0 = bi | 0;
     const b1 = Math.min(n - 1, b0 + 1);
-    const v = arr[b0] + (arr[b1] - arr[b0]) * (bi - b0);
-    // keep a visible floor so genuinely silent stretches don't vanish to a
-    // flat line — real contrast, but the bundle never fully disappears
-    return 0.4 + v * 0.7;
+    return arr[b0] + (arr[b1] - arr[b0]) * (bi - b0);
   }
-  const shapeTopAt = (nx) => sampleShape(trackShapeTop, nx);
-  const shapeBotAt = (nx) => sampleShape(trackShapeBot, nx);
+
+  // A big, unmistakable single-mountain silhouette, independently shaped for
+  // top and bottom (own random peak position/width picked once per player),
+  // so the bundle is never just a flat symmetric lens — this is what makes
+  // the asymmetry actually visible at a glance, on every track, even ones
+  // with fairly even loudness. Real per-track data (sampleShape) still adds
+  // its own texture on top, but no longer has to carry the whole shape.
+  const seedTop = Math.random();
+  const seedBot = Math.random();
+  function macroHill(nx, seed) {
+    const peak1 = 0.20 + seed * 0.42;
+    const width1 = 0.20 + seed * 0.14;
+    const peak2 = 0.55 + (1 - seed) * 0.35;
+    const width2 = 0.15 + (1 - seed) * 0.09;
+    const b1 = Math.exp(-((nx - peak1) * (nx - peak1)) / (2 * width1 * width1));
+    const b2 = 0.62 * Math.exp(-((nx - peak2) * (nx - peak2)) / (2 * width2 * width2));
+    return Math.min(1, b1 + b2);
+  }
+  function combinedShape(macroSeed, arr, nx) {
+    const macro = macroHill(nx, macroSeed);
+    const real = sampleShape(arr, nx);
+    // floor keeps the bundle from vanishing at quiet spots; macro hill does
+    // the heavy lifting for visible shape, real data adds genuine texture
+    return 0.16 + macro * 0.72 + real * 0.28;
+  }
+  const shapeTopAt = (nx) => combinedShape(seedTop, trackShapeTop, nx);
+  const shapeBotAt = (nx) => combinedShape(seedBot, trackShapeBot, nx);
 
   function sizeCanvas() {
     const w = waveWrap.clientWidth || 400;
