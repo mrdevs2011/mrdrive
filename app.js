@@ -5564,6 +5564,28 @@ function mountMrAudioPlayer(host, opts) {
   let smoothEnergy = 0.25;
   let energyVel = 0;
   let lastFrameT = 0;
+
+  // Openness: 0 = collapsed into one flat line (idle/paused), 1 = full wave
+  // (playing). Never jumps — always eases over OPENNESS_MS, in whichever
+  // direction it's currently headed, even if re-triggered mid-transition.
+  const OPENNESS_MS = 2000;
+  let openness = 0;
+  let opennessFrom = 0;
+  let opennessTarget = 0;
+  let opennessT0 = performance.now() - OPENNESS_MS; // start already "settled" at 0
+  function setOpenness(target) {
+    if (opennessTarget === target) return;
+    opennessFrom = openness;
+    opennessTarget = target;
+    opennessT0 = performance.now();
+  }
+  function updateOpenness() {
+    const p = Math.min(1, (performance.now() - opennessT0) / OPENNESS_MS);
+    // ease-in-out — slow start, slow finish, no rush in the middle either
+    const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+    openness = opennessFrom + (opennessTarget - opennessFrom) * eased;
+    return openness;
+  }
   // iOS-style spring (mass-spring-damper) instead of a flat lerp — values
   // overshoot their target a touch and settle with a gentle bounce, same
   // feel as UIKit's spring animations, rather than sliding in flatly.
@@ -5711,6 +5733,7 @@ function mountMrAudioPlayer(host, opts) {
     smoothEnergy = ev;
     energyVel = evel;
     const e = smoothEnergy;
+    const open = updateOpenness();
 
     const t = idle ? performance.now() * 0.00028 : (audio.currentTime || 0) * 0.55;
     const midY = h * 0.5;
@@ -5771,7 +5794,9 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq * 0.5 - phase * 1.1 + 2.1) * 0.18 +
           Math.sin(nx * Math.PI * 6.2 - phase * (2.8 + drift) + L * 0.55) * 0.10;
         const amp = h * 0.17 * th.amp * envs[i] * fms[i] * e;
-        let y = midY + th.baseOffset * h * 0.5 * envs[i] + wave * amp;
+        // "open" eases 0→1 (or back) over 2s — at 0 every lane collapses onto
+        // midY, i.e. one flat resting line; at 1 it's the full spread wave.
+        let y = midY + open * (th.baseOffset * h * 0.5 * envs[i] + wave * amp);
         // no clamp — waves are free to run past the box in any direction
         ys[i] = y;
       }
@@ -5899,11 +5924,12 @@ function mountMrAudioPlayer(host, opts) {
     if (sizeLabel) subEl.textContent = sizeLabel;
     if (typeof opts.onReady === "function") opts.onReady();
   });
-  audio.addEventListener("play", () => { setIcon(MR_AUDIO_ICONS.pause); pbox.classList.add("is-playing"); draw(); });
+  audio.addEventListener("play", () => { setIcon(MR_AUDIO_ICONS.pause); pbox.classList.add("is-playing"); setOpenness(1); draw(); });
   audio.addEventListener("pause", () => {
     if (!audio.ended) setIcon(MR_AUDIO_ICONS.play);
     pbox.classList.remove("is-playing");
     pbox.style.setProperty("--e", "0");
+    setOpenness(0);
   });
   audio.addEventListener("ended", () => {
     if (audio.loop) return;
@@ -5911,7 +5937,7 @@ function mountMrAudioPlayer(host, opts) {
     fill.style.width = "0%";
     pbox.classList.remove("is-playing");
     pbox.style.setProperty("--e", "0");
-    resetWave();
+    setOpenness(0);
     setTime();
   });
   audio.addEventListener("error", () => {
