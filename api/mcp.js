@@ -28,6 +28,21 @@ function isBlockedFile(filename) {
   return BLOCKED_EXTENSIONS.includes(ext);
 }
 
+const MIME_TYPES = {
+  svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+  gif: "image/gif", webp: "image/webp", bmp: "image/bmp", avif: "image/avif", ico: "image/x-icon",
+  mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime",
+  mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg",
+  pdf: "application/pdf", txt: "text/plain", csv: "text/csv",
+  json: "application/json", html: "text/html", css: "text/css",
+  zip: "application/zip",
+};
+
+function getContentType(filename) {
+  const ext = (filename.split(".").pop() || "").toLowerCase();
+  return MIME_TYPES[ext] || "application/octet-stream";
+}
+
 function generateToken() {
   return crypto.randomBytes(16).toString("hex");
 }
@@ -187,7 +202,7 @@ function buildServer(name, token) {
       const path = `${user.id}/${Date.now()}_${safeName}`;
 
       const { error: upErr } = await sb.storage.from(BUCKET).upload(path, buffer, {
-        contentType: "application/octet-stream",
+        contentType: getContentType(filename),
       });
       if (upErr) throw new Error(upErr.message);
 
