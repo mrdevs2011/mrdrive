@@ -242,7 +242,7 @@ function buildServer(name, token) {
 
   server.tool(
     "pull",
-    "Ochiq share linkini qaytaradi. Faylning O'ZINI chatga/~/Claude/ ga olib kelish uchun `get` ishlat, keyin download URL ni yukla. Faqat URL yetarli emas.",
+    "Ochiq share linkini qaytaradi. Faylning O'ZINI suhbat outputiga chiqarish uchun `get` ishlat, download URL ni yukla. Faqat URL yetarli emas. Kompyuterga yozish shart emas.",
     {
       filename: z.string().describe("Yuklab olinadigan fayl nomi"),
       expires_in: z
@@ -261,7 +261,7 @@ function buildServer(name, token) {
 
   server.tool(
     "get",
-    "Faylni chatga HAQIQIY fayl sifatida olib kelish (faqat URL emas). CMC shart emas. Share link + signed download URL + kichik matn mazmunini qaytaradi. Foydalanuvchi fayl so'rasa: 1) shu tool, 2) download URL dan faylni DARHOL yukla, 3) chatga haqiqiy faylni qo'y (matnni yoz, rasmni ko'rsat, boshqasini biriktir), 4) CMC bor bo'lsa shu faylni ~/Claude/ NOM ga ham saqla. Faqat link berib qolma.",
+    "Faylni suhbat outputiga HAQIQIY fayl sifatida chiqarish (faqat URL emas, kompyuterga yozish shart emas). Share link + signed download URL + kichik matn mazmunini qaytaradi. Foydalanuvchi fayl so'rasa: 1) shu tool, 2) download URL dan faylni DARHOL yukla, 3) javobda linkni BER va shu outputga haqiqiy faylni chiqar (matnni yoz, rasmni ko'rsat, boshqasini biriktir). CMC/kompyuter papkasiga saqlash shart emas. Faqat link berib qolma.",
     {
       filename: z.string().describe("MRdrive'dagi fayl nomi"),
     },
