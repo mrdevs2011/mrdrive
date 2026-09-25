@@ -1453,8 +1453,13 @@ function getTheme() {
 }
 function applyTheme(theme) {
   const t = theme === "dark" ? "dark" : "light";
-  document.documentElement.setAttribute("data-theme", t);
-  try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
+  if (typeof window.__mrTheme === "function") window.__mrTheme(t === "dark");
+  else {
+    document.documentElement.setAttribute("data-theme", t);
+    document.documentElement.classList.toggle("theme-dark", t === "dark");
+    if (document.body) document.body.classList.toggle("theme-dark", t === "dark");
+    try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
+  }
   const link = document.getElementById("hljs-theme");
   if (link) {
     link.href = t === "dark"

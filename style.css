@@ -34,8 +34,6 @@
   --red-text: var(--danger-strong);
   --blue-bg: var(--primary-soft);
   --blue-text: var(--primary);
-}
-
   --preview-bg: #f8fafc;
   --preview-chrome: #ffffff;
   --preview-text: #0f172a;
@@ -43,9 +41,10 @@
   --preview-border: #dbe4f0;
   --preview-code: #f1f5fb;
   --preview-btn: #eef3fb;
+}
 
 
-html[data-theme="dark"] {
+html[data-theme="dark"], html.theme-dark, body.theme-dark {
   color-scheme: dark;
   --accent-soft:   color-mix(in srgb, var(--accent) 20%, #0b0e14);
   --accent-strong: #93c5fd;
@@ -3582,7 +3581,7 @@ body.public-dark {
 .public-modal-box.is-dark-preview,
 .public-modal-box.is-dark-preview.has-preview,
 html.public-dark, body.public-dark,
-html[data-theme="dark"] .public-modal-backdrop {
+html[data-theme="dark"] html.PLACEHOLDER .public-modal-backdrop {
   background: var(--bg) !important;
   color: var(--text) !important;
 }
@@ -3626,108 +3625,133 @@ html[data-theme="light"] .public-modal-box.has-preview .public-topbar-main::befo
   border-color: var(--border) !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E") !important;
 }
-html[data-theme="dark"] .public-modal-box.has-preview .public-topbar-main::before {
+html[data-theme="dark"] html.PLACEHOLDER .public-modal-box.has-preview .public-topbar-main::before {
   background-color: var(--preview-btn) !important;
   border-color: var(--border) !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E") !important;
 }
 
-html[data-theme="dark"] .toast { background: var(--surface); color: var(--text); }
-html[data-theme="dark"] .selection-fab { background: var(--surface); }
-html[data-theme="dark"] .file-card { background: var(--surface); }
+html[data-theme="dark"] html.PLACEHOLDER .toast { background: var(--surface); color: var(--text); }
+html[data-theme="dark"] html.PLACEHOLDER .selection-fab { background: var(--surface); }
+html[data-theme="dark"] html.PLACEHOLDER .file-card { background: var(--surface); }
 
 
 /* ===== DARK MODE: whole app ===== */
-html[data-theme="dark"],
-html[data-theme="dark"] body,
-html[data-theme="dark"] .screen,
-html[data-theme="dark"] #app,
-html[data-theme="dark"] #app-screen,
-html[data-theme="dark"] #auth-screen,
-html[data-theme="dark"] #boot-loader,
-html[data-theme="dark"] .splash-scene {
+html[data-theme="dark"], html.theme-dark,
+html[data-theme="dark"] html.PLACEHOLDER body, body.theme-dark,
+html[data-theme="dark"] html.PLACEHOLDER .screen,
+html[data-theme="dark"] html.PLACEHOLDER #app,
+html[data-theme="dark"] html.PLACEHOLDER #app-screen,
+html[data-theme="dark"] html.PLACEHOLDER #auth-screen,
+html[data-theme="dark"] html.PLACEHOLDER #boot-loader,
+html[data-theme="dark"] html.PLACEHOLDER .splash-scene {
   background: var(--bg) !important;
   color: var(--text);
 }
-html[data-theme="dark"] header,
-html[data-theme="dark"] .settings-modal,
-html[data-theme="dark"] .file-card,
-html[data-theme="dark"] .auth-box,
-html[data-theme="dark"] .modal-box,
-html[data-theme="dark"] .prompt-box,
-html[data-theme="dark"] .shortcuts-box,
-html[data-theme="dark"] .folder-picker-box,
-html[data-theme="dark"] .usage-box,
-html[data-theme="dark"] .file-context-menu,
-html[data-theme="dark"] .toast,
-html[data-theme="dark"] .selection-fab,
-html[data-theme="dark"] .search-wrap,
-html[data-theme="dark"] #search-input,
-html[data-theme="dark"] .folder-tab,
-html[data-theme="dark"] .gear-btn {
+html[data-theme="dark"] html.PLACEHOLDER header,
+html[data-theme="dark"] html.PLACEHOLDER .settings-modal,
+html[data-theme="dark"] html.PLACEHOLDER .file-card,
+html[data-theme="dark"] html.PLACEHOLDER .auth-box,
+html[data-theme="dark"] html.PLACEHOLDER .modal-box,
+html[data-theme="dark"] html.PLACEHOLDER .prompt-box,
+html[data-theme="dark"] html.PLACEHOLDER .shortcuts-box,
+html[data-theme="dark"] html.PLACEHOLDER .folder-picker-box,
+html[data-theme="dark"] html.PLACEHOLDER .usage-box,
+html[data-theme="dark"] html.PLACEHOLDER .file-context-menu,
+html[data-theme="dark"] html.PLACEHOLDER .toast,
+html[data-theme="dark"] html.PLACEHOLDER .selection-fab,
+html[data-theme="dark"] html.PLACEHOLDER .search-wrap,
+html[data-theme="dark"] html.PLACEHOLDER #search-input,
+html[data-theme="dark"] html.PLACEHOLDER .folder-tab,
+html[data-theme="dark"] html.PLACEHOLDER .gear-btn {
   background: var(--surface);
   color: var(--text);
   border-color: var(--border);
 }
-html[data-theme="dark"] #search-input {
+html[data-theme="dark"] html.PLACEHOLDER #search-input {
   background: var(--bg);
   color: var(--text);
 }
-html[data-theme="dark"] .file-list,
-html[data-theme="dark"] .toolbar,
-html[data-theme="dark"] .folder-tabs {
+html[data-theme="dark"] html.PLACEHOLDER .file-list,
+html[data-theme="dark"] html.PLACEHOLDER .toolbar,
+html[data-theme="dark"] html.PLACEHOLDER .folder-tabs {
   background: transparent;
 }
-html[data-theme="dark"] .file-thumb-pending {
+html[data-theme="dark"] html.PLACEHOLDER .file-thumb-pending {
   background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
 }
-html[data-theme="dark"] .file-card.file-card-new {
+html[data-theme="dark"] html.PLACEHOLDER .file-card.file-card-new {
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 40%, #0b0e14);
 }
-html[data-theme="dark"] .annot-viewer,
-html[data-theme="dark"] .annot-workspace,
-html[data-theme="dark"] .annot-workspace.kind-image,
-html[data-theme="dark"] .annot-workspace.kind-video,
-html[data-theme="dark"] .annot-workspace.kind-audio,
-html[data-theme="dark"] .annot-viewer.kind-image .annot-page,
-html[data-theme="dark"] .public-modal-box,
-html[data-theme="dark"] .public-modal-backdrop,
-html[data-theme="dark"] #public-preview-wrap {
+html[data-theme="dark"] html.PLACEHOLDER .annot-viewer,
+html[data-theme="dark"] html.PLACEHOLDER .annot-workspace,
+html[data-theme="dark"] html.PLACEHOLDER .annot-workspace.kind-image,
+html[data-theme="dark"] html.PLACEHOLDER .annot-workspace.kind-video,
+html[data-theme="dark"] html.PLACEHOLDER .annot-workspace.kind-audio,
+html[data-theme="dark"] html.PLACEHOLDER .annot-viewer.kind-image .annot-page,
+html[data-theme="dark"] html.PLACEHOLDER .public-modal-box,
+html[data-theme="dark"] html.PLACEHOLDER .public-modal-backdrop,
+html[data-theme="dark"] html.PLACEHOLDER #public-preview-wrap {
   background: var(--bg) !important;
 }
-html[data-theme="dark"] .annot-topbar,
-html[data-theme="dark"] .public-topbar,
-html[data-theme="dark"] #public-info {
+html[data-theme="dark"] html.PLACEHOLDER .annot-topbar,
+html[data-theme="dark"] html.PLACEHOLDER .public-topbar,
+html[data-theme="dark"] html.PLACEHOLDER #public-info {
   background: var(--preview-chrome) !important;
   border-bottom-color: var(--preview-border) !important;
   color: var(--preview-text) !important;
 }
-html[data-theme="dark"] .annot-btn,
-html[data-theme="dark"] .public-download-btn,
-html[data-theme="dark"] .public-fs-btn,
-html[data-theme="dark"] .public-edit-btn {
+html[data-theme="dark"] html.PLACEHOLDER .annot-btn,
+html[data-theme="dark"] html.PLACEHOLDER .public-download-btn,
+html[data-theme="dark"] html.PLACEHOLDER .public-fs-btn,
+html[data-theme="dark"] html.PLACEHOLDER .public-edit-btn {
   background: var(--preview-btn) !important;
   border-color: var(--border) !important;
   color: var(--preview-text) !important;
 }
-html[data-theme="dark"] input,
-html[data-theme="dark"] textarea,
-html[data-theme="dark"] select,
-html[data-theme="dark"] .prompt-input {
+html[data-theme="dark"] html.PLACEHOLDER input,
+html[data-theme="dark"] html.PLACEHOLDER textarea,
+html[data-theme="dark"] html.PLACEHOLDER select,
+html[data-theme="dark"] html.PLACEHOLDER .prompt-input {
   background: var(--bg);
   color: var(--text);
   border-color: var(--border-strong);
 }
-html[data-theme="dark"] .empty,
-html[data-theme="dark"] .file-meta,
-html[data-theme="dark"] .public-meta,
-html[data-theme="dark"] .public-status {
+html[data-theme="dark"] html.PLACEHOLDER .empty,
+html[data-theme="dark"] html.PLACEHOLDER .file-meta,
+html[data-theme="dark"] html.PLACEHOLDER .public-meta,
+html[data-theme="dark"] html.PLACEHOLDER .public-status {
   color: var(--text-muted);
 }
-html[data-theme="dark"] .kbd,
-html[data-theme="dark"] kbd {
+html[data-theme="dark"] html.PLACEHOLDER .kbd,
+html[data-theme="dark"] html.PLACEHOLDER kbd {
   background: var(--bg);
   color: var(--text);
   border-color: var(--border);
+}
+
+
+/* HAMMER DARK — class + attribute */
+html.theme-dark, html[data-theme="dark"] {
+  background: #0b0e14 !important;
+  color: #e2e8f0 !important;
+}
+html.theme-dark body, html[data-theme="dark"] body,
+body.theme-dark {
+  background: #0b0e14 !important;
+  color: #e2e8f0 !important;
+}
+html.theme-dark header, html[data-theme="dark"] header,
+html.theme-dark .file-card, html[data-theme="dark"] .file-card,
+html.theme-dark .settings-modal, html[data-theme="dark"] .settings-modal {
+  background: #111827 !important;
+  color: #e2e8f0 !important;
+  border-color: #1e293b !important;
+}
+html.theme-dark .dropzone, html[data-theme="dark"] .dropzone,
+html.theme-dark #search-input, html[data-theme="dark"] #search-input {
+  background: #0b0e14 !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
 }
