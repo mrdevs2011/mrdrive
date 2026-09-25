@@ -406,9 +406,14 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition: transform 0.2s ease;
+}
+html[data-theme="dark"] .settings-switch::after,
+html.theme-dark .settings-switch::after {
+  background: #f1f5f9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 .settings-switch:checked { background: var(--primary); }
 .settings-switch:checked::after { transform: translateX(14px); }
@@ -1817,8 +1822,8 @@ body.is-dragging-file .folder-tab-wrap {
   position: fixed;
   inset: 0;
   z-index: 2000;
-  background: #0f0f12;
-  color: #e4e4e7;
+  background: var(--bg);
+  color: var(--text);
   display: flex;
   flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -1826,6 +1831,14 @@ body.is-dragging-file .folder-tab-wrap {
   -webkit-user-select: none;
   user-select: none;
   animation: fadeIn 0.18s ease;
+}
+/* Code / PDF / Markdown keep dark chrome regardless of app theme */
+.annot-viewer.kind-code,
+.annot-viewer.kind-pdf,
+.annot-viewer.kind-markdown,
+.annot-viewer.kind-text {
+  background: #0f0f12;
+  color: #e4e4e7;
 }
 
 .annot-topbar {
@@ -2068,11 +2081,11 @@ body.is-dragging-file .folder-tab-wrap {
 /* Page / image container – annotations stick to content */
 .annot-page {
   position: relative;
-  background: #fff;
+  background: var(--surface);
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.06);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   flex-shrink: 0;
   /* Important: transform origin for zoom */
   transform-origin: top center;
@@ -2302,29 +2315,37 @@ body.is-dragging-file .folder-tab-wrap {
   background: var(--accent);
   color: #fff;
 }
-/* Lighter loading overlay on light workspace */
+/* Theme-aware loading overlay (media) */
 .annot-viewer.kind-image .annot-loading,
 .annot-viewer.kind-video .annot-loading,
 .annot-viewer.kind-audio .annot-loading {
-  background: rgba(250, 250, 250, 0.75);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
   color: var(--text-muted);
 }
 
-/* Loading spinner inside viewer */
+/* Loading spinner inside viewer – follows theme by default */
 .annot-loading {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(9,9,11,0.7);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   z-index: 5;
-  color: #a1a1aa;
+  color: var(--text-muted);
   font-size: 14px;
   gap: 10px;
   animation: fadeIn 0.15s ease;
+}
+/* Dark chrome kinds keep a darker overlay */
+.annot-viewer.kind-code .annot-loading,
+.annot-viewer.kind-pdf .annot-loading,
+.annot-viewer.kind-markdown .annot-loading,
+.annot-viewer.kind-text .annot-loading {
+  background: rgba(9,9,11,0.72);
+  color: #a1a1aa;
 }
 .annot-loading svg {
   animation: spin 1s linear infinite;
@@ -3579,179 +3600,105 @@ body.public-dark {
 .public-modal-box.has-preview:has(.public-preview.is-markdown),
 .public-modal-box.has-preview:has(.public-preview.is-code),
 .public-modal-box.is-dark-preview,
-.public-modal-box.is-dark-preview.has-preview,
-html.public-dark, body.public-dark,
-html[data-theme="dark"] html.PLACEHOLDER .public-modal-backdrop {
-  background: var(--bg) !important;
+.public-modal-box.is-dark-preview.has-preview {
+  background: var(--preview-bg) !important;
+  color: var(--preview-text) !important;
+}
+html.public-dark,
+body.public-dark {
+  background: var(--preview-bg);
+  color: var(--preview-text);
+}
+
+/* ===== Theme consistency: media viewer + chrome follow data-theme ===== */
+
+/* Default workspace follows theme; code/pdf/md stay dark via kind-* rules */
+.annot-workspace {
+  background: var(--bg);
+}
+.annot-viewer.kind-code .annot-workspace,
+.annot-viewer.kind-pdf .annot-workspace,
+.annot-viewer.kind-markdown .annot-workspace,
+.annot-viewer.kind-text .annot-workspace {
+  background: radial-gradient(ellipse at top, #111117 0%, #09090b 70%);
+}
+
+/* Image/video/audio page card */
+.annot-workspace.kind-image .annot-page,
+.annot-workspace.kind-video .annot-page {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+
+/* Ensure media topbar/buttons never stick to a fixed light or dark palette */
+.annot-viewer.kind-image .annot-topbar,
+.annot-viewer.kind-video .annot-topbar,
+.annot-viewer.kind-audio .annot-topbar {
+  background: var(--surface) !important;
+  border-bottom-color: var(--border) !important;
   color: var(--text) !important;
 }
-.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-topbar,
-.public-modal-box.has-preview:has(.public-preview.is-code) .public-topbar,
-.public-modal-box.has-preview:has(.public-preview.is-markdown) #public-info,
-.public-modal-box.has-preview:has(.public-preview.is-code) #public-info,
-.public-modal-box.is-dark-preview .public-topbar,
-.public-modal-box.is-dark-preview #public-info {
-  background: var(--preview-chrome) !important;
-  border-bottom-color: var(--preview-border) !important;
-  color: var(--preview-text) !important;
-}
-.public-modal-box.has-preview:has(.public-preview.is-markdown) #public-filename,
-.public-modal-box.has-preview:has(.public-preview.is-code) #public-filename,
-.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-topbar h2,
-.public-modal-box.has-preview:has(.public-preview.is-code) .public-topbar h2 {
-  color: var(--preview-text) !important;
-}
-.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-download-btn,
-.public-modal-box.has-preview:has(.public-preview.is-code) .public-download-btn,
-.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-fs-btn,
-.public-modal-box.has-preview:has(.public-preview.is-code) .public-fs-btn,
-.public-modal-box.is-dark-preview .public-download-btn,
-.public-modal-box.is-dark-preview .public-fs-btn {
-  background: var(--preview-btn) !important;
-  border-color: var(--border) !important;
-  color: var(--preview-text) !important;
-}
-.public-modal-box.has-preview:has(.public-preview.is-markdown) #public-preview-wrap,
-.public-modal-box.has-preview:has(.public-preview.is-code) #public-preview-wrap,
-.public-modal-box.is-dark-preview #public-preview-wrap,
-.public-modal-box.is-dark-preview .public-loading {
-  background: var(--preview-bg) !important;
-  color: var(--preview-muted) !important;
-}
-.public-code-meta { background: var(--preview-chrome) !important; border-bottom-color: var(--preview-border) !important; }
-
-html[data-theme="light"] .public-modal-box.has-preview .public-topbar-main::before {
-  background-color: var(--bg) !important;
-  border-color: var(--border) !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E") !important;
-}
-html[data-theme="dark"] html.PLACEHOLDER .public-modal-box.has-preview .public-topbar-main::before {
-  background-color: var(--preview-btn) !important;
-  border-color: var(--border) !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E") !important;
-}
-
-html[data-theme="dark"] html.PLACEHOLDER .toast { background: var(--surface); color: var(--text); }
-html[data-theme="dark"] html.PLACEHOLDER .selection-fab { background: var(--surface); }
-html[data-theme="dark"] html.PLACEHOLDER .file-card { background: var(--surface); }
-
-
-/* ===== DARK MODE: whole app ===== */
-html[data-theme="dark"], html.theme-dark,
-html[data-theme="dark"] html.PLACEHOLDER body, body.theme-dark,
-html[data-theme="dark"] html.PLACEHOLDER .screen,
-html[data-theme="dark"] html.PLACEHOLDER #app,
-html[data-theme="dark"] html.PLACEHOLDER #app-screen,
-html[data-theme="dark"] html.PLACEHOLDER #auth-screen,
-html[data-theme="dark"] html.PLACEHOLDER #boot-loader,
-html[data-theme="dark"] html.PLACEHOLDER .splash-scene {
+.annot-viewer.kind-image .annot-btn,
+.annot-viewer.kind-video .annot-btn,
+.annot-viewer.kind-audio .annot-btn {
   background: var(--bg) !important;
-  color: var(--text);
+  border-color: var(--border) !important;
+  color: var(--text) !important;
 }
-html[data-theme="dark"] html.PLACEHOLDER header,
-html[data-theme="dark"] html.PLACEHOLDER .settings-modal,
-html[data-theme="dark"] html.PLACEHOLDER .file-card,
-html[data-theme="dark"] html.PLACEHOLDER .auth-box,
-html[data-theme="dark"] html.PLACEHOLDER .modal-box,
-html[data-theme="dark"] html.PLACEHOLDER .prompt-box,
-html[data-theme="dark"] html.PLACEHOLDER .shortcuts-box,
-html[data-theme="dark"] html.PLACEHOLDER .folder-picker-box,
-html[data-theme="dark"] html.PLACEHOLDER .usage-box,
-html[data-theme="dark"] html.PLACEHOLDER .file-context-menu,
-html[data-theme="dark"] html.PLACEHOLDER .toast,
-html[data-theme="dark"] html.PLACEHOLDER .selection-fab,
-html[data-theme="dark"] html.PLACEHOLDER .search-wrap,
-html[data-theme="dark"] html.PLACEHOLDER #search-input,
-html[data-theme="dark"] html.PLACEHOLDER .folder-tab,
-html[data-theme="dark"] html.PLACEHOLDER .gear-btn {
+.annot-viewer.kind-image .annot-btn:hover,
+.annot-viewer.kind-video .annot-btn:hover,
+.annot-viewer.kind-audio .annot-btn:hover {
+  background: var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* Public share media chrome also follows theme */
+.public-modal-box.has-preview .public-topbar,
+.public-modal-box.has-preview #public-info {
   background: var(--surface);
+  border-bottom-color: var(--border);
   color: var(--text);
+}
+.public-modal-box.has-preview #public-preview-wrap {
+  background: var(--bg);
+}
+
+/* File list / main chrome — rely on CSS vars; only soft enforcement */
+html[data-theme="dark"] .file-card,
+html.theme-dark .file-card {
+  background: var(--surface);
   border-color: var(--border);
-}
-html[data-theme="dark"] html.PLACEHOLDER #search-input {
-  background: var(--bg);
   color: var(--text);
 }
-html[data-theme="dark"] html.PLACEHOLDER .file-list,
-html[data-theme="dark"] html.PLACEHOLDER .toolbar,
-html[data-theme="dark"] html.PLACEHOLDER .folder-tabs {
-  background: transparent;
-}
-html[data-theme="dark"] html.PLACEHOLDER .file-thumb-pending {
-  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
-}
-html[data-theme="dark"] html.PLACEHOLDER .file-card.file-card-new {
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 40%, #0b0e14);
-}
-html[data-theme="dark"] html.PLACEHOLDER .annot-viewer,
-html[data-theme="dark"] html.PLACEHOLDER .annot-workspace,
-html[data-theme="dark"] html.PLACEHOLDER .annot-workspace.kind-image,
-html[data-theme="dark"] html.PLACEHOLDER .annot-workspace.kind-video,
-html[data-theme="dark"] html.PLACEHOLDER .annot-workspace.kind-audio,
-html[data-theme="dark"] html.PLACEHOLDER .annot-viewer.kind-image .annot-page,
-html[data-theme="dark"] html.PLACEHOLDER .public-modal-box,
-html[data-theme="dark"] html.PLACEHOLDER .public-modal-backdrop,
-html[data-theme="dark"] html.PLACEHOLDER #public-preview-wrap {
-  background: var(--bg) !important;
-}
-html[data-theme="dark"] html.PLACEHOLDER .annot-topbar,
-html[data-theme="dark"] html.PLACEHOLDER .public-topbar,
-html[data-theme="dark"] html.PLACEHOLDER #public-info {
-  background: var(--preview-chrome) !important;
-  border-bottom-color: var(--preview-border) !important;
-  color: var(--preview-text) !important;
-}
-html[data-theme="dark"] html.PLACEHOLDER .annot-btn,
-html[data-theme="dark"] html.PLACEHOLDER .public-download-btn,
-html[data-theme="dark"] html.PLACEHOLDER .public-fs-btn,
-html[data-theme="dark"] html.PLACEHOLDER .public-edit-btn {
-  background: var(--preview-btn) !important;
-  border-color: var(--border) !important;
-  color: var(--preview-text) !important;
-}
-html[data-theme="dark"] html.PLACEHOLDER input,
-html[data-theme="dark"] html.PLACEHOLDER textarea,
-html[data-theme="dark"] html.PLACEHOLDER select,
-html[data-theme="dark"] html.PLACEHOLDER .prompt-input {
-  background: var(--bg);
+html[data-theme="dark"] header,
+html.theme-dark header {
+  background: var(--surface);
+  border-bottom-color: var(--border);
   color: var(--text);
-  border-color: var(--border-strong);
 }
-html[data-theme="dark"] html.PLACEHOLDER .empty,
-html[data-theme="dark"] html.PLACEHOLDER .file-meta,
-html[data-theme="dark"] html.PLACEHOLDER .public-meta,
-html[data-theme="dark"] html.PLACEHOLDER .public-status {
+html[data-theme="dark"] .dropzone,
+html.theme-dark .dropzone {
+  background: var(--bg);
+  border-color: var(--border);
   color: var(--text-muted);
 }
-html[data-theme="dark"] html.PLACEHOLDER .kbd,
-html[data-theme="dark"] html.PLACEHOLDER kbd {
+html[data-theme="dark"] .settings-modal,
+html.theme-dark .settings-modal {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* Light mode: kill any leftover dark chrome on media */
+html[data-theme="light"] .annot-viewer.kind-image,
+html[data-theme="light"] .annot-viewer.kind-video,
+html[data-theme="light"] .annot-viewer.kind-audio {
   background: var(--bg);
   color: var(--text);
-  border-color: var(--border);
 }
-
-
-/* HAMMER DARK — class + attribute */
-html.theme-dark, html[data-theme="dark"] {
-  background: #0b0e14 !important;
-  color: #e2e8f0 !important;
-}
-html.theme-dark body, html[data-theme="dark"] body,
-body.theme-dark {
-  background: #0b0e14 !important;
-  color: #e2e8f0 !important;
-}
-html.theme-dark header, html[data-theme="dark"] header,
-html.theme-dark .file-card, html[data-theme="dark"] .file-card,
-html.theme-dark .settings-modal, html[data-theme="dark"] .settings-modal {
-  background: #111827 !important;
-  color: #e2e8f0 !important;
-  border-color: #1e293b !important;
-}
-html.theme-dark .dropzone, html[data-theme="dark"] .dropzone,
-html.theme-dark #search-input, html[data-theme="dark"] #search-input {
-  background: #0b0e14 !important;
-  color: #e2e8f0 !important;
-  border-color: #334155 !important;
+html[data-theme="light"] .annot-viewer.kind-image .annot-workspace,
+html[data-theme="light"] .annot-viewer.kind-video .annot-workspace,
+html[data-theme="light"] .annot-viewer.kind-audio .annot-workspace {
+  background: var(--bg);
 }
