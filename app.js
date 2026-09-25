@@ -583,6 +583,7 @@ function getFileKind(filename) {
   if (VIDEO_EXTENSIONS.includes(ext)) return "video";
   if (AUDIO_EXTENSIONS.includes(ext)) return "audio";
   if (PDF_EXTENSIONS.includes(ext)) return "pdf";
+  if (ext === "md" || ext === "markdown") return "markdown";
   return "other";
 }
 
@@ -677,7 +678,7 @@ function showPublicDownloadModal(token) {
         loaderEl.classList.add("is-hiding");
         setTimeout(() => loaderEl.remove(), 220);
       };
-      if (kind === "image" || kind === "video" || kind === "audio" || kind === "pdf") {
+      if (kind === "image" || kind === "video" || kind === "audio" || kind === "pdf" || kind === "markdown") {
         modalIcon.style.display = "none";
         modalBox.classList.add("has-preview");
         previewWrap.appendChild(loaderEl);
@@ -787,6 +788,31 @@ function showPublicDownloadModal(token) {
             statusEl.textContent = "PDF ni ko'rib bo'lmadi";
           }
         }
+      } else if (kind === "markdown") {
+        const { data: previewUrlData, error: previewUrlError } = await sb.storage
+          .from(BUCKET)
+          .createSignedUrl(data.storage_path, 3600);
+
+        if (previewUrlError || !previewUrlData) {
+          hideLoader();
+          modalBox.classList.remove("has-preview");
+          modalIcon.style.display = "";
+          modalIcon.classList.remove("is-loading");
+          modalIcon.innerHTML = ICON_DOWNLOAD;
+        } else {
+          try {
+            await renderPublicMarkdown(previewUrlData.signedUrl, previewWrap, data.filename);
+            hideLoader();
+            statusEl.textContent = "";
+            setupPublicControlsFade(modalBox, previewWrap, true);
+            fsBtn.style.display = "flex";
+            setupPublicFullscreen(fsBtn, modalBox, previewWrap);
+          } catch (err) {
+            console.error(err);
+            hideLoader();
+            statusEl.textContent = "Markdown ko'rib bo'lmadi";
+          }
+        }
       }
 
       downloadBtn.onclick = async () => {
@@ -861,6 +887,33 @@ function showPublicDownloadModal(token) {
 // raster canvas. Returns the list of {renderCanvas, drawCanvas, width,
 // height} pairs so setupPublicPdfEdit can wire pencil drawing on them and
 // the download handler can flatten them back into a PDF.
+async function renderPublicMarkdown(url, previewWrap, filename) {
+  const res = await fetch(url);
+  const mdText = await res.text();
+  const wrap = document.createElement("div");
+  wrap.className = "public-preview is-markdown";
+  const body = document.createElement("div");
+  body.className = "md-preview";
+  try {
+    if (window.marked && typeof marked.parse === "function") {
+      marked.setOptions({ breaks: true, gfm: true });
+      body.innerHTML = marked.parse(mdText);
+    } else if (window.marked) {
+      body.innerHTML = marked(mdText);
+    } else {
+      body.textContent = mdText;
+    }
+  } catch (e) {
+    body.textContent = mdText;
+  }
+  body.querySelectorAll("script").forEach((s) => s.remove());
+  wrap.appendChild(body);
+  Array.from(previewWrap.children).forEach((c) => {
+    if (!c.classList.contains("public-loading")) c.remove();
+  });
+  previewWrap.appendChild(wrap);
+}
+
 async function renderPublicPdf(url, previewWrap) {
   const wrap = document.createElement("div");
   wrap.className = "public-preview is-pdf";
@@ -4658,7 +4711,8 @@ function isViewable(filename) {
   if (/\.(mp4|webm|mov|m4v|ogv)$/i.test(lower)) return "video";
   if (/\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|weba)$/i.test(lower)) return "audio";
   if (/\.pdf$/i.test(lower)) return "pdf";
-  if (/\.(txt|md|json|js|ts|css|html|xml|py|java|c|cpp|h|go|rs|sh|yml|yaml|toml|ini|log|csv)$/i.test(lower)) return "code";
+  if (/\.(md|markdown)$/i.test(lower)) return "markdown";
+  if (/\.(txt|json|js|ts|css|html|xml|py|java|c|cpp|h|go|rs|sh|yml|yaml|toml|ini|log|csv)$/i.test(lower)) return "code";
   return null;
 }
 
@@ -4770,7 +4824,7 @@ async function openAnnotationViewer(file, kind, opts) {
   // stay dark. Toggled via a class so CSS owns the actual colors.
   // Kind class is also on the viewer so topbar / status / toolbar can match.
   const workspaceEl = document.getElementById("annot-workspace");
-  const kindClasses = ["kind-image", "kind-video", "kind-audio", "kind-pdf", "kind-code"];
+  const kindClasses = ["kind-image", "kind-video", "kind-audio", "kind-pdf", "kind-code", "kind-markdown"];
   workspaceEl.classList.remove(...kindClasses);
   workspaceEl.classList.add("kind-" + kind);
   viewer.classList.remove(...kindClasses);
@@ -4782,7 +4836,7 @@ async function openAnnotationViewer(file, kind, opts) {
   const editBtn = document.getElementById("annot-edit");
   const saveBtn = document.getElementById("annot-save");
   toolbar.style.display = "none";
-  const isReadOnly = kind === "code" || kind === "video" || kind === "audio";
+  const isReadOnly = kind === "code" || kind === "markdown" || kind === "video" || kind === "audio";
   if (saveBtn) saveBtn.style.display = isReadOnly ? "none" : "";
   editBtn.classList.remove("is-edit", "is-save", "active");
   editBtn.title = "Tahrirlash";
@@ -4838,6 +4892,11 @@ async function openAnnotationViewer(file, kind, opts) {
       await loadCodeForAnnot(signedUrl, scroll, loader, file.filename);
       statusHint.textContent = "Dark mode kod ko'rinishi · Faqat o'qish";
       // Hide drawing tools for code
+      toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
+    } else if (kind === "markdown") {
+      scroll.classList.add("is-text", "is-markdown");
+      await loadMarkdownForAnnot(signedUrl, scroll, loader, file.filename);
+      statusHint.textContent = "Markdown preview · Preview / Manba";
       toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
     } else if (kind === "video") {
       await loadVideoForAnnot(signedUrl, scroll);
@@ -4973,9 +5032,9 @@ function hideAnnotViewerNow() {
   viewer.style.transition = "";
   viewer.style.pointerEvents = "";
   viewer.setAttribute("aria-hidden", "true");
-  viewer.classList.remove("kind-image", "kind-video", "kind-audio", "kind-pdf", "kind-code");
+  viewer.classList.remove("kind-image", "kind-video", "kind-audio", "kind-pdf", "kind-code", "kind-markdown");
   const workspaceEl = document.getElementById("annot-workspace");
-  if (workspaceEl) workspaceEl.classList.remove("kind-image", "kind-video", "kind-audio", "kind-pdf", "kind-code");
+  if (workspaceEl) workspaceEl.classList.remove("kind-image", "kind-video", "kind-audio", "kind-pdf", "kind-code", "kind-markdown");
 }
 
 // Close transition (mirror of the open zoom): the viewer image shrinks
@@ -6181,6 +6240,78 @@ async function loadCodeForAnnot(url, scroll, loader, filename) {
       try { hljs.highlightElement(codeEl); } catch (e) { /* leave plain on failure */ }
     });
   }
+}
+
+async function loadMarkdownForAnnot(url, scroll, loader, filename) {
+  const res = await fetch(url);
+  const text = await res.text();
+  const lines = text.split("\n").length;
+
+  const wrap = document.createElement("div");
+  wrap.className = "annot-md-wrap";
+
+  const header = document.createElement("div");
+  header.className = "code-header md-header";
+  header.innerHTML = `
+    <span class="code-header-name">${escapeHtml(filename)}</span>
+    <span class="code-header-meta">
+      <span class="code-lang-badge">MD</span>
+      <span class="code-lines">${lines} qator</span>
+      <button type="button" class="md-toggle-btn" data-mode="preview">Manba</button>
+    </span>
+  `;
+
+  const preview = document.createElement("div");
+  preview.className = "md-preview";
+  try {
+    if (window.marked && typeof marked.parse === "function") {
+      marked.setOptions({ breaks: true, gfm: true });
+      preview.innerHTML = marked.parse(text);
+    } else if (window.marked) {
+      preview.innerHTML = marked(text);
+    } else {
+      preview.textContent = text;
+    }
+  } catch (e) {
+    preview.textContent = text;
+  }
+  // Soften raw HTML risk: strip script tags if any slipped through
+  preview.querySelectorAll("script").forEach((s) => s.remove());
+
+  const sourceWrap = document.createElement("div");
+  sourceWrap.className = "annot-code-wrap md-source";
+  sourceWrap.style.display = "none";
+  const pre = document.createElement("pre");
+  const codeEl = document.createElement("code");
+  codeEl.className = "language-markdown";
+  codeEl.textContent = text;
+  pre.appendChild(codeEl);
+  sourceWrap.appendChild(pre);
+
+  wrap.appendChild(header);
+  wrap.appendChild(preview);
+  wrap.appendChild(sourceWrap);
+  scroll.innerHTML = "";
+  scroll.appendChild(wrap);
+
+  const btn = header.querySelector(".md-toggle-btn");
+  btn.addEventListener("click", () => {
+    const isPreview = btn.dataset.mode === "preview";
+    if (isPreview) {
+      preview.style.display = "none";
+      sourceWrap.style.display = "";
+      btn.dataset.mode = "source";
+      btn.textContent = "Preview";
+      if (window.hljs && !codeEl.dataset.hl) {
+        try { hljs.highlightElement(codeEl); codeEl.dataset.hl = "1"; } catch (_) {}
+      }
+    } else {
+      sourceWrap.style.display = "none";
+      preview.style.display = "";
+      btn.dataset.mode = "preview";
+      btn.textContent = "Manba";
+    }
+  });
 }
 
 function attachDrawingHandlers(canvas, pageIdx) {
