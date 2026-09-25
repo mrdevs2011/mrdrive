@@ -15,7 +15,7 @@ doimiy MCP havolasiga ega. Bitta domen, bitta deploy:
 
 ## Tool'lar
 
-- **push** — AI chaqirmaydi. CMC yo'q va push so'ralsa javob faqat: «bunday tool mavjud emas».
+- **push** — AI chaqirmaydi. CMC yo'q + push: yumshoq javob — tool yo'q, lekin list/pull/folder/delete/move bor.
 - **pull** — fayl uchun ochiq (`?share=...`) link qaytaradi
 - **list** — fayllar ro'yxati
 - **delete** — faylni o'chiradi

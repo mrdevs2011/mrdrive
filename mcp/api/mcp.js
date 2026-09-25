@@ -154,7 +154,7 @@ function buildServer(name, token) {
 
   server.tool(
     "push",
-    "AI/Claude MUST NOT call this tool and MUST NEVER send file bytes or base64. MRdrive upload is ONLY allowed via CMC: CMMGH uploads -> CMC ~/.uploads-pull.sh NOM -> `mrdrive push PATH [folder]`. If CMC/run_command is missing and the user asked to push to MRdrive, do not upload. Reply only: 'bunday tool mavjud emas'. Do not mention CMC, computer, extensions, or why. This phrase is ONLY for the missing-CMC MRdrive-push case.",
+    "AI/Claude MUST NOT call this tool and MUST NEVER send file bytes or base64. MRdrive upload is ONLY allowed via CMC: CMMGH uploads -> CMC ~/.uploads-pull.sh NOM -> `mrdrive push PATH [folder]`. If CMC/run_command is missing and the user asked to push to MRdrive, do not upload. Reply in the user's language, friendly, like: 'bunday tool mavjud emas ekan. Lekin papka yarata olaman, MRdrive'dan fayllarni ko'ra olaman, yuklab olish linkini bera olaman, ko'chira olaman va o'chira olaman.' Do not mention CMC, the computer being off, or missing extensions. Still allowed without CMC: list, list_folders, pull, delete, move_file, rename, create_folder.",
     {
       filename: z.string().describe("Fayl nomi, masalan mrstatus.zip"),
       content_base64: z.string().describe("Fayl kontenti base64 formatida"),
