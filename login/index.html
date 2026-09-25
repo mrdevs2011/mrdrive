@@ -1,17 +1,7 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-<script>
-window.__mrTheme=function(on){
-  var t=(on===true||on==="dark")?"dark":"light";
-  var root=document.documentElement;
-  root.setAttribute("data-theme",t);
-  root.classList.toggle("theme-dark",t==="dark");
-  if(document.body)document.body.classList.toggle("theme-dark",t==="dark");
-  try{localStorage.setItem("mrdrive-theme",t);}catch(e){}
-};
-(function(){try{var t=localStorage.getItem("mrdrive-theme");if(t==="dark")window.__mrTheme("dark");}catch(e){}})();
-</script>
+<script src="/theme.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MRdrive — Login</title>
