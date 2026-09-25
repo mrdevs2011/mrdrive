@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+<script>
+(function(){try{var t=localStorage.getItem("mrdrive-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MRdrive</title>
 
 <link rel="icon" type="image/png" href="/assets/logo.png">
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<link rel="stylesheet" id="hljs-theme" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -61,6 +64,13 @@
               </svg>
               <span class="settings-toggle-text">O'chirishdan oldin so'ramaslik</span>
               <input type="checkbox" id="settings-skip-delete" class="settings-switch" />
+            </label>
+            <label class="settings-item settings-toggle" for="settings-dark-mode">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 14.5A8.5 8.5 0 1 1 9.5 3 7 7 0 0 0 21 14.5z"/>
+              </svg>
+              <span class="settings-toggle-text">Qorong'i rejim</span>
+              <input type="checkbox" id="settings-dark-mode" class="settings-switch" />
             </label>
             <button type="button" class="settings-item" id="settings-shortcuts-btn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">

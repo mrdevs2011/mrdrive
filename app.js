@@ -684,9 +684,12 @@ function showPublicDownloadModal(token) {
         modalIcon.style.display = "none";
         modalBox.classList.add("has-preview");
         if (kind === "markdown" || kind === "code") {
-          modalBox.classList.add("is-dark-preview");
-          document.documentElement.classList.add("public-dark");
-          document.body.classList.add("public-dark");
+          applyTheme(getTheme());
+          if (getTheme() === "dark") {
+            modalBox.classList.add("is-dark-preview");
+          } else {
+            modalBox.classList.remove("is-dark-preview");
+          }
         }
         previewWrap.appendChild(loaderEl);
       } else {
@@ -1439,6 +1442,32 @@ async function refreshStorageUsage() {
   }
 }
 
+
+const THEME_KEY = "mrdrive-theme";
+function getTheme() {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    if (v === "dark" || v === "light") return v;
+  } catch (_) {}
+  return "light";
+}
+function applyTheme(theme) {
+  const t = theme === "dark" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", t);
+  try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
+  const link = document.getElementById("hljs-theme");
+  if (link) {
+    link.href = t === "dark"
+      ? "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+      : "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css";
+  }
+  const cb = document.getElementById("settings-dark-mode");
+  if (cb) cb.checked = t === "dark";
+  document.documentElement.classList.toggle("public-dark", t === "dark");
+  if (document.body) document.body.classList.toggle("public-dark", t === "dark");
+}
+applyTheme(getTheme());
+
 // Gear icon → sozlamalar modal (Claude ga ulang + Account + Log out)
 (function initSettingsMenu() {
   const gearBtn = document.getElementById("gear-btn");
@@ -1457,8 +1486,13 @@ async function refreshStorageUsage() {
     gearBtn.classList.remove("open");
     if (accountPanel) accountPanel.hidden = true;
   }
+  const darkCb = document.getElementById("settings-dark-mode");
+  darkCb?.addEventListener("change", () => applyTheme(darkCb.checked ? "dark" : "light"));
+  if (darkCb) darkCb.checked = getTheme() === "dark";
+
   function openSettings() {
     if (skipDeleteCb) skipDeleteCb.checked = isSkipDeleteConfirm();
+    if (darkCb) darkCb.checked = getTheme() === "dark";
     modal.hidden = false;
     gearBtn.classList.add("open");
     refreshStorageUsage();
