@@ -2909,11 +2909,11 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   cursor: pointer;
   z-index: 1;
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
-  transition: height 0.15s ease;
+  transition: height 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .mr-audio-progress:hover,
-.mr-audio-progress:active {
-  height: 6px;
+.mr-audio-progress.is-dragging {
+  height: 7px;
 }
 .mr-audio-progress-fill {
   height: 100%;
@@ -2922,24 +2922,37 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   border-radius: 999px;
   position: relative;
   box-shadow: 0 0 10px rgba(59, 130, 246, 0.55);
+  /* smooths out the per-frame JS width updates during normal playback —
+     iOS-slider-like glide instead of a stepped/jumpy bar */
+  transition: width 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* while the user is actively dragging the thumb, kill the transition so
+   the fill tracks the finger with zero lag (no springy delay while held) */
+.mr-audio-progress.is-dragging .mr-audio-progress-fill {
+  transition: none;
 }
 .mr-audio-progress-fill::after {
   content: "";
   position: absolute;
   right: -8px;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translateY(-50%) scale(1);
   width: 15px;
   height: 15px;
   background: radial-gradient(circle at 32% 28%, #ffffff, #eef4ff 55%, #cfe0ff 100%);
   border-radius: 50%;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18), 0 2px 8px rgba(15, 23, 42, 0.25);
-  transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.15s ease;
+  /* iOS-style overshoot spring: pops past its target size then settles */
+  transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
 }
-.mr-audio-progress:hover .mr-audio-progress-fill::after,
-.mr-audio-progress:active .mr-audio-progress-fill::after {
-  transform: translateY(-50%) scale(1.2);
-  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.25), 0 2px 10px rgba(15, 23, 42, 0.3);
+.mr-audio-progress:hover .mr-audio-progress-fill::after {
+  transform: translateY(-50%) scale(1.15);
+  box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.22), 0 2px 9px rgba(15, 23, 42, 0.28);
+}
+.mr-audio-progress.is-dragging .mr-audio-progress-fill::after {
+  transform: translateY(-50%) scale(1.45);
+  box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 3px 14px rgba(15, 23, 42, 0.35);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
 }
 .mr-audio-controls {
   display: flex;

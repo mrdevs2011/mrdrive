@@ -5841,15 +5841,18 @@ function mountMrAudioPlayer(host, opts) {
   const onMove = (ev) => { dragging = true; seekFromEvent(ev); };
   const onStop = () => {
     dragging = false;
+    pbox.classList.remove("is-dragging");
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("touchmove", onMove);
   };
   pbox.addEventListener("mousedown", (e) => {
+    pbox.classList.add("is-dragging");
     seekFromEvent(e);
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onStop, { once: true });
   });
   pbox.addEventListener("touchstart", (e) => {
+    pbox.classList.add("is-dragging");
     seekFromEvent(e);
     window.addEventListener("touchmove", onMove, { passive: false });
     window.addEventListener("touchend", onStop, { once: true });
