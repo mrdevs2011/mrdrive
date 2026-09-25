@@ -5578,32 +5578,46 @@ function mountMrAudioPlayer(host, opts) {
     return arr[b0] + (arr[b1] - arr[b0]) * (bi - b0);
   }
 
-  // A big, unmistakable single-mountain silhouette, independently shaped for
-  // top and bottom (own random peak position/width picked once per player),
-  // so the bundle is never just a flat symmetric lens — this is what makes
-  // the asymmetry actually visible at a glance, on every track, even ones
-  // with fairly even loudness. Real per-track data (sampleShape) still adds
-  // its own texture on top, but no longer has to carry the whole shape.
-  const seedTop = Math.random();
-  const seedBot = Math.random();
-  function macroHill(nx, seed) {
-    const peak1 = 0.20 + seed * 0.42;
-    const width1 = 0.20 + seed * 0.14;
-    const peak2 = 0.55 + (1 - seed) * 0.35;
-    const width2 = 0.15 + (1 - seed) * 0.09;
-    const b1 = Math.exp(-((nx - peak1) * (nx - peak1)) / (2 * width1 * width1));
-    const b2 = 0.62 * Math.exp(-((nx - peak2) * (nx - peak2)) / (2 * width2 * width2));
-    return Math.min(1, b1 + b2);
+  // A genuinely irregular mountain-range silhouette along the WHOLE length —
+  // several distinct peaks and valleys of random height/width/position, not
+  // one smooth lens-shaped bulge. Built once per player from a handful of
+  // random bumps, so it never collapses back into a uniform oval regardless
+  // of how flat the actual track's loudness is. Top and bottom each get
+  // their own independent set of bumps on top of that.
+  function buildBumps(count) {
+    const bumps = [];
+    for (let i = 0; i < count; i++) {
+      // roughly evenly spread across the width, but jittered so spacing
+      // isn't perfectly regular either
+      const slot = (i + 0.5) / count;
+      bumps.push({
+        pos: Math.max(0.04, Math.min(0.96, slot + (Math.random() - 0.5) * (0.85 / count))),
+        height: 0.32 + Math.random() * 0.68,
+        width: 0.075 + Math.random() * 0.075,
+      });
+    }
+    return bumps;
   }
-  function combinedShape(macroSeed, arr, nx) {
-    const macro = macroHill(nx, macroSeed);
+  function macroHill(nx, bumps) {
+    let v = 0;
+    for (let i = 0; i < bumps.length; i++) {
+      const b = bumps[i];
+      const d = nx - b.pos;
+      v += b.height * Math.exp(-(d * d) / (2 * b.width * b.width));
+    }
+    return Math.min(1, v);
+  }
+  const bumpsTop = buildBumps(6);
+  const bumpsBot = buildBumps(6);
+  function combinedShape(bumps, arr, nx) {
+    const macro = macroHill(nx, bumps);
     const real = sampleShape(arr, nx);
-    // floor keeps the bundle from vanishing at quiet spots; macro hill does
-    // the heavy lifting for visible shape, real data adds genuine texture
-    return 0.16 + macro * 0.72 + real * 0.28;
+    // low floor so real valleys actually read as valleys, not just a
+    // slightly-thinner version of the same oval
+    return 0.1 + macro * 0.72 + real * 0.22;
   }
-  const shapeTopAt = (nx) => combinedShape(seedTop, trackShapeTop, nx);
-  const shapeBotAt = (nx) => combinedShape(seedBot, trackShapeBot, nx);
+  const shapeTopAt = (nx) => combinedShape(bumpsTop, trackShapeTop, nx);
+  const shapeBotAt = (nx) => combinedShape(bumpsBot, trackShapeBot, nx);
 
   function sizeCanvas() {
     const w = waveWrap.clientWidth || 400;
