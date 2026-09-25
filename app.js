@@ -5556,9 +5556,20 @@ function mountMrAudioPlayer(host, opts) {
   const SMOOTH = 0.06;
 
   function envelope(nx) {
-    // true zero at ends so tips never clip against canvas edge
-    const s = Math.sin(Math.PI * nx);
-    return Math.pow(s, 1.45);
+    // full amplitude across almost the whole width; only fade in the last
+    // sliver at each edge so tips don't hard-clip against the canvas border
+    // (previously faded across the ENTIRE width, which made the wave taper
+    // to a point and look "cut off" instead of filling the player)
+    const EDGE = 0.05;
+    if (nx < EDGE) {
+      const t = nx / EDGE;
+      return t * t * (3 - 2 * t);
+    }
+    if (nx > 1 - EDGE) {
+      const t = (1 - nx) / EDGE;
+      return t * t * (3 - 2 * t);
+    }
+    return 1;
   }
 
   function sampleFreq(nx) {
