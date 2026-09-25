@@ -5717,7 +5717,8 @@ function mountMrAudioPlayer(host, opts) {
     const n = STEPS;
 
     // precompute x + envelope + freq once per frame (buffers pre-allocated above — no GC per frame)
-    const pad = w * 0.04; // keep tips inside canvas — no hard clip
+    const pad = 0; // taper hits zero amplitude right at the edge, so the point
+    // lands exactly on the progress bar's own start/end (same 100%-width parent)
     const drawW = w - pad * 2;
     for (let i = 0; i <= n; i++) {
       const nx = i / n;
