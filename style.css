@@ -1801,8 +1801,9 @@ body.is-dragging-file .folder-tab-wrap {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: #0f1419;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color: #e2e8f0;
   flex-shrink: 0;
   min-height: 48px;
 }
@@ -1815,22 +1816,22 @@ body.is-dragging-file .folder-tab-wrap {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--text);
+  color: #e4e4e7;
   cursor: default;
 }
 .annot-filename .annot-path-prefix {
-  color: var(--text-muted, #71717a);
+  color: #94a3b8;
   font-weight: 450;
   transition: color 0.15s ease;
 }
 .annot-filename .annot-path-name {
-  color: var(--text, #18181b);
+  color: #f1f5f9;
   font-weight: 600;
   transition: color 0.15s ease;
 }
 .annot-filename:hover .annot-path-prefix,
 .annot-filename:hover .annot-path-name {
-  color: var(--text, #18181b);
+  color: #fff;
 }
 
 .annot-top-actions {
@@ -1845,15 +1846,16 @@ body.is-dragging-file .folder-tab-wrap {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border: 1px solid var(--border);
+  border: 1px solid #334155;
   border-radius: 12px;
-  background: var(--bg);
-  color: var(--text);
+  background: #1e293b;
+  color: #e2e8f0;
   cursor: pointer;
   transition: none;
 }
 .annot-btn:hover, .annot-btn:active {
-  background: var(--border);
+  background: #334155;
+  color: #fff;
 }
 .annot-btn.active {
   background: var(--border);
@@ -2186,6 +2188,52 @@ body.is-dragging-file .folder-tab-wrap {
 
 /* kind-code dark chrome: see unified kind-code + kind-markdown block below */
 
+
+/* Media previews keep light topbar; code/md/pdf stay on dark chrome */
+.annot-viewer.kind-image .annot-topbar,
+.annot-viewer.kind-video .annot-topbar,
+.annot-viewer.kind-audio .annot-topbar {
+  background: var(--surface);
+  border-bottom-color: var(--border);
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-filename,
+.annot-viewer.kind-video .annot-filename,
+.annot-viewer.kind-audio .annot-filename {
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-filename .annot-path-prefix,
+.annot-viewer.kind-video .annot-filename .annot-path-prefix,
+.annot-viewer.kind-audio .annot-filename .annot-path-prefix {
+  color: var(--text-muted);
+}
+.annot-viewer.kind-image .annot-filename .annot-path-name,
+.annot-viewer.kind-video .annot-filename .annot-path-name,
+.annot-viewer.kind-audio .annot-filename .annot-path-name,
+.annot-viewer.kind-image .annot-filename:hover .annot-path-prefix,
+.annot-viewer.kind-image .annot-filename:hover .annot-path-name,
+.annot-viewer.kind-video .annot-filename:hover .annot-path-prefix,
+.annot-viewer.kind-video .annot-filename:hover .annot-path-name,
+.annot-viewer.kind-audio .annot-filename:hover .annot-path-prefix,
+.annot-viewer.kind-audio .annot-filename:hover .annot-path-name {
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-btn,
+.annot-viewer.kind-video .annot-btn,
+.annot-viewer.kind-audio .annot-btn {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+.annot-viewer.kind-image .annot-btn:hover,
+.annot-viewer.kind-image .annot-btn:active,
+.annot-viewer.kind-video .annot-btn:hover,
+.annot-viewer.kind-video .annot-btn:active,
+.annot-viewer.kind-audio .annot-btn:hover,
+.annot-viewer.kind-audio .annot-btn:active {
+  background: var(--border);
+  color: var(--text);
+}
 /* Image/video toolbar inherits light theme variables */
 .annot-viewer.kind-image .annot-toolbar,
 .annot-viewer.kind-video .annot-toolbar {
@@ -3357,3 +3405,62 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 }
 
 
+
+/* Public dark preview (md + code): no light surfaces, from first paint */
+html.public-dark,
+body.public-dark {
+  background: #0b0e14 !important;
+  color: #e2e8f0;
+}
+.public-modal-box.is-dark-preview,
+.public-modal-box.is-dark-preview.has-preview,
+.public-modal-backdrop:has(.is-dark-preview) {
+  background: #0b0e14 !important;
+}
+.public-modal-box.is-dark-preview .public-topbar,
+.public-modal-box.is-dark-preview #public-info {
+  background: #0f1419 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+  color: #e2e8f0 !important;
+}
+.public-modal-box.is-dark-preview .public-topbar h2,
+.public-modal-box.is-dark-preview #public-filename,
+.public-modal-box.is-dark-preview .public-meta,
+.public-modal-box.is-dark-preview .public-status,
+.public-modal-box.is-dark-preview .public-brand-link {
+  color: #e2e8f0 !important;
+}
+.public-modal-box.is-dark-preview .public-meta,
+.public-modal-box.is-dark-preview .public-topbar-text .public-brand-link {
+  display: none !important;
+}
+.public-modal-box.is-dark-preview #public-preview-wrap {
+  background: #0b0e14 !important;
+}
+.public-modal-box.is-dark-preview .public-loading {
+  background: #0b0e14 !important;
+  color: #94a3b8 !important;
+}
+.public-modal-box.is-dark-preview .public-download-btn,
+.public-modal-box.is-dark-preview .public-fs-btn,
+.public-modal-box.is-dark-preview .public-edit-btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+.public-modal-box.is-dark-preview .public-download-btn:hover:not(:disabled),
+.public-modal-box.is-dark-preview .public-fs-btn:hover:not(:disabled),
+.public-modal-box.is-dark-preview .public-edit-btn:hover:not(.active) {
+  background: #334155 !important;
+  color: #fff !important;
+}
+.public-modal-box.is-dark-preview .public-modal-icon {
+  background: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+/* No second chrome bar inside public dark previews */
+.public-modal-box.is-dark-preview .md-header,
+.public-modal-box.is-dark-preview .code-header,
+.public-modal-box.is-dark-preview .public-code-meta {
+  display: none !important;
+}

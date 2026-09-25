@@ -683,6 +683,11 @@ function showPublicDownloadModal(token) {
       if (kind === "image" || kind === "video" || kind === "audio" || kind === "pdf" || kind === "markdown" || kind === "code") {
         modalIcon.style.display = "none";
         modalBox.classList.add("has-preview");
+        if (kind === "markdown" || kind === "code") {
+          modalBox.classList.add("is-dark-preview");
+          document.documentElement.classList.add("public-dark");
+          document.body.classList.add("public-dark");
+        }
         previewWrap.appendChild(loaderEl);
       } else {
         modalIcon.classList.remove("is-loading");
@@ -696,7 +701,7 @@ function showPublicDownloadModal(token) {
 
         if (previewUrlError || !previewUrlData) {
           hideLoader();
-          modalBox.classList.remove("has-preview");
+          modalBox.classList.remove("has-preview", "is-dark-preview"); document.documentElement.classList.remove("public-dark"); document.body.classList.remove("public-dark");
           modalIcon.style.display = "";
           modalIcon.classList.remove("is-loading");
           modalIcon.innerHTML = ICON_DOWNLOAD;
@@ -772,7 +777,7 @@ function showPublicDownloadModal(token) {
 
         if (previewUrlError || !previewUrlData || !window.pdfjsLib) {
           hideLoader();
-          modalBox.classList.remove("has-preview");
+          modalBox.classList.remove("has-preview", "is-dark-preview"); document.documentElement.classList.remove("public-dark"); document.body.classList.remove("public-dark");
           modalIcon.style.display = "";
           modalIcon.classList.remove("is-loading");
           modalIcon.innerHTML = ICON_DOWNLOAD;
@@ -797,7 +802,7 @@ function showPublicDownloadModal(token) {
 
         if (previewUrlError || !previewUrlData) {
           hideLoader();
-          modalBox.classList.remove("has-preview");
+          modalBox.classList.remove("has-preview", "is-dark-preview"); document.documentElement.classList.remove("public-dark"); document.body.classList.remove("public-dark");
           modalIcon.style.display = "";
           modalIcon.classList.remove("is-loading");
           modalIcon.innerHTML = ICON_DOWNLOAD;
@@ -822,7 +827,7 @@ function showPublicDownloadModal(token) {
 
         if (previewUrlError || !previewUrlData) {
           hideLoader();
-          modalBox.classList.remove("has-preview");
+          modalBox.classList.remove("has-preview", "is-dark-preview"); document.documentElement.classList.remove("public-dark"); document.body.classList.remove("public-dark");
           modalIcon.style.display = "";
           modalIcon.classList.remove("is-loading");
           modalIcon.innerHTML = ICON_DOWNLOAD;
