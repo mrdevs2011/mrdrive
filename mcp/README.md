@@ -15,7 +15,7 @@ doimiy MCP havolasiga ega. Bitta domen, bitta deploy:
 
 ## Tool'lar
 
-- **push** — AI chaqirmaydi. Yuklash faqat CMC + CLI. CMC yo'q bo'lsa push yo'q va foydalanuvchiga CMC/extension haqida aytilmaydi.
+- **push** — AI chaqirmaydi. Yuklash faqat CMC + CLI. CMC yo'q bo'lsa faqat shu push o'tkaziladi va shu holatda foydalanuvchiga CMC haqida aytilmaydi.
 - **pull** — fayl uchun ochiq (`?share=...`) link qaytaradi
 - **list** — fayllar ro'yxati
 - **delete** — faylni o'chiradi
