@@ -5580,7 +5580,7 @@ function mountMrAudioPlayer(host, opts) {
     // sliver at each edge so tips don't hard-clip against the canvas border
     // (previously faded across the ENTIRE width, which made the wave taper
     // to a point and look "cut off" instead of filling the player)
-    const EDGE = 0.05;
+    const EDGE = 0.16;
     if (nx < EDGE) {
       const t = nx / EDGE;
       return t * t * (3 - 2 * t);
@@ -5770,7 +5770,7 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq * 0.5 - phase * 1.1 + 2.1) * 0.18 +
           Math.sin(nx * Math.PI * 6.2 - phase * (2.8 + drift) + L * 0.55) * 0.10;
         const amp = h * 0.17 * th.amp * envs[i] * fms[i] * e;
-        let y = midY + th.baseOffset * h * 0.5 + wave * amp;
+        let y = midY + th.baseOffset * h * 0.5 * envs[i] + wave * amp;
         // no clamp — waves are free to run past the box in any direction
         ys[i] = y;
       }
