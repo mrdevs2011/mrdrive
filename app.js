@@ -5623,28 +5623,30 @@ function mountMrAudioPlayer(host, opts) {
     return smoothBins[b0] + (smoothBins[b1] - smoothBins[b0]) * (bi - b0);
   }
 
-  // 48 well-chosen threads (looks dense, runs smooth)
+  // Professional bundle: one blue family, thin strokes only (no filled
+  // blobs) — a fan of lanes that share close frequencies so they cross and
+  // weave like a vector wave illustration instead of a neon fluid blob.
   const THREADS = [];
   (function build() {
-    // 8 bright core
-    for (let i = 0; i < 8; i++) {
-      const t = i / 7;
-      THREADS.push({ amp: 0.5 + t * 0.15, speed: 0.12 + t * 0.08, freq: 2 + t, phase: t * 5, thick: 1.2 + t * 0.4, r: 240, g: 248, b: 255, a: 0.5 - t * 0.15, kind: 0 });
-    }
-    // 16 cyan silk
-    for (let i = 0; i < 16; i++) {
-      const t = i / 15;
-      THREADS.push({ amp: 0.6 + (i % 4) * 0.06, speed: 0.15 + t * 0.12, freq: 2.2 + t * 1.5, phase: t * 8 + 1, thick: 1.4 + (i % 3) * 0.3, r: 70 + (i % 5) * 15, g: 160 + (i % 4) * 12, b: 250, a: 0.28 - t * 0.08, kind: 1 });
-    }
-    // 12 royal membranes
-    for (let i = 0; i < 12; i++) {
-      const t = i / 11;
-      THREADS.push({ amp: 0.8 + (i % 3) * 0.05, speed: 0.12 + t * 0.1, freq: 1.6 + t * 1.2, phase: t * 6 + 3, thick: 2.5 + (i % 3) * 0.5, r: 30 + (i % 4) * 12, g: 80 + (i % 3) * 15, b: 210, a: 0.16 - t * 0.04, kind: 2 });
-    }
-    // 12 fine filaments
-    for (let i = 0; i < 12; i++) {
-      const t = i / 11;
-      THREADS.push({ amp: 0.35 + (i % 4) * 0.06, speed: 0.2 + t * 0.15, freq: 3.5 + t * 2, phase: t * 10 + 5, thick: 0.6, r: 140, g: 200, b: 255, a: 0.12, kind: 3 });
+    const N = 42;
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1);          // 0..1 across the bundle
+      const spread = (t - 0.5) * 2;   // -1..1, lane position from center
+      const edge = Math.abs(spread);  // 0 at center, 1 at outer lanes
+      THREADS.push({
+        amp: 0.5 + edge * 0.4,                 // outer lanes swing wider
+        speed: 0.10 + t * 0.05,
+        freq: 1.65 + (i % 3) * 0.16,           // close freqs → lanes cross, don't scatter
+        phase: spread * 2.3 + (i % 5) * 0.14,
+        thick: 0.85 + (1 - edge) * 0.55,       // slightly bolder near the core
+        // single blue family: lighter/cooler at the edges, deeper toward the center
+        r: 60 + edge * 70,
+        g: 130 + edge * 55,
+        b: 246,
+        a: 0.30 + (1 - edge) * 0.26,
+        kind: 1,
+        baseOffset: spread * 0.30,             // lane's own vertical position before the wave bends it
+      });
     }
   })();
 
@@ -5768,7 +5770,7 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * th.freq * 0.5 - phase * 1.1 + 2.1) * 0.18 +
           Math.sin(nx * Math.PI * 6.2 - phase * (2.8 + drift) + L * 0.55) * 0.10;
         const amp = h * 0.17 * th.amp * envs[i] * fms[i] * e;
-        let y = midY + wave * amp;
+        let y = midY + th.baseOffset * h * 0.5 + wave * amp;
         // no clamp — waves are free to run past the box in any direction
         ys[i] = y;
       }
