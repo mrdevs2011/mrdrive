@@ -604,7 +604,7 @@ header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
-  background: #fff;
+  background: var(--surface);
   color: var(--text-muted, #6b7280);
   font-size: 12.5px;
   padding: 6px 12px;
@@ -1064,7 +1064,7 @@ body.is-dragging-file .folder-tab-wrap {
   width: fit-content;
   max-width: min(420px, 100%);
   padding: 12px 18px 12px 12px;
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
   box-shadow: 0 12px 32px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.06);
@@ -1155,7 +1155,7 @@ body.is-dragging-file .folder-tab-wrap {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: #f4f4f5;
+  background: var(--neutral-soft);
   margin: 0 auto 18px;
   color: var(--primary);
 }
@@ -2527,11 +2527,11 @@ body.is-dragging-file .folder-tab-wrap {
 
 .selection-fab { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 2000;
   width: 58px; height: 58px; display: flex; align-items: center; justify-content: center; padding: 0;
-  color: var(--primary); background: #fff; border: 0; cursor: pointer;
+  color: var(--primary); background: var(--surface); border: 0; cursor: pointer;
   border-radius: 50%;
   box-shadow: 0 8px 24px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.12);
   animation: fab-in .18s ease-out; transition: transform .15s, background .15s; }
-.selection-fab:hover { background: #f4f4f5; box-shadow: 0 10px 28px rgba(0,0,0,.22), 0 3px 8px rgba(0,0,0,.14); transform: translateX(-50%) scale(1.06); }
+.selection-fab:hover { background: var(--bg); box-shadow: 0 10px 28px rgba(0,0,0,.22), 0 3px 8px rgba(0,0,0,.14); transform: translateX(-50%) scale(1.06); }
 .selection-fab:active { transform: translateX(-50%) scale(.96); }
 .selection-fab.busy { pointer-events: none; animation: fab-pulse .8s ease-in-out infinite; }
 @keyframes fab-in { from { opacity: 0; transform: translate(-50%, 14px) scale(.85); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
@@ -2587,7 +2587,7 @@ img.file-type-icon.file-thumb,
   object-fit: cover;
   object-position: center;
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border, #e4e4e7);
   color: transparent;
   opacity: 1 !important;
@@ -2688,7 +2688,7 @@ header, .toolbar {
   z-index: 12000;
   min-width: 200px;
   padding: 6px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06);
@@ -2831,7 +2831,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
     bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     z-index: 1500;
     padding: 6px;
-    background: #fff;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 18px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.06);
@@ -3635,3 +3635,99 @@ html[data-theme="dark"] .public-modal-box.has-preview .public-topbar-main::befor
 html[data-theme="dark"] .toast { background: var(--surface); color: var(--text); }
 html[data-theme="dark"] .selection-fab { background: var(--surface); }
 html[data-theme="dark"] .file-card { background: var(--surface); }
+
+
+/* ===== DARK MODE: whole app ===== */
+html[data-theme="dark"],
+html[data-theme="dark"] body,
+html[data-theme="dark"] .screen,
+html[data-theme="dark"] #app,
+html[data-theme="dark"] #app-screen,
+html[data-theme="dark"] #auth-screen,
+html[data-theme="dark"] #boot-loader,
+html[data-theme="dark"] .splash-scene {
+  background: var(--bg) !important;
+  color: var(--text);
+}
+html[data-theme="dark"] header,
+html[data-theme="dark"] .settings-modal,
+html[data-theme="dark"] .file-card,
+html[data-theme="dark"] .auth-box,
+html[data-theme="dark"] .modal-box,
+html[data-theme="dark"] .prompt-box,
+html[data-theme="dark"] .shortcuts-box,
+html[data-theme="dark"] .folder-picker-box,
+html[data-theme="dark"] .usage-box,
+html[data-theme="dark"] .file-context-menu,
+html[data-theme="dark"] .toast,
+html[data-theme="dark"] .selection-fab,
+html[data-theme="dark"] .search-wrap,
+html[data-theme="dark"] #search-input,
+html[data-theme="dark"] .folder-tab,
+html[data-theme="dark"] .gear-btn {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+html[data-theme="dark"] #search-input {
+  background: var(--bg);
+  color: var(--text);
+}
+html[data-theme="dark"] .file-list,
+html[data-theme="dark"] .toolbar,
+html[data-theme="dark"] .folder-tabs {
+  background: transparent;
+}
+html[data-theme="dark"] .file-thumb-pending {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+}
+html[data-theme="dark"] .file-card.file-card-new {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, #0b0e14);
+}
+html[data-theme="dark"] .annot-viewer,
+html[data-theme="dark"] .annot-workspace,
+html[data-theme="dark"] .annot-workspace.kind-image,
+html[data-theme="dark"] .annot-workspace.kind-video,
+html[data-theme="dark"] .annot-workspace.kind-audio,
+html[data-theme="dark"] .annot-viewer.kind-image .annot-page,
+html[data-theme="dark"] .public-modal-box,
+html[data-theme="dark"] .public-modal-backdrop,
+html[data-theme="dark"] #public-preview-wrap {
+  background: var(--bg) !important;
+}
+html[data-theme="dark"] .annot-topbar,
+html[data-theme="dark"] .public-topbar,
+html[data-theme="dark"] #public-info {
+  background: var(--preview-chrome) !important;
+  border-bottom-color: var(--preview-border) !important;
+  color: var(--preview-text) !important;
+}
+html[data-theme="dark"] .annot-btn,
+html[data-theme="dark"] .public-download-btn,
+html[data-theme="dark"] .public-fs-btn,
+html[data-theme="dark"] .public-edit-btn {
+  background: var(--preview-btn) !important;
+  border-color: var(--border) !important;
+  color: var(--preview-text) !important;
+}
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select,
+html[data-theme="dark"] .prompt-input {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+html[data-theme="dark"] .empty,
+html[data-theme="dark"] .file-meta,
+html[data-theme="dark"] .public-meta,
+html[data-theme="dark"] .public-status {
+  color: var(--text-muted);
+}
+html[data-theme="dark"] .kbd,
+html[data-theme="dark"] kbd {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
