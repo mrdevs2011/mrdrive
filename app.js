@@ -584,6 +584,8 @@ function getFileKind(filename) {
   if (AUDIO_EXTENSIONS.includes(ext)) return "audio";
   if (PDF_EXTENSIONS.includes(ext)) return "pdf";
   if (ext === "md" || ext === "markdown") return "markdown";
+  // Same text/code set as isViewable() — public share gets dark text preview
+  if (["txt","json","js","mjs","cjs","jsx","ts","tsx","css","html","xml","py","java","c","cpp","h","go","rs","sh","yml","yaml","toml","ini","log","csv"].includes(ext)) return "code";
   return "other";
 }
 
@@ -678,7 +680,7 @@ function showPublicDownloadModal(token) {
         loaderEl.classList.add("is-hiding");
         setTimeout(() => loaderEl.remove(), 220);
       };
-      if (kind === "image" || kind === "video" || kind === "audio" || kind === "pdf" || kind === "markdown") {
+      if (kind === "image" || kind === "video" || kind === "audio" || kind === "pdf" || kind === "markdown" || kind === "code") {
         modalIcon.style.display = "none";
         modalBox.classList.add("has-preview");
         previewWrap.appendChild(loaderEl);
@@ -813,6 +815,31 @@ function showPublicDownloadModal(token) {
             statusEl.textContent = "Markdown ko'rib bo'lmadi";
           }
         }
+      } else if (kind === "code") {
+        const { data: previewUrlData, error: previewUrlError } = await sb.storage
+          .from(BUCKET)
+          .createSignedUrl(data.storage_path, 3600);
+
+        if (previewUrlError || !previewUrlData) {
+          hideLoader();
+          modalBox.classList.remove("has-preview");
+          modalIcon.style.display = "";
+          modalIcon.classList.remove("is-loading");
+          modalIcon.innerHTML = ICON_DOWNLOAD;
+        } else {
+          try {
+            await renderPublicCode(previewUrlData.signedUrl, previewWrap, data.filename);
+            hideLoader();
+            statusEl.textContent = "";
+            setupPublicControlsFade(modalBox, previewWrap, true);
+            fsBtn.style.display = "flex";
+            setupPublicFullscreen(fsBtn, modalBox, previewWrap);
+          } catch (err) {
+            console.error(err);
+            hideLoader();
+            statusEl.textContent = "Matn ko'rib bo'lmadi";
+          }
+        }
       }
 
       downloadBtn.onclick = async () => {
@@ -912,6 +939,49 @@ async function renderPublicMarkdown(url, previewWrap, filename) {
     if (!c.classList.contains("public-loading")) c.remove();
   });
   previewWrap.appendChild(wrap);
+}
+
+async function renderPublicCode(url, previewWrap, filename) {
+  const res = await fetch(url);
+  const text = await res.text();
+  const extLower = (filename.split(".").pop() || "").toLowerCase();
+  const ext = extLower.toUpperCase() || "TXT";
+  const lines = text.split("\n").length;
+  const tooBig = text.length > CODE_HIGHLIGHT_MAX_CHARS;
+
+  const wrap = document.createElement("div");
+  wrap.className = "public-preview is-code";
+
+  const body = document.createElement("div");
+  body.className = "public-code-wrap";
+
+  const meta = document.createElement("div");
+  meta.className = "public-code-meta";
+  meta.innerHTML =
+    '<span class="code-lang-badge">' + escapeHtml(ext) + '</span>' +
+    '<span class="code-lines">' + lines + ' qator</span>' +
+    (tooBig ? '<span class="code-lines">rang ochirilgan - katta fayl</span>' : '');
+
+  const pre = document.createElement("pre");
+  const codeEl = document.createElement("code");
+  const lang = (typeof CODE_LANG_MAP !== "undefined" && CODE_LANG_MAP[extLower]) || null;
+  if (lang) codeEl.className = "language-" + lang;
+  codeEl.textContent = text;
+  pre.appendChild(codeEl);
+  body.appendChild(meta);
+  body.appendChild(pre);
+  wrap.appendChild(body);
+
+  Array.from(previewWrap.children).forEach((c) => {
+    if (!c.classList.contains("public-loading")) c.remove();
+  });
+  previewWrap.appendChild(wrap);
+
+  if (!tooBig && window.hljs) {
+    requestAnimationFrame(() => {
+      try { hljs.highlightElement(codeEl); } catch (e) { /* plain text ok */ }
+    });
+  }
 }
 
 async function renderPublicPdf(url, previewWrap) {
@@ -4814,6 +4884,7 @@ async function openAnnotationViewer(file, kind, opts) {
   updateAnnotNavButtons();
 
   setAnnotFilenamePath(file);
+  clearMdTopbarControls();
   scroll.innerHTML = "";
   scroll.className = "annot-scroll";
   viewer.style.display = "flex";
@@ -6267,6 +6338,7 @@ async function loadMarkdownForAnnot(url, scroll, loader, filename) {
   const wrap = document.createElement("div");
   wrap.className = "annot-md-wrap";
 
+  // Keep a hidden header only as a data holder (CSS hides it); controls live in topbar.
   const header = document.createElement("div");
   header.className = "code-header md-header";
   header.innerHTML = `
@@ -6274,7 +6346,6 @@ async function loadMarkdownForAnnot(url, scroll, loader, filename) {
     <span class="code-header-meta">
       <span class="code-lang-badge">MD</span>
       <span class="code-lines">${lines} qator</span>
-      <button type="button" class="md-toggle-btn" data-mode="preview">Manba</button>
     </span>
   `;
 
@@ -6292,7 +6363,6 @@ async function loadMarkdownForAnnot(url, scroll, loader, filename) {
   } catch (e) {
     preview.textContent = text;
   }
-  // Soften raw HTML risk: strip script tags if any slipped through
   sanitizeMdHtml(preview);
 
   const sourceWrap = document.createElement("div");
@@ -6311,7 +6381,34 @@ async function loadMarkdownForAnnot(url, scroll, loader, filename) {
   scroll.innerHTML = "";
   scroll.appendChild(wrap);
 
-  const btn = header.querySelector(".md-toggle-btn");
+  // Single top header: MD badge, line count, Preview/Manba in annot-topbar
+  mountMdTopbarControls(lines, preview, sourceWrap, codeEl);
+}
+
+function clearMdTopbarControls() {
+  const actions = document.querySelector(".annot-top-actions");
+  if (!actions) return;
+  actions.querySelectorAll(".md-topbar-meta").forEach((el) => el.remove());
+}
+
+function mountMdTopbarControls(lines, preview, sourceWrap, codeEl) {
+  clearMdTopbarControls();
+  const actions = document.querySelector(".annot-top-actions");
+  if (!actions) return;
+
+  const meta = document.createElement("span");
+  meta.className = "md-topbar-meta";
+  meta.innerHTML = `
+    <span class="code-lang-badge">MD</span>
+    <span class="code-lines">${lines} qator</span>
+    <button type="button" class="md-toggle-btn" data-mode="preview">Manba</button>
+  `;
+
+  // Insert before prev/next so it sits near the filename side of actions
+  const firstBtn = actions.querySelector("#annot-prev") || actions.firstChild;
+  actions.insertBefore(meta, firstBtn);
+
+  const btn = meta.querySelector(".md-toggle-btn");
   btn.addEventListener("click", () => {
     const isPreview = btn.dataset.mode === "preview";
     if (isPreview) {

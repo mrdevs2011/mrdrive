@@ -2147,16 +2147,10 @@ body.is-dragging-file .folder-tab-wrap {
   width: 100%;
   overflow: auto;
 }
-/* Second header hidden for code — top annot-topbar already shows the filename.
-   Markdown keeps its header (Preview/Manba toggle). */
-.annot-code-wrap .code-header:not(.md-header) {
-  display: none;
-}
+/* Second header hidden — top annot-topbar already shows filename + MD controls. */
+.annot-code-wrap .code-header,
 .annot-md-wrap .md-header {
-  display: flex !important;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: none !important;
 }
 .code-header-name {
   overflow: hidden;
@@ -3021,6 +3015,33 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   margin: 0 -16px 20px;
   padding: 12px 16px;
 }
+
+/* MD controls in the single top annot-topbar */
+.md-topbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+.annot-viewer.kind-markdown .md-topbar-meta .code-lang-badge {
+  background: rgba(255,255,255,0.08);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+.annot-viewer.kind-markdown .md-topbar-meta .code-lines {
+  color: #94a3b8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.annot-viewer.kind-markdown .md-topbar-meta .md-toggle-btn {
+  margin-left: 0;
+}
+
 .md-toggle-btn {
   appearance: none;
   border: 1px solid rgba(255,255,255,0.14);
@@ -3180,7 +3201,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   background: #0b0e14;
 }
 
-/* Public share markdown */
+/* Public share markdown — dark mode */
 .public-preview.is-markdown {
   width: 100%;
   max-width: 820px;
@@ -3189,6 +3210,10 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   box-sizing: border-box;
   overflow: auto;
   max-height: min(78vh, 900px);
+  align-items: stretch;
+  justify-content: flex-start;
+  display: block;
+  height: auto;
 }
 .public-preview.is-markdown .md-preview {
   color: #e6edf3;
@@ -3221,3 +3246,101 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   border-color: #334155 !important;
   color: #e2e8f0 !important;
 }
+
+/* Public share code/text — dark preview (same as account viewer) */
+.public-preview.is-code {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  background: #0b0e14;
+}
+.public-code-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: #0b0e14;
+  overflow: hidden;
+}
+.public-code-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: #0f1419;
+}
+.public-code-meta .code-lang-badge {
+  background: rgba(255,255,255,0.08);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+.public-code-meta .code-lines {
+  color: #94a3b8;
+  font-size: 12px;
+}
+.public-code-wrap pre {
+  margin: 0;
+  padding: 14px 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  font-family: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  letter-spacing: 0.1px;
+  color: #d8dee9;
+  background: #0b0e14;
+  tab-size: 2;
+}
+.public-code-wrap pre code.hljs {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  white-space: pre;
+  display: block;
+}
+.public-code-wrap pre code {
+  white-space: pre;
+  display: block;
+}
+.public-modal-box.has-preview:has(.public-preview.is-code) {
+  background: #0f1419 !important;
+}
+.public-modal-box.has-preview:has(.public-preview.is-code) .public-topbar,
+.public-modal-box.has-preview:has(.public-preview.is-code) #public-info {
+  background: #0f1419 !important;
+  border-bottom-color: rgba(255,255,255,0.08) !important;
+}
+.public-modal-box.has-preview:has(.public-preview.is-code) .public-topbar h2,
+.public-modal-box.has-preview:has(.public-preview.is-code) #public-filename,
+.public-modal-box.has-preview:has(.public-preview.is-code) .public-meta,
+.public-modal-box.has-preview:has(.public-preview.is-code) .public-status {
+  color: #e2e8f0 !important;
+}
+.public-modal-box.has-preview:has(.public-preview.is-code) #public-preview-wrap {
+  background: #0b0e14 !important;
+}
+.public-modal-box.has-preview:has(.public-preview.is-code) .public-download-btn,
+.public-modal-box.has-preview:has(.public-preview.is-code) .public-fs-btn,
+.public-modal-box.has-preview:has(.public-preview.is-code) .public-edit-btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+
