@@ -185,11 +185,12 @@ create policy "users update own folder"
   );
 
 -- ============================================================
--- 4) Index for resolve_mcp_user (O(1) token lookup)
--- Run as postgres/supabase SQL editor. Safe to re-run.
+-- 4) Index on auth.users — BEKOR
 -- ============================================================
-create index if not exists idx_auth_users_mcp_token
-  on auth.users ((lower(raw_user_meta_data->>'mcp_token')));
-
-create index if not exists idx_auth_users_mcp_name
-  on auth.users ((raw_user_meta_data->>'name'));
+-- Supabase auth.users tizim schemasi: oddiy SQL Editor (yoki anon role)
+-- CREATE INDEX qila olmaydi → ERROR 42501: must be owner of table users.
+-- Manual indeks TALAB QILINMAYDI. Token lookup to'liq RPC orqali:
+--   resolve_mcp_user(p_name, p_token)  — security definer
+--   mcp_token_matches(p_user_id)       — security definer
+-- RLS policy'lar shu funksiyalarga tayanadi. Indeks yo'qligi funksionallikni
+-- buzmaydi (auth.users kichik; lookup RPC ichida bajariladi).
