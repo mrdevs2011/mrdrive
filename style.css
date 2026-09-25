@@ -2147,9 +2147,16 @@ body.is-dragging-file .folder-tab-wrap {
   width: 100%;
   overflow: auto;
 }
-/* Second header hidden — top annot-topbar already shows the filename */
-.annot-code-wrap .code-header {
+/* Second header hidden for code — top annot-topbar already shows the filename.
+   Markdown keeps its header (Preview/Manba toggle). */
+.annot-code-wrap .code-header:not(.md-header) {
   display: none;
+}
+.annot-md-wrap .md-header {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .code-header-name {
   overflow: hidden;
@@ -2183,40 +2190,7 @@ body.is-dragging-file .folder-tab-wrap {
   display: none !important;
 }
 
-/* Text/code previews: header always dark (matches dark code workspace) */
-.annot-viewer.kind-code .annot-topbar {
-  background: #0f172a;
-  border-bottom-color: #1e293b;
-  color: #e2e8f0;
-}
-.annot-viewer.kind-code .annot-filename {
-  color: #e4e4e7;
-}
-.annot-viewer.kind-code .annot-filename .annot-path-prefix {
-  color: #a1a1aa;
-}
-.annot-viewer.kind-code .annot-filename .annot-path-name {
-  color: #fafafa;
-}
-.annot-viewer.kind-code .annot-filename:hover .annot-path-prefix,
-.annot-viewer.kind-code .annot-filename:hover .annot-path-name {
-  color: #fff;
-}
-.annot-viewer.kind-code .annot-btn {
-  background: #27272a;
-  border-color: #3f3f46;
-  color: #e4e4e7;
-}
-.annot-viewer.kind-code .annot-btn:hover,
-.annot-viewer.kind-code .annot-btn:active {
-  background: #3f3f46;
-  color: #fff;
-}
-.annot-viewer.kind-code .annot-btn.is-save {
-  background: #3f3f46;
-  border-color: #52525b;
-  color: #fff;
-}
+/* kind-code dark chrome: see unified kind-code + kind-markdown block below */
 
 /* Image/video toolbar inherits light theme variables */
 .annot-viewer.kind-image .annot-toolbar,
@@ -3142,21 +3116,68 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .md-preview .md-source pre {
   margin: 0;
 }
+/* Code + Markdown: fully dark chrome (no white surface/buttons) */
+.annot-viewer.kind-code .annot-topbar,
 .annot-viewer.kind-markdown .annot-topbar {
-  background: #0f1419;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-.annot-viewer.kind-markdown .annot-filename,
-.annot-viewer.kind-markdown .annot-filename .annot-path-prefix,
-.annot-viewer.kind-markdown .annot-filename .annot-path-name {
+  background: #0f1419 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
   color: #e2e8f0;
 }
-.annot-viewer.kind-markdown .annot-btn {
-  color: #cbd5e1;
+.annot-viewer.kind-code .annot-filename,
+.annot-viewer.kind-markdown .annot-filename {
+  color: #e4e4e7;
 }
+.annot-viewer.kind-code .annot-filename .annot-path-prefix,
+.annot-viewer.kind-markdown .annot-filename .annot-path-prefix {
+  color: #94a3b8 !important;
+}
+.annot-viewer.kind-code .annot-filename .annot-path-name,
+.annot-viewer.kind-markdown .annot-filename .annot-path-name {
+  color: #f1f5f9 !important;
+}
+.annot-viewer.kind-code .annot-filename:hover .annot-path-prefix,
+.annot-viewer.kind-code .annot-filename:hover .annot-path-name,
+.annot-viewer.kind-markdown .annot-filename:hover .annot-path-prefix,
+.annot-viewer.kind-markdown .annot-filename:hover .annot-path-name {
+  color: #fff !important;
+}
+.annot-viewer.kind-code .annot-btn,
+.annot-viewer.kind-markdown .annot-btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+.annot-viewer.kind-code .annot-btn:hover,
+.annot-viewer.kind-code .annot-btn:active,
 .annot-viewer.kind-markdown .annot-btn:hover,
 .annot-viewer.kind-markdown .annot-btn:active {
-  background: rgba(255,255,255,0.08);
+  background: #334155 !important;
+  color: #fff !important;
+}
+.annot-viewer.kind-code .annot-btn.is-save,
+.annot-viewer.kind-markdown .annot-btn.is-save {
+  background: #334155 !important;
+  border-color: #475569 !important;
+  color: #fff !important;
+}
+.annot-viewer.kind-markdown .annot-workspace,
+.annot-viewer.kind-code .annot-workspace {
+  background: #0b0e14 !important;
+}
+.annot-scroll.is-markdown {
+  background: #0b0e14 !important;
+  padding: 0 !important;
+  overflow: auto !important;
+  align-items: stretch !important;
+}
+.annot-md-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 100%;
+  background: #0b0e14;
 }
 
 /* Public share markdown */
@@ -3173,6 +3194,30 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   color: #e6edf3;
 }
 .public-modal-box.has-preview .public-preview.is-markdown {
-  background: #0f1419;
+  background: #0b0e14;
   border-radius: 12px;
+}
+.public-modal-box.has-preview:has(.public-preview.is-markdown) {
+  background: #0f1419 !important;
+}
+.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-topbar,
+.public-modal-box.has-preview:has(.public-preview.is-markdown) #public-info {
+  background: #0f1419 !important;
+  border-bottom-color: rgba(255,255,255,0.08) !important;
+}
+.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-topbar h2,
+.public-modal-box.has-preview:has(.public-preview.is-markdown) #public-filename,
+.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-meta,
+.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-status {
+  color: #e2e8f0 !important;
+}
+.public-modal-box.has-preview:has(.public-preview.is-markdown) #public-preview-wrap {
+  background: #0b0e14 !important;
+}
+.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-download-btn,
+.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-fs-btn,
+.public-modal-box.has-preview:has(.public-preview.is-markdown) .public-edit-btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
 }
