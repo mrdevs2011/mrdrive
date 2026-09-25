@@ -5592,23 +5592,29 @@ function mountMrAudioPlayer(host, opts) {
       const slot = (i + 0.5) / count;
       bumps.push({
         pos: Math.max(0.04, Math.min(0.96, slot + (Math.random() - 0.5) * (0.85 / count))),
-        height: 0.32 + Math.random() * 0.68,
-        width: 0.075 + Math.random() * 0.075,
+        height: 0.24 + Math.random() * 0.76,
+        width: 0.05 + Math.random() * 0.045,
       });
     }
     return bumps;
   }
   function macroHill(nx, bumps) {
+    // MAX across bumps, not a sum — summing nearby gaussians saturates to
+    // ~1 almost everywhere once they overlap even a little, which is why
+    // it kept looking like one flat oval. Taking the max instead means
+    // only the nearest peak matters at each point, so the gaps between
+    // peaks actually read as real valleys.
     let v = 0;
     for (let i = 0; i < bumps.length; i++) {
       const b = bumps[i];
       const d = nx - b.pos;
-      v += b.height * Math.exp(-(d * d) / (2 * b.width * b.width));
+      const contrib = b.height * Math.exp(-(d * d) / (2 * b.width * b.width));
+      if (contrib > v) v = contrib;
     }
-    return Math.min(1, v);
+    return v;
   }
-  const bumpsTop = buildBumps(6);
-  const bumpsBot = buildBumps(6);
+  const bumpsTop = buildBumps(5);
+  const bumpsBot = buildBumps(5);
   function combinedShape(bumps, arr, nx) {
     const macro = macroHill(nx, bumps);
     const real = sampleShape(arr, nx);
