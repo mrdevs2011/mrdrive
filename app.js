@@ -5520,7 +5520,10 @@ function mountMrAudioPlayer(host, opts) {
 
   function sizeCanvas() {
     const w = waveWrap.clientWidth || 400;
-    const h = 84;
+    // Draw area is much taller than the visible wave slot on purpose —
+    // no boundary/clamp anymore, so peaks are free to spill up over the
+    // title and down over the controls instead of being fenced in.
+    const h = 260;
     canvas.style.width = w + "px";
     canvas.style.height = h + "px";
     canvas.width = Math.round(w * dpr);
@@ -5711,12 +5714,8 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * 5.5 - phase * 3.1 + L * 0.7) * 0.09;
         const amp = h * 0.16 * th.amp * envs[i] * fms[i] * e;
         let y = midY + wave * amp;
-        const yPad = h * 0.06;
-        if (y < yPad) y = yPad;
-        if (y > h - yPad) y = h - yPad;
+        // no clamp — waves are free to run past the box in any direction
         let half = h * 0.032 * th.thick * envs[i] * (0.5 + fms[i] * 0.5) * e;
-        if (y - half < yPad) half = Math.max(0.5, y - yPad);
-        if (y + half > h - yPad) half = Math.max(0.5, h - yPad - y);
         yTop[i] = y - half;
         yBot[i] = y + half;
       }
@@ -5743,9 +5742,7 @@ function mountMrAudioPlayer(host, opts) {
           Math.sin(nx * Math.PI * 6.2 - phase * (2.8 + drift) + L * 0.55) * 0.10;
         const amp = h * 0.17 * th.amp * envs[i] * fms[i] * e;
         let y = midY + wave * amp;
-        const yPad = h * 0.06;
-        if (y < yPad) y = yPad;
-        if (y > h - yPad) y = h - yPad;
+        // no clamp — waves are free to run past the box in any direction
         ys[i] = y;
       }
       const a = th.a * (0.7 + e * 0.35);
