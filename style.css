@@ -2917,19 +2917,32 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 }
 .mr-audio-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #60a5fa, var(--accent) 55%, #7c9bff);
+  /* same blue family as the wave lines, not a generic accent gradient */
+  background: linear-gradient(90deg, #2563eb, #60a5fa 50%, #93c5fd);
+  background-size: 220% 100%;
+  background-position: 0% 0;
   width: 0%;
   border-radius: 999px;
   position: relative;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.55);
+  /* --e (0..1, set from JS each frame while playing) breathes the glow with
+     the music's loudness instead of a flat static shadow */
+  box-shadow: 0 0 calc(7px + var(--e, 0) * 11px) rgba(59, 130, 246, calc(0.4 + var(--e, 0) * 0.35));
   /* smooths out the per-frame JS width updates during normal playback —
      iOS-slider-like glide instead of a stepped/jumpy bar */
-  transition: width 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.15s ease;
 }
 /* while the user is actively dragging the thumb, kill the transition so
    the fill tracks the finger with zero lag (no springy delay while held) */
 .mr-audio-progress.is-dragging .mr-audio-progress-fill {
   transition: none;
+}
+/* a slow light travels along the played portion, echoing the flowing wave —
+   only runs while actually playing, so a paused bar stays calm */
+.mr-audio-progress.is-playing .mr-audio-progress-fill {
+  animation: mrProgressFlow 2.6s linear infinite;
+}
+@keyframes mrProgressFlow {
+  to { background-position: -220% 0; }
 }
 .mr-audio-progress-fill::after {
   content: "";
@@ -2939,11 +2952,11 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   transform: translateY(-50%) scale(1);
   width: 15px;
   height: 15px;
-  background: radial-gradient(circle at 32% 28%, #ffffff, #eef4ff 55%, #cfe0ff 100%);
+  background: radial-gradient(circle at 32% 28%, #ffffff, #eaf2ff 55%, #bfdcff 100%);
   border-radius: 50%;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18), 0 2px 8px rgba(15, 23, 42, 0.25);
+  box-shadow: 0 0 0 calc(4px + var(--e, 0) * 3px) rgba(59, 130, 246, calc(0.18 + var(--e, 0) * 0.22)), 0 2px 8px rgba(15, 23, 42, 0.25);
   /* iOS-style overshoot spring: pops past its target size then settles */
-  transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+  transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
 }
 .mr-audio-progress:hover .mr-audio-progress-fill::after {
   transform: translateY(-50%) scale(1.15);

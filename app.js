@@ -5812,6 +5812,10 @@ function mountMrAudioPlayer(host, opts) {
     }
     drawFluidWave(energy, false);
     if (!dragging && audio.duration) fill.style.width = (audio.currentTime / audio.duration) * 100 + "%";
+    // feed the progress bar's glow/flow-shimmer from the same loudness
+    // signal driving the wave, so the two feel like one instrument
+    const eNorm = Math.max(0, Math.min(1, (energy - 0.15) / 1.3));
+    pbox.style.setProperty("--e", eNorm.toFixed(3));
     const sec = Math.floor(audio.currentTime || 0);
     if (sec !== lastSec) { lastSec = sec; setTime(); }
   }
@@ -5895,12 +5899,18 @@ function mountMrAudioPlayer(host, opts) {
     if (sizeLabel) subEl.textContent = sizeLabel;
     if (typeof opts.onReady === "function") opts.onReady();
   });
-  audio.addEventListener("play", () => { setIcon(MR_AUDIO_ICONS.pause); draw(); });
-  audio.addEventListener("pause", () => { if (!audio.ended) setIcon(MR_AUDIO_ICONS.play); });
+  audio.addEventListener("play", () => { setIcon(MR_AUDIO_ICONS.pause); pbox.classList.add("is-playing"); draw(); });
+  audio.addEventListener("pause", () => {
+    if (!audio.ended) setIcon(MR_AUDIO_ICONS.play);
+    pbox.classList.remove("is-playing");
+    pbox.style.setProperty("--e", "0");
+  });
   audio.addEventListener("ended", () => {
     if (audio.loop) return;
     setIcon(MR_AUDIO_ICONS.play);
     fill.style.width = "0%";
+    pbox.classList.remove("is-playing");
+    pbox.style.setProperty("--e", "0");
     resetWave();
     setTime();
   });
