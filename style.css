@@ -1195,6 +1195,16 @@ body.is-dragging-file .folder-tab-wrap {
   text-align: left;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  /* Smooth collapse/expand so MD content gently slides without focus jump */
+  max-height: 80px;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition:
+    opacity 0.32s ease,
+    max-height 0.32s ease,
+    padding 0.32s ease,
+    border-width 0.32s ease,
+    transform 0.32s ease;
 }
 .public-modal-box.has-preview .public-topbar-main {
   display: flex;
@@ -1222,7 +1232,11 @@ body.is-dragging-file .folder-tab-wrap {
 .public-modal-box.controls-hidden .public-topbar,
 .public-modal-box.controls-hidden #public-info {
   opacity: 0;
-  transform: translateY(-6px);
+  max-height: 0;
+  padding: 0;
+  border-bottom-width: 0;
+  gap: 0;
+  transform: none;
   pointer-events: none;
 }
 
