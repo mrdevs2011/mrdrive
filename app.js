@@ -3823,11 +3823,16 @@ async function explainDeleteFailure(id) {
   const me = user.user_metadata?.username || user.user_metadata?.name || "this account";
 
   if (row.user_id !== user.id) {
+    if (roomMode && currentRoom && String(currentRoom.owner_id) === String(user.id)) {
+      return {
+        message:
+          "Xato: egasi sifatida o'chirish bloklandi. Supabase SQL da " +
+          "room owner delete files policy ishga tushirilganini tekshiring."
+      };
+    }
     return {
       message:
-        "Error: this file belongs to a DIFFERENT account, so you can't delete it.\n\n" +
-        `You are logged in as "${me}". It only shows up here because it is public. ` +
-        "Log in with the account that uploaded it."
+        "Bu fayl boshqa ishtirokchiga tegishli — faqat o'z fayllaringizni o'chira olasiz."
     };
   }
 
@@ -4340,6 +4345,12 @@ async function deleteFile(id, path, evt) {
   const clickX = evt ? evt.clientX : undefined;
   const clickY = evt ? evt.clientY : undefined;
 
+  const target = allFiles.find((f) => String(f.id) === String(id));
+  if (roomMode && target && !canDeleteFile(target)) {
+    showToast("O'chirishga ruxsat yo'q", "warning", "Faqat o'z fayllaringizni o'chira olasiz");
+    return;
+  }
+
   if (!(await showConfirm("Ushbu faylni o'chirishni xohlaysizmi?", "O'chirish", { skippable: true }))) return;
 
   // Prefer data-file-id; fall back to the button's parent card (event target)
@@ -4532,8 +4543,17 @@ function showFolderPicker(fileIds) {
 }
 
 async function deleteSelectedFiles(ids, clickX, clickY, opts) {
-  const list = (ids || []).map(String).filter(Boolean);
-  if (!list.length) return;
+  let list = (ids || []).map(String).filter(Boolean);
+  if (roomMode) {
+    list = list.filter((id) => {
+      const f = allFiles.find((x) => String(x.id) === String(id));
+      return f && canDeleteFile(f);
+    });
+  }
+  if (!list.length) {
+    showToast("O'chirishga ruxsat yo'q", "warning", "Faqat o'z fayllaringizni o'chira olasiz");
+    return;
+  }
 
   const msg =
     list.length === 1
@@ -7768,17 +7788,23 @@ document.getElementById("settings-shortcuts-btn")?.addEventListener("click", (e)
 // ==========================================
 
 function canDeleteFile(f) {
-  // Personal drive: list is already own files.
-  // Room: room owner can delete any; logged-in uploader can delete own uploads.
+  // Personal drive: own files only in list.
+  // Room owner -> delete ANY file in room.
+  // Room member -> read all, delete only own uploads.
+  // Anonymous -> read only.
   if (!f) return false;
   if (!roomMode) return true;
   const me = window.__mrSessionUserId;
   if (!me) return false;
   if (currentRoom && String(currentRoom.owner_id) === String(me)) return true;
-  // Own upload: path contains my user id (not anon guest rows attributed to owner)
   const path = f.storage_path || "";
   if (path.includes("/anon/")) return false;
   return String(f.user_id) === String(me);
+}
+
+function isRoomOwner() {
+  const me = window.__mrSessionUserId;
+  return !!(roomMode && currentRoom && me && String(currentRoom.owner_id) === String(me));
 }
 
 async function refreshSessionUserId() {

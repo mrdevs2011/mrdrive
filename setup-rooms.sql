@@ -159,3 +159,34 @@ create policy "rooms storage update"
 
 -- Optional: realtime for rooms table (Dashboard -> Replication if needed)
 -- alter publication supabase_realtime add table public.rooms;
+
+-- ============================================================
+-- 5) Room owner can delete ANY file in their room
+--    Members can delete only their own uploads (existing policy)
+-- ============================================================
+
+drop policy if exists "room owner delete files" on public.files;
+create policy "room owner delete files"
+  on public.files for delete
+  using (
+    room_id is not null
+    and exists (
+      select 1 from public.rooms r
+      where r.id = files.room_id
+        and r.owner_id = auth.uid()
+    )
+  );
+
+-- Storage: room owner may delete any object under rooms/{their_token}/
+drop policy if exists "room owner storage delete" on storage.objects;
+create policy "room owner storage delete"
+  on storage.objects for delete
+  using (
+    bucket_id = 'files'
+    and (storage.foldername(name))[1] = 'rooms'
+    and exists (
+      select 1 from public.rooms r
+      where r.public_token = (storage.foldername(name))[2]
+        and r.owner_id = auth.uid()
+    )
+  );
