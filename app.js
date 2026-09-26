@@ -2012,6 +2012,7 @@ async function runUpload(file, fileId, targetFolder, ui) {
           filesListReady = true;
           renderToolbar();
           renderFiles();
+          prefetchThumbUrls([row]).catch(() => {});
         }
       }
       ui.setDone();
@@ -7895,6 +7896,8 @@ async function loadRoomFiles(silent) {
   await refreshSessionUserId();
   renderToolbar();
   renderFiles();
+  // Square image previews in the list (same as personal drive)
+  prefetchThumbUrls(newFiles).catch((e) => console.warn("prefetchThumbUrls (room):", e));
 }
 
 async function loadMyRooms() {
