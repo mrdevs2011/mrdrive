@@ -3961,7 +3961,7 @@ const SWEEP_DURATION = 1500;   // wave of grains breaking loose — a touch long
 const COLLAPSE_DELAY = 1200;
 const FADE_IN_MS     = 180;    // canvas crossfades over the live card, grains stay still meanwhile — longer = imperceptible hand-off
 const TILE_SIZE      = 1.0;    // finer grain = reads as sand, not confetti
-const DRIFT_X        = 110;    // px: how far grains spread sideways (wide, airy scatter)
+const DRIFT_X        = 8;      // almost vertical — no slide-left
 const PUFF_Y         = 16;     // px: soft upward lift as a grain breaks loose, then it arcs outward and down
 const GRAVITY        = 0.00065; // gentler downward pull — grains drift down like dust, not snap like rocks
 const START_SPEED     = 0.012;  // px/ms: grains ease into motion instead of jumping
@@ -4448,6 +4448,36 @@ async function playDeleteDissolve(card, clickX, clickY, group) {
   });
 }
 
+
+function playDeleteCollapse(card) {
+  return new Promise((resolve) => {
+    if (!card || !card.isConnected) { resolve(); return; }
+    const start = card.getBoundingClientRect();
+    card.style.maxHeight = start.height + "px";
+    card.style.boxSizing = "border-box";
+    card.style.overflow = "hidden";
+    card.style.transform = "none";
+    void card.offsetHeight;
+    card.classList.add("is-deleting");
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      if (card.parentNode) card.remove();
+      resolve();
+    };
+    const onEnd = (e) => {
+      if (e.target !== card) return;
+      if (e.propertyName === "max-height" || e.propertyName === "opacity") {
+        card.removeEventListener("transitionend", onEnd);
+        done();
+      }
+    };
+    card.addEventListener("transitionend", onEnd);
+    setTimeout(done, 750);
+  });
+}
+
 async function deleteFile(id, path, evt) {
   const clickX = evt ? evt.clientX : undefined;
   const clickY = evt ? evt.clientY : undefined;
@@ -4465,7 +4495,7 @@ async function deleteFile(id, path, evt) {
   if (!card && evt && evt.target) {
     card = evt.target.closest(".file-card");
   }
-  if (card) await playDeleteDissolve(card, clickX, clickY);
+  if (card) await playDeleteCollapse(card);
 
   markLocalDelete(id);
   forgetThumb(id); // drop the cached image immediately — it must vanish together with the file
@@ -4674,7 +4704,7 @@ async function deleteSelectedFiles(ids, clickX, clickY, opts) {
     .filter(Boolean);
   if (cards.length) {
     const group = dissolveGroupInfo(cards); // one shared top->bottom wave for all selected files
-    await Promise.all(cards.map((c) => playDeleteDissolve(c, clickX, clickY, group)));
+    await Promise.all(cards.map((c) => playDeleteCollapse(c)));
   }
 
   list.forEach((id) => markLocalDelete(id));
