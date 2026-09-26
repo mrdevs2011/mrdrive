@@ -324,6 +324,18 @@ html[data-theme="dark"] .sp-ic-audio, html.theme-dark .sp-ic-audio { color: #f47
   width: 360px;
   text-align: center;
 }
+.brand-logo {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.logo .brand-logo {
+  width: 48px;
+  height: 48px;
+  filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--accent) 22%, transparent));
+}
 .logo { display: flex; justify-content: center; margin-bottom: 14px; }
 .auth-box h1 { margin-bottom: 22px; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
 .form-title { color: var(--text-muted); margin-bottom: 18px; font-size: 14px; font-weight: 500; }
