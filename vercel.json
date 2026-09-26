@@ -5,27 +5,11 @@
     },
     "api/upload.js": {
       "maxDuration": 60
-    },
-    "api/room-upload.js": {
-      "maxDuration": 60
     }
   },
   "rewrites": [
-    {
-      "source": "/video",
-      "destination": "/video/index.html"
-    },
-    {
-      "source": "/video/",
-      "destination": "/video/index.html"
-    },
-    {
-      "source": "/f/(.*)",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/r/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/video", "destination": "/video/index.html" },
+    { "source": "/video/", "destination": "/video/index.html" },
+    { "source": "/f/(.*)", "destination": "/index.html" }
   ]
 }

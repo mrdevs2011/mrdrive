@@ -248,12 +248,6 @@ let allFolders = [];
 let newlyCreatedFolderId = null; // for appear animation
 let currentSearch = "";
 let currentFolder = null;
-
-// Public Rooms
-const ROOMS_TABLE = "rooms";
-let currentRoom = null; // { id, name, public_token, owner_id, ... } when in room view
-let myRooms = []; // rooms owned by current user
-let roomMode = false; // true when viewing /r/TOKEN
 let selectedFileIds = new Set(); // ids currently selected via click/marquee
 let lastClickedFileId = null; // for shift-click range select
 let kbCursorId = null; // card the arrow keys are standing on (keyboard shortcuts)
@@ -465,8 +459,6 @@ function applyPathAfterLoad(opts) {
 let realtimeChannel = null;
 let realtimeDebounce = null;
 let pollTimer = null;
-let roomLifeChannel = null;
-let roomGoneLeaving = false;
 const POLL_MS = 2000; // fallback refresh interval, no Supabase config needed
 
 // ==========================================
@@ -482,12 +474,9 @@ const POLL_MS = 2000; // fallback refresh interval, no Supabase config needed
 //      polling still covers you. Safe to leave in either way.
 function startPolling(userId) {
   stopPolling();
-  // userId yoki room token — roomda anonim ham poll qiladi
-  if (!userId && !(roomMode && currentRoom)) return;
+  if (!userId) return;
   pollTimer = setInterval(() => {
-    if (document.visibilityState !== "visible") return;
-    if (roomMode) checkRoomStillExists();
-    loadFiles(true);
+    if (document.visibilityState === "visible") loadFiles(true);
   }, POLL_MS);
 }
 
@@ -503,6 +492,7 @@ function setupRealtime(userId) {
     sb.removeChannel(realtimeChannel);
     realtimeChannel = null;
   }
+  if (!userId) return;
 
   const scheduleReload = () => {
     // Debounce so a burst of changes (e.g. bulk upload) triggers one reload.
@@ -510,28 +500,6 @@ function setupRealtime(userId) {
     clearTimeout(realtimeDebounce);
     realtimeDebounce = setTimeout(() => loadFiles(!!filesListReady), 50);
   };
-
-  // Public room: listen by room_id (works for owner + guests when publication enabled)
-  if (roomMode && currentRoom) {
-    const chName = `mrdrive-room-${currentRoom.id}`;
-    let ch = sb.channel(chName).on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: TABLE, filter: `room_id=eq.${currentRoom.id}` },
-      scheduleReload
-    );
-    // Owner also gets personal folder updates if logged in
-    if (userId) {
-      ch = ch.on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: FOLDERS_TABLE, filter: `user_id=eq.${userId}` },
-        scheduleReload
-      );
-    }
-    realtimeChannel = ch.subscribe();
-    return;
-  }
-
-  if (!userId) return;
 
   realtimeChannel = sb
     .channel(`mrdrive-changes-${userId}`)
@@ -555,12 +523,6 @@ function setupRealtime(userId) {
 const urlParams = new URLSearchParams(window.location.search);
 const shareToken = urlParams.get("share");
 
-function parseRoomTokenFromPath() {
-  const m = (window.location.pathname || "").match(/^\/r\/([a-f0-9]{32})\/?$/i);
-  return m ? m[1].toLowerCase() : null;
-}
-const roomTokenFromUrl = parseRoomTokenFromPath();
-
 /** Splash (3s) davomida orqa fonda yuklab qo'yiladigan statik narsalar:
  * ikonlar, Claude logo, PDF worker. Fayl ro'yxati va rasm thumbnaillari
  * loadFiles() ichida yuklanadi (prefetchThumbUrls / prefetchDragUrls). */
@@ -583,20 +545,12 @@ if (shareToken) {
   if (window.MRSplash) window.MRSplash.skip(); else bootLoader.style.display = "none";
   if (appScreen) appScreen.style.display = "none";
   showPublicDownloadModal(shareToken);
-} else if (roomTokenFromUrl) {
-  // Public room: login ixtiyoriy. Guest = theme toggle, qolgan route = login.
-  if (window.MRSplash) window.MRSplash.skip(); else bootLoader.style.display = "none";
-  if (appScreen) appScreen.style.display = "block";
-  roomMode = true;
-  applyGuestRestrictions();
-  enterRoomByToken(roomTokenFromUrl);
 } else {
   sb.auth.getSession().then(({ data: { session } }) => {
     if (session) {
       // App splash ORQASIDA render bo'ladi (splash opaque, ustida turadi):
       // fayllar, papkalar, thumbnaillar, ikonlar — hammasi 2 soniya ichida
       // yuklanib, splash tugaganda tayyor holda ochiladi.
-      window.__mrSessionUserId = session.user.id;
       if (appScreen) appScreen.style.display = "block";
       preloadBootAssets();
       const parsed = parseAppPath(window.location.pathname);
@@ -648,6 +602,7 @@ function showPublicDownloadModal(token) {
             <div class="public-topbar-text">
               <h2 id="public-filename">Loading…</h2>
               <p id="public-meta" class="public-meta"></p>
+              <a class="public-brand-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer" title="MRdrive">MRdrive</a>
             </div>
           </div>
           <div class="public-actions">
@@ -660,7 +615,6 @@ function showPublicDownloadModal(token) {
           <p id="public-status" class="public-status"></p>
         </div>
         <div id="public-preview-wrap"></div>
-        <a class="public-brand-link public-brand-footer" href="https://mrdrive.vercel.app" rel="noopener noreferrer" title="MRdrive">MRdrive</a>
       </div>
     </div>
   `;
@@ -707,13 +661,10 @@ function showPublicDownloadModal(token) {
       }
 
       filenameEl.textContent = data.filename;
-      let meta = `Yaratilgan: ${formatDate(data.uploaded_at)}`;
+      let meta = `${formatSize(data.size)} · ${formatDate(data.uploaded_at)}`;
       if (data.expires_at) {
-        meta += ` · <span class="public-expiry-inline">Amal qiladi: ${formatDate(data.expires_at)}</span>`;
-      } else {
-        meta += ` · <span class="public-expiry-inline">Amal qiladi: muddatsiz</span>`;
+        meta += ` · <span class="public-expiry-inline">amal qilish: ${formatDate(data.expires_at)}</span>`;
       }
-      meta += ` · ${formatSize(data.size)}`;
       metaEl.innerHTML = meta;
 
       downloadBtn.disabled = false;
@@ -1432,7 +1383,7 @@ function renderStorageUsage(u, note) {
   const STORAGE_LIMIT_BYTES = Number(u.limit) > 0 ? Number(u.limit) : DEFAULT_STORAGE_LIMIT_BYTES;
   const total = (u.video || 0) + (u.image || 0) + (u.file || 0);
   const pct = (total / STORAGE_LIMIT_BYTES) * 100;
-  const pctText = (pct > 0 && pct < 0.1 ? 0.1 : (pct >= 10 ? Math.round(pct) : Number(pct.toFixed(1)))) + "%";
+  const pctText = total > 0 && pct < 0.1 ? "<0.1%" : (pct >= 10 ? Math.round(pct) : pct.toFixed(1)) + "%";
   const $ = (id) => document.getElementById(id);
 
   const pctEl = $("usage-pct");
@@ -1510,122 +1461,8 @@ function applyTheme(theme) {
   if (cb) cb.checked = t === "dark";
   document.documentElement.classList.toggle("public-dark", t === "dark");
   if (document.body) document.body.classList.toggle("public-dark", t === "dark");
-  const guestToggle = document.getElementById("theme-toggle-btn");
-  if (guestToggle && typeof paintGuestThemeToggle === "function") paintGuestThemeToggle(guestToggle);
 }
 applyTheme(getTheme());
-
-(function bindBrandHome() {
-  function goHome(e) {
-    if (e) e.preventDefault();
-    try {
-      if (annotState && annotState.open && typeof closeAnnotationViewer === "function") {
-        closeAnnotationViewer({ skipUrl: true });
-      }
-    } catch (_) {}
-    location.assign("/");
-  }
-  function wire(el) {
-    if (!el || el.dataset.homeWired) return;
-    el.dataset.homeWired = "1";
-    el.setAttribute("role", "link");
-    el.setAttribute("title", "MRdrive — bosh sahifa");
-    el.style.cursor = "pointer";
-    el.addEventListener("click", goHome);
-  }
-  wire(document.querySelector("#app .brand"));
-  document.querySelectorAll("header .brand-logo, .brand .brand-logo").forEach(wire);
-})();
-
-/** Ro'yxatdan o'tmagan / sessiyasiz user: gear UI ham, console orqali ham yopiq. */
-function isRegisteredSession() {
-  return !!(window.__mrSessionUserId);
-}
-
-const ICON_THEME_SUN = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
-const ICON_THEME_MOON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 14.3A8.5 8.5 0 0 1 9.7 3 7 7 0 1 0 21 14.3z"/></svg>`;
-
-function paintGuestThemeToggle(btn) {
-  if (!btn) return;
-  const dark = getTheme() === "dark";
-  btn.innerHTML = dark ? ICON_THEME_SUN : ICON_THEME_MOON;
-  btn.title = dark ? "Yorug' rejim" : "Qorong'u rejim";
-  btn.setAttribute("aria-label", btn.title);
-}
-
-function stripGuestSettingsDom() {
-  const modal = document.getElementById("settings-modal");
-  if (modal) {
-    modal.hidden = true;
-    modal.setAttribute("data-guest-locked", "1");
-  }
-  const gearBtn = document.getElementById("gear-btn");
-  if (gearBtn) {
-    gearBtn.hidden = true;
-    gearBtn.classList.remove("open");
-  }
-  let btn = document.getElementById("theme-toggle-btn");
-  if (!btn) {
-    btn = document.createElement("button");
-    btn.type = "button";
-    btn.id = "theme-toggle-btn";
-    btn.className = "gear-btn theme-toggle-btn";
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      applyTheme(getTheme() === "dark" ? "light" : "dark");
-    });
-    const wrap = document.querySelector(".settings-wrap") || document.querySelector(".header-right");
-    if (wrap) wrap.appendChild(btn);
-    else if (gearBtn && gearBtn.parentNode) gearBtn.parentNode.appendChild(btn);
-  }
-  paintGuestThemeToggle(btn);
-}
-
-function isPublicRoomGuestView() {
-  return !!(roomMode || roomTokenFromUrl);
-}
-
-function restoreRegisteredChrome() {
-  const toggle = document.getElementById("theme-toggle-btn");
-  if (toggle) toggle.remove();
-  const gearBtn = document.getElementById("gear-btn");
-  const modal = document.getElementById("settings-modal");
-  if (gearBtn) {
-    gearBtn.hidden = false;
-    gearBtn.removeAttribute("hidden");
-    gearBtn.style.display = "";
-  }
-  if (modal) modal.removeAttribute("data-guest-locked");
-  window.__mrGuestLocked = false;
-}
-
-function applyGuestRestrictions() {
-  if (isRegisteredSession()) {
-    restoreRegisteredChrome();
-    return;
-  }
-  // Roomga loginisiz kirganlar: gear o'rnida theme toggle.
-  // Qolganlar (bosh sahifa, papka, drive): login screen.
-  if (!isPublicRoomGuestView() && !shareToken) {
-    location.replace("/login/");
-    return;
-  }
-  if (shareToken) return;
-  stripGuestSettingsDom();
-  window.__mrGuestLocked = true;
-}
-
-function requireRegistered(action) {
-  if (isRegisteredSession()) return true;
-  if (!isPublicRoomGuestView()) {
-    location.replace("/login/");
-    return false;
-  }
-  applyGuestRestrictions();
-  showToast("Faqat hisob bilan", "warning", "Bu amal uchun ro'yxatdan o'ting.");
-  return false;
-}
 
 // Gear icon → sozlamalar modal (Claude ga ulang + Account + Log out)
 (function initSettingsMenu() {
@@ -1644,24 +1481,17 @@ function requireRegistered(action) {
     modal.hidden = true;
     gearBtn.classList.remove("open");
     if (accountPanel) accountPanel.hidden = true;
-    const roomsPanel = document.getElementById("settings-rooms-panel");
-    if (roomsPanel) roomsPanel.hidden = true;
   }
   const darkCb = document.getElementById("settings-dark-mode");
   darkCb?.addEventListener("change", () => applyTheme(darkCb.checked ? "dark" : "light"));
   if (darkCb) darkCb.checked = getTheme() === "dark";
 
   function openSettings() {
-    if (!isRegisteredSession()) {
-      applyGuestRestrictions();
-      return;
-    }
     if (skipDeleteCb) skipDeleteCb.checked = isSkipDeleteConfirm();
     if (darkCb) darkCb.checked = getTheme() === "dark";
     modal.hidden = false;
     gearBtn.classList.add("open");
     refreshStorageUsage();
-    if (typeof loadMyRooms === "function") loadMyRooms();
   }
 
   gearBtn.addEventListener("click", (e) => {
@@ -1681,29 +1511,8 @@ function requireRegistered(action) {
         if (accountNameEl) accountNameEl.textContent = meta.name || "—";
         if (accountUsernameEl) accountUsernameEl.textContent = meta.username || "—";
       });
-      // close rooms panel when opening account
-      const roomsPanel = document.getElementById("settings-rooms-panel");
-      if (roomsPanel) roomsPanel.hidden = true;
     }
     accountPanel.hidden = !opening;
-  });
-
-  const roomsBtn = document.getElementById("settings-rooms-btn");
-  const roomsPanel = document.getElementById("settings-rooms-panel");
-  const roomsCreateBtn = document.getElementById("settings-rooms-create-btn");
-  roomsBtn?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (!roomsPanel) return;
-    const opening = roomsPanel.hidden;
-    if (opening) {
-      if (accountPanel) accountPanel.hidden = true;
-      if (typeof loadMyRooms === "function") loadMyRooms();
-    }
-    roomsPanel.hidden = !opening;
-  });
-  roomsCreateBtn?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    createRoom();
   });
 
   logoutBtn?.addEventListener("click", () => {
@@ -1724,28 +1533,9 @@ sb.auth.onAuthStateChange((event, session) => {
   // Splash paytida boot oqimi hamma narsani o'zi yuklaydi — takror yuklamaymiz
   // (lekin sign-out bo'lsa baribir login'ga o'tamiz).
   if (splashActive() && session) return;
-  // Public share / room — login majburiy emas (ko'rish uchun)
+  // Public share link — login majburiy emas
   if (shareToken) return;
-  if (roomMode || roomTokenFromUrl) {
-    if (session) {
-      window.__mrSessionUserId = session.user.id;
-      restoreRegisteredChrome();
-      if (currentRoom) {
-        updateRoomHeader();
-        loadRoomFiles();
-      }
-    } else {
-      window.__mrSessionUserId = null;
-      applyGuestRestrictions();
-      if (currentRoom) {
-        updateRoomHeader();
-        loadRoomFiles();
-      }
-    }
-    return;
-  }
   if (session) {
-    window.__mrSessionUserId = session.user.id;
     if (appScreen) appScreen.style.display = "block";
     // TOKEN_REFRESHED / INITIAL_SESSION tab-focus da JWT flicker qilmasin:
     // ro'yxat allaqachon bor bo'lsa faqat silent refresh.
@@ -2043,53 +1833,6 @@ function uploadFile(file, folder) {
   });
 }
 
-async function ensureAuthSession() {
-  let { data: { session } } = await sb.auth.getSession();
-  if (session?.user) return session;
-  // Local session yo'q / eskirgan — bir marta refresh urinib ko'ramiz
-  try {
-    const { data, error } = await sb.auth.refreshSession();
-    if (!error && data?.session?.user) return data.session;
-  } catch (_) {}
-  return null;
-}
-
-function uploadRoomAnon(file, roomToken, guestName, onProgress) {
-  let xhr = null;
-  const promise = new Promise((resolve, reject) => {
-    xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/room-upload");
-    xhr.setRequestHeader("X-Room-Token", roomToken);
-    xhr.setRequestHeader("X-Filename", file.name);
-    if (guestName) xhr.setRequestHeader("X-Guest-Name", guestName);
-    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(e.loaded / e.total);
-    };
-    xhr.onload = () => {
-      let body = null;
-      try { body = JSON.parse(xhr.responseText); } catch (_) {}
-      if (xhr.status >= 200 && xhr.status < 300) return resolve(body);
-      const msg = (body && body.error) || `HTTP ${xhr.status}`;
-      const err = new Error(msg);
-      err.retryable = xhr.status >= 500 || xhr.status === 429 || xhr.status === 408;
-      reject(err);
-    };
-    xhr.onerror = () => { const e = new Error("Network error"); e.retryable = true; reject(e); };
-    xhr.onabort = () => {
-      const e = new Error("Upload cancelled");
-      e.cancelled = true;
-      reject(e);
-    };
-    xhr.send(file);
-  });
-  return {
-    promise,
-    abort() { if (xhr) try { xhr.abort(); } catch (_) {} }
-  };
-}
-
 async function runUpload(file, fileId, targetFolder, ui) {
   let keepBlocked = false;
   let path = null;
@@ -2097,71 +1840,14 @@ async function runUpload(file, fileId, targetFolder, ui) {
   try {
     if (ui.isCancelled()) return;
 
-    const session = await ensureAuthSession();
-
-    // Public room: login ixtiyoriy — anonim ham yuklay oladi
-    if (roomMode && currentRoom && !session?.user) {
-      ui.setPercent(0);
-      let result = null;
-      for (let attempt = 1; ; attempt++) {
-        if (ui.isCancelled()) return;
-        try {
-          const up = uploadRoomAnon(
-            file,
-            currentRoom.public_token,
-            "Anonim",
-            (ratio) => {
-              if (ui.isCancelled()) return;
-              if (ratio >= 1) ui.setSaving();
-              else ui.setPercent(ratio * 100);
-            }
-          );
-          ui.setAbort(() => up.abort());
-          result = await up.promise;
-          break;
-        } catch (err) {
-          if (err && err.cancelled) return;
-          if (!err.retryable || attempt >= UPLOAD_MAX_ATTEMPTS) throw err;
-          if (ui.isCancelled()) return;
-          ui.setPercent(0);
-          await sleep(600 * attempt);
-        }
-      }
-      if (ui.isCancelled()) return;
-      ui.setSaving();
-      markLocalUpload(file.name, file.size);
-      // Optimistic: API returned the row — show immediately, then soft-refresh
-      if (result && result.file && result.file.id) {
-        const row = result.file;
-        if (!allFiles.some((f) => String(f.id) === String(row.id))) {
-          allFiles = [row, ...allFiles];
-          filesListReady = true;
-          renderToolbar();
-          renderFiles();
-          prefetchThumbUrls([row]).catch(() => {});
-        }
-      }
-      ui.setDone();
-      keepBlocked = true;
-      batchStats.ok++;
-      scheduleLoadFiles();
-      return;
-    }
-
-    if (!session?.user) {
-      showToast("Login kerak", "warning", "Shaxsiy diskka yuklash uchun kiring");
-      throw new Error("Login qilinmagan — yuklash uchun kiring");
-    }
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error("Not logged in");
     const user = session.user;
 
     // Unique even for same-named files added in the same millisecond.
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const rand = Math.random().toString(36).slice(2, 8);
-    if (roomMode && currentRoom) {
-      path = `rooms/${currentRoom.public_token}/${user.id}/${Date.now()}_${rand}_${safeName}`;
-    } else {
-      path = `${user.id}/${Date.now()}_${rand}_${safeName}`;
-    }
+    path = `${user.id}/${Date.now()}_${rand}_${safeName}`;
 
     ui.setPercent(0);
     for (let attempt = 1; ; attempt++) {
@@ -2196,14 +1882,7 @@ async function runUpload(file, fileId, targetFolder, ui) {
       storage_path: path,
       size: file.size
     };
-    if (roomMode && currentRoom) {
-      insertData.room_id = currentRoom.id;
-      insertData.uploader_username =
-        user.user_metadata?.username || user.user_metadata?.name || "user";
-    }
-    if (targetFolder) {
-      insertData.folder = targetFolder;
-    }
+    if (targetFolder) insertData.folder = targetFolder;
 
     const { error: dbError } = await sb.from(TABLE).insert(insertData);
     if (dbError) {
@@ -2455,15 +2134,15 @@ async function ensureFolderExists(name) {
     id: "temp-" + Date.now(),
     name,
     user_id: user.id,
-    created_at: new Date().toISOString(),
-    room_id: (roomMode && currentRoom) ? currentRoom.id : null
+    created_at: new Date().toISOString()
   };
   allFolders.push(optimisticFolder);
   renderToolbar();
 
-  const insertFolder = { user_id: user.id, name };
-  if (roomMode && currentRoom) insertFolder.room_id = currentRoom.id;
-  const { data, error } = await sb.from(FOLDERS_TABLE).insert(insertFolder).select().single();
+  const { data, error } = await sb.from(FOLDERS_TABLE).insert({
+    user_id: user.id,
+    name
+  }).select().single();
 
   if (error) {
     allFolders = allFolders.filter(f => f.id !== optimisticFolder.id);
@@ -2551,12 +2230,6 @@ function isAuthJwtError(err) {
 }
 
 async function loadFiles(silent) {
-  // Public room: session optional — always refresh via RPC
-  if (roomMode && currentRoom) {
-    await loadRoomFiles(silent);
-    return;
-  }
-
   // getSession = local only (no network). getUser() hits Auth API and races
   // with tab-focus token refresh → brief "Invalid JWT" flashes.
   let session = (await sb.auth.getSession()).data?.session;
@@ -2568,8 +2241,10 @@ async function loadFiles(silent) {
   }
   let user = session.user;
 
+  // Only MY rows. Without this filter the "anyone can read public files" policy
+  // also returns other accounts' public files, which then show up (undeletable) in this drive.
   let [filesRes, foldersRes] = await Promise.all([
-    sb.from(TABLE).select("*").eq("user_id", user.id).is("room_id", null).order("uploaded_at", { ascending: false }),
+    sb.from(TABLE).select("*").eq("user_id", user.id).order("uploaded_at", { ascending: false }),
     sb.from(FOLDERS_TABLE).select("*").eq("user_id", user.id).order("created_at", { ascending: true })
   ]);
 
@@ -2581,7 +2256,7 @@ async function loadFiles(silent) {
         session = data.session;
         user = session.user;
         [filesRes, foldersRes] = await Promise.all([
-          sb.from(TABLE).select("*").eq("user_id", user.id).is("room_id", null).order("uploaded_at", { ascending: false }),
+          sb.from(TABLE).select("*").eq("user_id", user.id).order("uploaded_at", { ascending: false }),
           sb.from(FOLDERS_TABLE).select("*").eq("user_id", user.id).order("created_at", { ascending: true })
         ]);
       }
@@ -2650,25 +2325,18 @@ async function loadFiles(silent) {
 }
 
 function renderToolbar() {
-  const canManageFolders = !roomMode || isRegisteredSession();
-  const searchPlaceholder = (roomMode && currentRoom)
-    ? "Roomdan qidirish..."
-    : "Fayllarni qidirish...";
-
   let toolbar = document.getElementById("toolbar");
   if (!toolbar) {
     toolbar = document.createElement("div");
     toolbar.id = "toolbar";
     toolbar.className = "toolbar";
-    const dz = document.getElementById("dropzone") || dropzone;
-    if (dz && dz.parentNode) dz.parentNode.insertBefore(toolbar, dz.nextSibling);
-    else document.getElementById("app")?.appendChild(toolbar);
+    dropzone.parentNode.insertBefore(toolbar, dropzone.nextSibling);
   }
 
   toolbar.innerHTML = `
     <div class="search-wrap">
       <span class="search-icon">${ICON_SEARCH}</span>
-      <input type="text" id="search-input" placeholder="${escapeHtml(searchPlaceholder)}" value="${escapeHtml(currentSearch)}" />
+      <input type="text" id="search-input" placeholder="Fayllarni qidirish..." value="${escapeHtml(currentSearch)}" />
     </div>
     <div class="folder-tabs">
       <button class="folder-tab ${currentFolder === null ? 'active' : ''}" data-folder="" onclick="setFolder(null)" title="Faylni papkadan chiqarish uchun shu yerga tashlang">
@@ -2679,12 +2347,12 @@ function renderToolbar() {
           <button class="folder-tab ${currentFolder === f.name ? 'active' : ''}" data-folder="${escapeHtml(f.name)}" onclick="setFolder('${escapeJs(f.name)}')" title="Faylni shu papkaga tashlang">
             ${ICON_FOLDER} ${escapeHtml(f.name)}
           </button>
-          ${canManageFolders ? `<button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}', event)" title="Papkani o'chir">
+          <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}', event)" title="Papkani o'chir">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>` : ""}
+          </button>
         </div>
       `).join("")}
-      ${canManageFolders ? `<button class="folder-tab new-folder-btn" onclick="createFolder()">+ Folder</button>` : ""}
+      <button class="folder-tab new-folder-btn" onclick="createFolder()">+ Folder</button>
     </div>
   `;
 
@@ -3018,7 +2686,6 @@ window.addEventListener("popstate", (e) => {
 });
 
 async function createFolder(fileIds, opts) {
-  if (!requireRegistered("folder")) return;
   const dropIds = Array.isArray(fileIds) ? fileIds.map(String) : null; // set when files were dropped on "+ Folder"
   const name = await showPrompt(dropIds ? "Papka nomini kiriting" : "Yangi papka", {
     okLabel: dropIds ? "Yaratish va ko'chirish" : "Yaratish",
@@ -3040,8 +2707,7 @@ async function createFolder(fileIds, opts) {
     id: "temp-" + Date.now(),
     name: trimmed,
     user_id: user.id,
-    created_at: new Date().toISOString(),
-    room_id: (roomMode && currentRoom) ? currentRoom.id : null
+    created_at: new Date().toISOString()
   };
   allFolders.push(optimisticFolder);
   newlyCreatedFolderId = optimisticFolder.id;
@@ -3061,9 +2727,10 @@ async function createFolder(fileIds, opts) {
   }
 
   // Background sync to database
-  const insertFolder = { user_id: user.id, name: trimmed };
-  if (roomMode && currentRoom) insertFolder.room_id = currentRoom.id;
-  const { data, error } = await sb.from(FOLDERS_TABLE).insert(insertFolder).select().single();
+  const { data, error } = await sb.from(FOLDERS_TABLE).insert({
+    user_id: user.id,
+    name: trimmed
+  }).select().single();
 
   if (error) {
     // Revert optimistic update on error
@@ -3091,7 +2758,6 @@ async function createFolder(fileIds, opts) {
 }
 
 async function deleteFolder(id, name, evt) {
-  if (!requireRegistered("folder")) return;
   const filesInFolder = allFiles.filter(f => f.folder === name);
   let msg = `"${name}" papkasini o'chirishni xohlaysizmi?`;
   if (filesInFolder.length > 0) {
@@ -3114,10 +2780,7 @@ async function deleteFolder(id, name, evt) {
   markLocalDeleteFolder(id, name);
 
   if (filesInFolder.length > 0) {
-    let q = sb.from(TABLE).update({ folder: null }).eq("folder", name);
-    if (roomMode && currentRoom) q = q.eq("room_id", currentRoom.id);
-    else q = q.is("room_id", null);
-    await q;
+    await sb.from(TABLE).update({ folder: null }).eq("folder", name);
   }
 
   const { error } = await sb.from(FOLDERS_TABLE).delete().eq("id", id);
@@ -3187,9 +2850,6 @@ function renderFiles() {
     const isExpired = f.expires_at && new Date(f.expires_at) < new Date();
 
     let meta = `${formatSize(f.size)} · ${formatDate(f.uploaded_at)}`;
-    if (f.uploader_username) {
-      meta += ` · <span class="uploader-badge">@${escapeHtml(f.uploader_username)}</span>`;
-    }
     if (f.download_count > 0) {
       meta += ` · ${f.download_count} ${f.download_count === 1 ? "download" : "downloads"}`;
     }
@@ -3219,16 +2879,16 @@ function renderFiles() {
       </div>
       <div class="file-actions">
         <div class="file-actions-more">
-          ${roomMode ? "" : (isPublic
+          ${isPublic
             ? `<div class="toggle-group">
                  <button class="toggle-btn copy-btn" onclick="copyPublicLink(${f.id}, this)" title="Havolani nusxalash">${ICON_COPY}</button>
                  <button class="toggle-btn refresh-btn" onclick="refreshPublicLink(${f.id})" title="Yangi havola (eski ishlamay qoladi)">${ICON_REFRESH}</button>
                  <button class="toggle-btn unlink-btn" onclick="unpublishFile(${f.id})" title="Ommaviydan o'chirish">${ICON_UNLINK}</button>
                </div>`
             : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Ommaviy havola yaratish">${ICON_LINK}</button>`
-          )}
+          }
           <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Yuklab olish">${ICON_DOWNLOAD}</button>
-          ${canDeleteFile(f) ? `<button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}', event)" title="O'chirish">${ICON_DELETE}</button>` : ""}
+          <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}', event)" title="O'chirish">${ICON_DELETE}</button>
         </div>
       </div>
     </div>
@@ -3935,16 +3595,11 @@ async function explainDeleteFailure(id) {
   const me = user.user_metadata?.username || user.user_metadata?.name || "this account";
 
   if (row.user_id !== user.id) {
-    if (roomMode && currentRoom && String(currentRoom.owner_id) === String(user.id)) {
-      return {
-        message:
-          "Xato: egasi sifatida o'chirish bloklandi. Supabase SQL da " +
-          "room owner delete files policy ishga tushirilganini tekshiring."
-      };
-    }
     return {
       message:
-        "Bu fayl boshqa ishtirokchiga tegishli — faqat o'z fayllaringizni o'chira olasiz."
+        "Error: this file belongs to a DIFFERENT account, so you can't delete it.\n\n" +
+        `You are logged in as "${me}". It only shows up here because it is public. ` +
+        "Log in with the account that uploaded it."
     };
   }
 
@@ -3966,7 +3621,7 @@ const SWEEP_DURATION = 1500;   // wave of grains breaking loose — a touch long
 const COLLAPSE_DELAY = 1200;
 const FADE_IN_MS     = 180;    // canvas crossfades over the live card, grains stay still meanwhile — longer = imperceptible hand-off
 const TILE_SIZE      = 1.0;    // finer grain = reads as sand, not confetti
-const DRIFT_X        = 8;      // almost vertical — no slide-left
+const DRIFT_X        = 110;    // px: how far grains spread sideways (wide, airy scatter)
 const PUFF_Y         = 16;     // px: soft upward lift as a grain breaks loose, then it arcs outward and down
 const GRAVITY        = 0.00065; // gentler downward pull — grains drift down like dust, not snap like rocks
 const START_SPEED     = 0.012;  // px/ms: grains ease into motion instead of jumping
@@ -4453,45 +4108,9 @@ async function playDeleteDissolve(card, clickX, clickY, group) {
   });
 }
 
-
-function playDeleteCollapse(card) {
-  return new Promise((resolve) => {
-    if (!card || !card.isConnected) { resolve(); return; }
-    const start = card.getBoundingClientRect();
-    card.style.maxHeight = start.height + "px";
-    card.style.boxSizing = "border-box";
-    card.style.overflow = "hidden";
-    card.style.transform = "none";
-    void card.offsetHeight;
-    card.classList.add("is-deleting");
-    let settled = false;
-    const done = () => {
-      if (settled) return;
-      settled = true;
-      if (card.parentNode) card.remove();
-      resolve();
-    };
-    const onEnd = (e) => {
-      if (e.target !== card) return;
-      if (e.propertyName === "max-height" || e.propertyName === "opacity") {
-        card.removeEventListener("transitionend", onEnd);
-        done();
-      }
-    };
-    card.addEventListener("transitionend", onEnd);
-    setTimeout(done, 750);
-  });
-}
-
 async function deleteFile(id, path, evt) {
   const clickX = evt ? evt.clientX : undefined;
   const clickY = evt ? evt.clientY : undefined;
-
-  const target = allFiles.find((f) => String(f.id) === String(id));
-  if (roomMode && target && !canDeleteFile(target)) {
-    showToast("O'chirishga ruxsat yo'q", "warning", "Faqat o'z fayllaringizni o'chira olasiz");
-    return;
-  }
 
   if (!(await showConfirm("Ushbu faylni o'chirishni xohlaysizmi?", "O'chirish", { skippable: true }))) return;
 
@@ -4500,7 +4119,7 @@ async function deleteFile(id, path, evt) {
   if (!card && evt && evt.target) {
     card = evt.target.closest(".file-card");
   }
-  if (card) await playDeleteCollapse(card);
+  if (card) await playDeleteDissolve(card, clickX, clickY);
 
   markLocalDelete(id);
   forgetThumb(id); // drop the cached image immediately — it must vanish together with the file
@@ -4685,17 +4304,8 @@ function showFolderPicker(fileIds) {
 }
 
 async function deleteSelectedFiles(ids, clickX, clickY, opts) {
-  let list = (ids || []).map(String).filter(Boolean);
-  if (roomMode) {
-    list = list.filter((id) => {
-      const f = allFiles.find((x) => String(x.id) === String(id));
-      return f && canDeleteFile(f);
-    });
-  }
-  if (!list.length) {
-    showToast("O'chirishga ruxsat yo'q", "warning", "Faqat o'z fayllaringizni o'chira olasiz");
-    return;
-  }
+  const list = (ids || []).map(String).filter(Boolean);
+  if (!list.length) return;
 
   const msg =
     list.length === 1
@@ -4709,7 +4319,7 @@ async function deleteSelectedFiles(ids, clickX, clickY, opts) {
     .filter(Boolean);
   if (cards.length) {
     const group = dissolveGroupInfo(cards); // one shared top->bottom wave for all selected files
-    await Promise.all(cards.map((c) => playDeleteCollapse(c)));
+    await Promise.all(cards.map((c) => playDeleteDissolve(c, clickX, clickY, group)));
   }
 
   list.forEach((id) => markLocalDelete(id));
@@ -7923,403 +7533,3 @@ document.getElementById("settings-shortcuts-btn")?.addEventListener("click", (e)
   if (gear && menu && !menu.hidden) gear.click(); // close the settings menu first
   showShortcutsHelp();
 });
-
-
-// ==========================================
-// PUBLIC ROOMS
-// ==========================================
-
-function canDeleteFile(f) {
-  // Personal drive: own files only in list.
-  // Room owner -> delete ANY file in room.
-  // Room member -> read all, delete only own uploads.
-  // Anonymous -> read only.
-  if (!f) return false;
-  if (!roomMode) return true;
-  const me = window.__mrSessionUserId;
-  if (!me) return false;
-  if (currentRoom && String(currentRoom.owner_id) === String(me)) return true;
-  const path = f.storage_path || "";
-  if (path.includes("/anon/")) return false;
-  return String(f.user_id) === String(me);
-}
-
-function isRoomOwner() {
-  const me = window.__mrSessionUserId;
-  return !!(roomMode && currentRoom && me && String(currentRoom.owner_id) === String(me));
-}
-
-async function refreshSessionUserId() {
-  const { data: { session } } = await sb.auth.getSession();
-  window.__mrSessionUserId = session?.user?.id || null;
-  return session;
-}
-
-
-function leaveDeletedRoom() {
-  if (roomGoneLeaving) return;
-  roomGoneLeaving = true;
-  stopPolling();
-  try { if (roomLifeChannel) sb.removeChannel(roomLifeChannel); } catch (_) {}
-  roomLifeChannel = null;
-  currentRoom = null;
-  roomMode = false;
-  try { showToast("Room o'chirildi", "warning", "Bosh sahifaga qaytildi"); } catch (_) {}
-  location.replace("./");
-}
-
-async function checkRoomStillExists() {
-  if (!roomMode || !currentRoom?.public_token || roomGoneLeaving) return;
-  try {
-    const { data, error } = await sb.rpc("get_room_by_token", { p_token: currentRoom.public_token });
-    const room = Array.isArray(data) ? data[0] : data;
-    if (error || !room) leaveDeletedRoom();
-  } catch (_) {
-    leaveDeletedRoom();
-  }
-}
-
-function subscribeRoomLife(token, roomId) {
-  if (roomLifeChannel) {
-    try { sb.removeChannel(roomLifeChannel); } catch (_) {}
-    roomLifeChannel = null;
-  }
-  if (!token) return;
-  let ch = sb.channel("mrdrive-room-life-" + token);
-  ch = ch.on("broadcast", { event: "room_deleted" }, () => leaveDeletedRoom());
-  if (roomId) {
-    ch = ch.on(
-      "postgres_changes",
-      { event: "DELETE", schema: "public", table: ROOMS_TABLE, filter: "id=eq." + roomId },
-      () => leaveDeletedRoom()
-    );
-  }
-  roomLifeChannel = ch.subscribe();
-}
-
-async function broadcastRoomDeleted(token) {
-  if (!token) return;
-  try {
-    const ch = sb.channel("mrdrive-room-life-" + token);
-    await new Promise((resolve) => {
-      const t = setTimeout(resolve, 700);
-      ch.subscribe((status) => {
-        if (status === "SUBSCRIBED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          clearTimeout(t);
-          resolve();
-        }
-      });
-    });
-    await ch.send({ type: "broadcast", event: "room_deleted", payload: { at: Date.now() } });
-    try { sb.removeChannel(ch); } catch (_) {}
-  } catch (_) {}
-}
-
-async function enterRoomByToken(token) {
-  roomMode = true;
-  currentFolder = null;
-  fileListEl.innerHTML = `<p class="empty">Room yuklanmoqda…</p>`;
-
-  let data, error;
-  try {
-    ({ data, error } = await sb.rpc("get_room_by_token", { p_token: token }));
-  } catch (e) {
-    error = e;
-  }
-  const room = Array.isArray(data) ? data[0] : data;
-  if (error || !room) {
-    leaveDeletedRoom();
-    return;
-  }
-  roomGoneLeaving = false;
-  currentRoom = room;
-  // Session/theme setup best-effort: agar bittasi xato bersa ham header
-  // (updateRoomHeader) baribir chizilishi kerak — shuning uchun try/catch.
-  try {
-    await refreshSessionUserId();
-    applyTheme(getTheme());
-  } catch (e) {
-    console.error("enterRoomByToken: session/theme init failed", e);
-  }
-  // onAuthStateChange qachon otilishiga (race) tayanmasdan, chrome holatini
-  // shu yerda aniq belgilaymiz — logged-in bo'lsa gear/room-bar darhol tiklansin.
-  if (window.__mrSessionUserId) {
-    restoreRegisteredChrome();
-  } else {
-    applyGuestRestrictions();
-  }
-  updateRoomHeader();
-  try {
-    await loadRoomFiles();
-  } catch (e) {
-    console.error("enterRoomByToken: loadRoomFiles failed", e);
-  }
-  // Live updates for everyone in the room (incl. anonymous)
-  const session = (await sb.auth.getSession()).data?.session;
-  setupRealtime(session?.user?.id || null);
-  subscribeRoomLife(currentRoom.public_token, currentRoom.id);
-  startPolling(session?.user?.id || currentRoom.public_token);
-  if (!session) {
-    const dz = document.getElementById("dropzone");
-    if (dz) {
-      const hint = document.getElementById("room-login-hint") || document.createElement("p");
-      hint.id = "room-login-hint";
-      hint.className = "room-login-hint";
-      hint.innerHTML = `Anonim yuklash mumkin. Hisob bilan yuklasangiz keyin o'chira olasiz. <a href="/login/">Login</a>`;
-      if (!document.getElementById("room-login-hint")) dz.appendChild(hint);
-    }
-  }
-}
-
-function updateRoomHeader() {
-  if (!currentRoom) return;
-  const brand = document.querySelector(".brand h1");
-  if (brand) brand.textContent = currentRoom.name || "Room";
-  // Ensure room bar exists
-  let bar = document.getElementById("room-bar");
-  if (!bar) {
-    bar = document.createElement("div");
-    bar.id = "room-bar";
-    bar.className = "room-bar";
-    const app = document.getElementById("app");
-    const header = app && app.querySelector("header");
-    if (header && header.nextSibling) {
-      app.insertBefore(bar, header.nextSibling);
-    } else if (app) {
-      app.prepend(bar);
-    }
-  }
-  const isOwner = window.__mrSessionUserId && String(currentRoom.owner_id) === String(window.__mrSessionUserId);
-  bar.innerHTML = `
-    <div class="room-bar-main">
-      <span class="room-bar-label">Public room</span>
-      <strong class="room-bar-name">${escapeHtml(currentRoom.name || "Room")}</strong>
-    </div>
-    <div class="room-bar-actions">
-      <button type="button" class="room-bar-btn" onclick="copyRoomLink()" title="Linkni nusxalash">${ICON_COPY} Link</button>
-      ${isOwner ? `<button type="button" class="room-bar-btn room-bar-danger" onclick="deleteCurrentRoom()" title="Roomni o'chirish">${ICON_DELETE}</button>` : ""}
-      <a class="room-bar-btn" href="/" title="MRdrive">← Drive</a>
-    </div>
-  `;
-}
-
-async function loadRoomFolders() {
-  if (!currentRoom) return [];
-  // 1) folders.room_id (yangi schema)
-  let res = await sb.from(FOLDERS_TABLE).select("*").eq("room_id", currentRoom.id).order("created_at", { ascending: true });
-  if (!res.error) return res.data || [];
-  // 2) fallback: room fayllaridagi folder nomlari + owner papkalari
-  const fromFiles = [...new Set((allFiles || []).map((f) => f.folder).filter(Boolean))];
-  const ownerRes = await sb.from(FOLDERS_TABLE).select("*").eq("user_id", currentRoom.owner_id).order("created_at", { ascending: true });
-  const ownerFolders = (!ownerRes.error && ownerRes.data) ? ownerRes.data : [];
-  const byName = new Map();
-  for (const f of ownerFolders) {
-    if (fromFiles.includes(f.name) || String(f.room_id || "") === String(currentRoom.id)) byName.set(f.name, f);
-  }
-  fromFiles.forEach((name) => {
-    if (!byName.has(name)) byName.set(name, { id: "file-" + name, name, user_id: currentRoom.owner_id });
-  });
-  return [...byName.values()];
-}
-
-async function loadRoomFiles(silent) {
-  if (!currentRoom) return;
-  const { data, error } = await sb.rpc("list_room_files", { p_token: currentRoom.public_token });
-  if (error) {
-    const msg = String(error.message || "").toLowerCase();
-    if (msg.includes("not found") || msg.includes("o'chir") || msg.includes("deleted") || msg.includes("does not exist")) {
-      leaveDeletedRoom();
-      return;
-    }
-    if (!silent) fileListEl.innerHTML = `<p class="empty">Xato: ${escapeHtml(error.message)}</p>`;
-    return;
-  }
-  const newFiles = data || [];
-  if (silent && filesListReady) {
-    const same = JSON.stringify(newFiles) === JSON.stringify(allFiles);
-    if (same) return;
-  }
-  allFiles = newFiles;
-  allFolders = await loadRoomFolders();
-  filesListReady = true;
-  await refreshSessionUserId();
-  if (!window.__mrSessionUserId) applyGuestRestrictions();
-  applyTheme(getTheme());
-  renderToolbar();
-  renderFiles();
-  // Square image previews in the list (same as personal drive)
-  prefetchThumbUrls(newFiles).catch((e) => console.warn("prefetchThumbUrls (room):", e));
-}
-
-async function loadMyRooms() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session?.user) {
-    myRooms = [];
-    renderSettingsRooms();
-    return;
-  }
-  const { data, error } = await sb.from(ROOMS_TABLE)
-    .select("id, name, public_token, created_at, owner_id")
-    .eq("owner_id", session.user.id)
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.warn("loadMyRooms", error);
-    myRooms = [];
-  } else {
-    myRooms = data || [];
-  }
-  renderSettingsRooms();
-}
-
-function renderSettingsRooms() {
-  const list = document.getElementById("settings-rooms-list");
-  if (!list) return;
-  if (!myRooms.length) {
-    list.innerHTML = `<p class="settings-rooms-empty">Hali room yo'q. Yangi yarating.</p>`;
-    return;
-  }
-  list.innerHTML = myRooms.map((r) => {
-    const url = `${window.location.origin}/r/${r.public_token}`;
-    const date = r.created_at ? new Date(r.created_at).toLocaleDateString("uz-UZ") : "";
-    return `
-      <div class="settings-room-card" data-room-id="${r.id}">
-        <div class="settings-room-card-main">
-          <div class="settings-room-card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-          </div>
-          <div class="settings-room-card-info">
-            <strong class="settings-room-card-name">${escapeHtml(r.name || "Room")}</strong>
-            <span class="settings-room-card-meta">${escapeHtml(date)}</span>
-          </div>
-        </div>
-        <div class="settings-room-card-actions">
-          <button type="button" class="settings-room-btn" onclick="openRoomFromSettings('${escapeJs(r.public_token)}')" title="Ochish">Ochish</button>
-          <button type="button" class="settings-room-btn" onclick="copyRoomLinkByToken('${escapeJs(r.public_token)}')" title="Link">${ICON_COPY}</button>
-          <button type="button" class="settings-room-btn settings-room-btn-danger" onclick="deleteRoomFromSettings(${r.id}, '${escapeJs(r.name || "Room")}')" title="O'chirish">${ICON_DELETE}</button>
-        </div>
-      </div>`;
-  }).join("");
-}
-
-async function openRoomFromSettings(token) {
-  document.getElementById("settings-modal")?.setAttribute("hidden", "");
-  document.getElementById("gear-btn")?.classList.remove("open");
-  history.pushState({}, "", `/r/${token}`);
-  roomMode = true;
-  await enterRoomByToken(token);
-}
-
-async function copyRoomLinkByToken(token) {
-  const url = `${window.location.origin}/r/${token}`;
-  await copyToClipboard(url);
-  showToast("Room linki nusxalandi");
-}
-
-async function deleteRoomFromSettings(id, name) {
-  const ok = await showConfirm(`"${name}" roomini o'chirasizmi?`, "O'chirish");
-  if (!ok) return;
-  const doomed = myRooms.find((r) => String(r.id) === String(id));
-  await broadcastRoomDeleted(doomed?.public_token || (currentRoom && String(currentRoom.id) === String(id) ? currentRoom.public_token : null));
-  const { error } = await sb.from(ROOMS_TABLE).delete().eq("id", id);
-  if (error) {
-    showAlert("Xato: " + error.message);
-    return;
-  }
-  showToast("Room o'chirildi");
-  await loadMyRooms();
-  if (currentRoom && String(currentRoom.id) === String(id)) {
-    leaveDeletedRoom();
-  }
-}
-
-async function createRoom() {
-  if (!requireRegistered("room")) return;
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session?.user) {
-    showAlert("Room yaratish uchun login qiling.");
-    return;
-  }
-  const raw = await showPrompt("Room nomi", {
-    okLabel: "Yaratish",
-    cancelLabel: "Bekor qilish",
-    placeholder: "Masalan: Loyiha team",
-    defaultValue: "Room"
-  });
-  if (raw == null) return; // cancelled
-  const name = String(raw).trim() || "Room";
-  const token = generateToken();
-  const { data, error } = await sb.from(ROOMS_TABLE).insert({
-    owner_id: session.user.id,
-    name,
-    public_token: token
-  }).select().single();
-
-  if (error) {
-    showAlert("Xato: " + error.message);
-    return;
-  }
-  myRooms = [data, ...myRooms.filter((r) => r.id !== data.id)];
-  renderSettingsRooms();
-  const url = `${window.location.origin}/r/${token}`;
-  await copyToClipboard(url);
-  showToast("Room yaratildi — link nusxalandi");
-  // Navigate into the new room
-  history.pushState({}, "", `/r/${token}`);
-  roomMode = true;
-  currentRoom = data;
-  window.__mrSessionUserId = session.user.id;
-  updateRoomHeader();
-  await loadRoomFiles();
-  document.getElementById("settings-modal")?.setAttribute("hidden", "");
-  document.getElementById("gear-btn")?.classList.remove("open");
-}
-
-async function copyRoomLink() {
-  if (!currentRoom) return;
-  const url = `${window.location.origin}/r/${currentRoom.public_token}`;
-  await copyToClipboard(url);
-  showToast("Room linki nusxalandi");
-}
-
-async function deleteCurrentRoom() {
-  if (!currentRoom) return;
-  const ok = await showConfirm(
-    `"${currentRoom.name}" roomini o'chirasizmi? Ichidagi barcha fayllar ham o'chadi.`,
-    "O'chirish"
-  );
-  if (!ok) return;
-  // Best-effort: remove storage objects we can (owner may not own others' room paths)
-  try {
-    const files = allFiles || [];
-    const paths = files.map((f) => f.storage_path).filter(Boolean);
-    if (paths.length) {
-      // delete in chunks
-      for (let i = 0; i < paths.length; i += 50) {
-        await sb.storage.from(BUCKET).remove(paths.slice(i, i + 50)).catch(() => {});
-      }
-    }
-  } catch (_) {}
-  const token = currentRoom.public_token;
-  await broadcastRoomDeleted(token);
-  const { error } = await sb.from(ROOMS_TABLE).delete().eq("id", currentRoom.id);
-  if (error) {
-    showAlert("Xato: " + error.message);
-    return;
-  }
-  leaveDeletedRoom();
-}
-
-// Hide folder tabs in room mode; show simple label
-const _origRenderToolbar = typeof renderToolbar === "function" ? renderToolbar : null;
-
-window.createRoom = createRoom;
-window.copyRoomLink = copyRoomLink;
-window.deleteCurrentRoom = deleteCurrentRoom;
-window.enterRoomByToken = enterRoomByToken;
-window.loadMyRooms = loadMyRooms;
-window.openRoomFromSettings = openRoomFromSettings;
-window.copyRoomLinkByToken = copyRoomLinkByToken;
-window.deleteRoomFromSettings = deleteRoomFromSettings;
