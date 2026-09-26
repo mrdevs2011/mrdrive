@@ -1502,6 +1502,8 @@ applyTheme(getTheme());
     modal.hidden = true;
     gearBtn.classList.remove("open");
     if (accountPanel) accountPanel.hidden = true;
+    const roomsPanel = document.getElementById("settings-rooms-panel");
+    if (roomsPanel) roomsPanel.hidden = true;
   }
   const darkCb = document.getElementById("settings-dark-mode");
   darkCb?.addEventListener("change", () => applyTheme(darkCb.checked ? "dark" : "light"));
@@ -1513,6 +1515,7 @@ applyTheme(getTheme());
     modal.hidden = false;
     gearBtn.classList.add("open");
     refreshStorageUsage();
+    if (typeof loadMyRooms === "function") loadMyRooms();
   }
 
   gearBtn.addEventListener("click", (e) => {
@@ -1532,8 +1535,29 @@ applyTheme(getTheme());
         if (accountNameEl) accountNameEl.textContent = meta.name || "—";
         if (accountUsernameEl) accountUsernameEl.textContent = meta.username || "—";
       });
+      // close rooms panel when opening account
+      const roomsPanel = document.getElementById("settings-rooms-panel");
+      if (roomsPanel) roomsPanel.hidden = true;
     }
     accountPanel.hidden = !opening;
+  });
+
+  const roomsBtn = document.getElementById("settings-rooms-btn");
+  const roomsPanel = document.getElementById("settings-rooms-panel");
+  const roomsCreateBtn = document.getElementById("settings-rooms-create-btn");
+  roomsBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!roomsPanel) return;
+    const opening = roomsPanel.hidden;
+    if (opening) {
+      if (accountPanel) accountPanel.hidden = true;
+      if (typeof loadMyRooms === "function") loadMyRooms();
+    }
+    roomsPanel.hidden = !opening;
+  });
+  roomsCreateBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    createRoom();
   });
 
   logoutBtn?.addEventListener("click", () => {
@@ -2434,7 +2458,6 @@ function renderToolbar() {
         </div>
       `).join("")}
       <button class="folder-tab new-folder-btn" onclick="createFolder()">+ Folder</button>
-      <button class="folder-tab new-room-btn" onclick="createRoom()" title="Public room yaratish">+ Room</button>
     </div>
   `;
 
@@ -7717,6 +7740,87 @@ async function loadRoomFiles() {
   renderFiles();
 }
 
+async function loadMyRooms() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session?.user) {
+    myRooms = [];
+    renderSettingsRooms();
+    return;
+  }
+  const { data, error } = await sb.from(ROOMS_TABLE)
+    .select("id, name, public_token, created_at, owner_id")
+    .eq("owner_id", session.user.id)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("loadMyRooms", error);
+    myRooms = [];
+  } else {
+    myRooms = data || [];
+  }
+  renderSettingsRooms();
+}
+
+function renderSettingsRooms() {
+  const list = document.getElementById("settings-rooms-list");
+  if (!list) return;
+  if (!myRooms.length) {
+    list.innerHTML = `<p class="settings-rooms-empty">Hali room yo'q. Yangi yarating.</p>`;
+    return;
+  }
+  list.innerHTML = myRooms.map((r) => {
+    const url = `${window.location.origin}/r/${r.public_token}`;
+    const date = r.created_at ? new Date(r.created_at).toLocaleDateString("uz-UZ") : "";
+    return `
+      <div class="settings-room-card" data-room-id="${r.id}">
+        <div class="settings-room-card-main">
+          <div class="settings-room-card-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div class="settings-room-card-info">
+            <strong class="settings-room-card-name">${escapeHtml(r.name || "Room")}</strong>
+            <span class="settings-room-card-meta">${escapeHtml(date)}</span>
+          </div>
+        </div>
+        <div class="settings-room-card-actions">
+          <button type="button" class="settings-room-btn" onclick="openRoomFromSettings('${escapeJs(r.public_token)}')" title="Ochish">Ochish</button>
+          <button type="button" class="settings-room-btn" onclick="copyRoomLinkByToken('${escapeJs(r.public_token)}')" title="Link">${ICON_COPY}</button>
+          <button type="button" class="settings-room-btn settings-room-btn-danger" onclick="deleteRoomFromSettings(${r.id}, '${escapeJs(r.name || "Room")}')" title="O'chirish">${ICON_DELETE}</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+async function openRoomFromSettings(token) {
+  document.getElementById("settings-modal")?.setAttribute("hidden", "");
+  document.getElementById("gear-btn")?.classList.remove("open");
+  history.pushState({}, "", `/r/${token}`);
+  roomMode = true;
+  await enterRoomByToken(token);
+}
+
+async function copyRoomLinkByToken(token) {
+  const url = `${window.location.origin}/r/${token}`;
+  await copyToClipboard(url);
+  showToast("Room linki nusxalandi");
+}
+
+async function deleteRoomFromSettings(id, name) {
+  if (!confirm(`"${name}" roomini o'chirasizmi?`)) return;
+  const { error } = await sb.from(ROOMS_TABLE).delete().eq("id", id);
+  if (error) {
+    showAlert("Xato: " + error.message);
+    return;
+  }
+  showToast("Room o'chirildi");
+  await loadMyRooms();
+  if (currentRoom && String(currentRoom.id) === String(id)) {
+    location.href = "/";
+  }
+}
+
 async function createRoom() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session?.user) {
@@ -7735,6 +7839,8 @@ async function createRoom() {
     showAlert("Xato: " + error.message);
     return;
   }
+  myRooms = [data, ...myRooms.filter((r) => r.id !== data.id)];
+  renderSettingsRooms();
   const url = `${window.location.origin}/r/${token}`;
   await copyToClipboard(url);
   showToast("Room yaratildi — link nusxalandi");
@@ -7745,6 +7851,8 @@ async function createRoom() {
   window.__mrSessionUserId = session.user.id;
   updateRoomHeader();
   await loadRoomFiles();
+  document.getElementById("settings-modal")?.setAttribute("hidden", "");
+  document.getElementById("gear-btn")?.classList.remove("open");
 }
 
 async function copyRoomLink() {
@@ -7784,3 +7892,7 @@ window.createRoom = createRoom;
 window.copyRoomLink = copyRoomLink;
 window.deleteCurrentRoom = deleteCurrentRoom;
 window.enterRoomByToken = enterRoomByToken;
+window.loadMyRooms = loadMyRooms;
+window.openRoomFromSettings = openRoomFromSettings;
+window.copyRoomLinkByToken = copyRoomLinkByToken;
+window.deleteRoomFromSettings = deleteRoomFromSettings;
