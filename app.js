@@ -580,10 +580,11 @@ if (shareToken) {
   if (appScreen) appScreen.style.display = "none";
   showPublicDownloadModal(shareToken);
 } else if (roomTokenFromUrl) {
-  // Public room: show app UI in room mode (login optional for view; required for upload)
+  // Public room: login ixtiyoriy. Guest = theme toggle, qolgan route = login.
   if (window.MRSplash) window.MRSplash.skip(); else bootLoader.style.display = "none";
   if (appScreen) appScreen.style.display = "block";
   roomMode = true;
+  applyGuestRestrictions();
   enterRoomByToken(roomTokenFromUrl);
 } else {
   sb.auth.getSession().then(({ data: { session } }) => {
@@ -1549,9 +1550,15 @@ function paintGuestThemeToggle(btn) {
 
 function stripGuestSettingsDom() {
   const modal = document.getElementById("settings-modal");
-  if (modal) modal.remove();
-
+  if (modal) {
+    modal.hidden = true;
+    modal.setAttribute("data-guest-locked", "1");
+  }
   const gearBtn = document.getElementById("gear-btn");
+  if (gearBtn) {
+    gearBtn.hidden = true;
+    gearBtn.classList.remove("open");
+  }
   let btn = document.getElementById("theme-toggle-btn");
   if (!btn) {
     btn = document.createElement("button");
@@ -1563,25 +1570,53 @@ function stripGuestSettingsDom() {
       e.stopPropagation();
       applyTheme(getTheme() === "dark" ? "light" : "dark");
     });
-    if (gearBtn) gearBtn.replaceWith(btn);
-    else {
-      const wrap = document.querySelector(".settings-wrap") || document.querySelector(".header-right");
-      if (wrap) wrap.appendChild(btn);
-    }
-  } else if (gearBtn) {
-    gearBtn.remove();
+    const wrap = document.querySelector(".settings-wrap") || document.querySelector(".header-right");
+    if (wrap) wrap.appendChild(btn);
+    else if (gearBtn && gearBtn.parentNode) gearBtn.parentNode.appendChild(btn);
   }
   paintGuestThemeToggle(btn);
 }
 
+function isPublicRoomGuestView() {
+  return !!(roomMode || roomTokenFromUrl);
+}
+
+function restoreRegisteredChrome() {
+  const toggle = document.getElementById("theme-toggle-btn");
+  if (toggle) toggle.remove();
+  const gearBtn = document.getElementById("gear-btn");
+  const modal = document.getElementById("settings-modal");
+  if (gearBtn) {
+    gearBtn.hidden = false;
+    gearBtn.removeAttribute("hidden");
+    gearBtn.style.display = "";
+  }
+  if (modal) modal.removeAttribute("data-guest-locked");
+  window.__mrGuestLocked = false;
+}
+
 function applyGuestRestrictions() {
-  if (isRegisteredSession()) return;
+  if (isRegisteredSession()) {
+    restoreRegisteredChrome();
+    return;
+  }
+  // Roomga loginisiz kirganlar: gear o'rnida theme toggle.
+  // Qolganlar (bosh sahifa, papka, drive): login screen.
+  if (!isPublicRoomGuestView() && !shareToken) {
+    location.replace("/login/");
+    return;
+  }
+  if (shareToken) return;
   stripGuestSettingsDom();
   window.__mrGuestLocked = true;
 }
 
 function requireRegistered(action) {
   if (isRegisteredSession()) return true;
+  if (!isPublicRoomGuestView()) {
+    location.replace("/login/");
+    return false;
+  }
   applyGuestRestrictions();
   showToast("Faqat hisob bilan", "warning", "Bu amal uchun ro'yxatdan o'ting.");
   return false;
@@ -1689,13 +1724,14 @@ sb.auth.onAuthStateChange((event, session) => {
   if (roomMode || roomTokenFromUrl) {
     if (session) {
       window.__mrSessionUserId = session.user.id;
+      restoreRegisteredChrome();
       if (currentRoom) {
         updateRoomHeader();
         loadRoomFiles();
       }
     } else {
       window.__mrSessionUserId = null;
-      if (roomMode || roomTokenFromUrl || shareToken) applyGuestRestrictions();
+      applyGuestRestrictions();
       if (currentRoom) {
         updateRoomHeader();
         loadRoomFiles();
