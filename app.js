@@ -596,6 +596,7 @@ if (shareToken) {
       // App splash ORQASIDA render bo'ladi (splash opaque, ustida turadi):
       // fayllar, papkalar, thumbnaillar, ikonlar — hammasi 2 soniya ichida
       // yuklanib, splash tugaganda tayyor holda ochiladi.
+      window.__mrSessionUserId = session.user.id;
       if (appScreen) appScreen.style.display = "block";
       preloadBootAssets();
       const parsed = parseAppPath(window.location.pathname);
