@@ -1895,6 +1895,53 @@ function uploadFile(file, folder) {
   });
 }
 
+async function ensureAuthSession() {
+  let { data: { session } } = await sb.auth.getSession();
+  if (session?.user) return session;
+  // Local session yo'q / eskirgan — bir marta refresh urinib ko'ramiz
+  try {
+    const { data, error } = await sb.auth.refreshSession();
+    if (!error && data?.session?.user) return data.session;
+  } catch (_) {}
+  return null;
+}
+
+function uploadRoomAnon(file, roomToken, guestName, onProgress) {
+  let xhr = null;
+  const promise = new Promise((resolve, reject) => {
+    xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/room-upload");
+    xhr.setRequestHeader("X-Room-Token", roomToken);
+    xhr.setRequestHeader("X-Filename", file.name);
+    if (guestName) xhr.setRequestHeader("X-Guest-Name", guestName);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      let body = null;
+      try { body = JSON.parse(xhr.responseText); } catch (_) {}
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(body);
+      const msg = (body && body.error) || `HTTP ${xhr.status}`;
+      const err = new Error(msg);
+      err.retryable = xhr.status >= 500 || xhr.status === 429 || xhr.status === 408;
+      reject(err);
+    };
+    xhr.onerror = () => { const e = new Error("Network error"); e.retryable = true; reject(e); };
+    xhr.onabort = () => {
+      const e = new Error("Upload cancelled");
+      e.cancelled = true;
+      reject(e);
+    };
+    xhr.send(file);
+  });
+  return {
+    promise,
+    abort() { if (xhr) try { xhr.abort(); } catch (_) {} }
+  };
+}
+
 async function runUpload(file, fileId, targetFolder, ui) {
   let keepBlocked = false;
   let path = null;
@@ -1902,8 +1949,50 @@ async function runUpload(file, fileId, targetFolder, ui) {
   try {
     if (ui.isCancelled()) return;
 
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error("Not logged in");
+    const session = await ensureAuthSession();
+
+    // Public room: login ixtiyoriy — anonim ham yuklay oladi
+    if (roomMode && currentRoom && !session?.user) {
+      ui.setPercent(0);
+      let result = null;
+      for (let attempt = 1; ; attempt++) {
+        if (ui.isCancelled()) return;
+        try {
+          const up = uploadRoomAnon(
+            file,
+            currentRoom.public_token,
+            "Anonim",
+            (ratio) => {
+              if (ui.isCancelled()) return;
+              if (ratio >= 1) ui.setSaving();
+              else ui.setPercent(ratio * 100);
+            }
+          );
+          ui.setAbort(() => up.abort());
+          result = await up.promise;
+          break;
+        } catch (err) {
+          if (err && err.cancelled) return;
+          if (!err.retryable || attempt >= UPLOAD_MAX_ATTEMPTS) throw err;
+          if (ui.isCancelled()) return;
+          ui.setPercent(0);
+          await sleep(600 * attempt);
+        }
+      }
+      if (ui.isCancelled()) return;
+      ui.setSaving();
+      markLocalUpload(file.name, file.size);
+      ui.setDone();
+      keepBlocked = true;
+      batchStats.ok++;
+      scheduleLoadFiles();
+      return;
+    }
+
+    if (!session?.user) {
+      showToast("Login kerak", "warning", "Shaxsiy diskka yuklash uchun kiring");
+      throw new Error("Login qilinmagan — yuklash uchun kiring");
+    }
     const user = session.user;
 
     // Unique even for same-named files added in the same millisecond.
@@ -7648,11 +7737,16 @@ document.getElementById("settings-shortcuts-btn")?.addEventListener("click", (e)
 // ==========================================
 
 function canDeleteFile(f) {
-  // Personal drive: list is already own files. Room: only the uploader.
+  // Personal drive: list is already own files.
+  // Room: room owner can delete any; logged-in uploader can delete own uploads.
   if (!f) return false;
   if (!roomMode) return true;
   const me = window.__mrSessionUserId;
   if (!me) return false;
+  if (currentRoom && String(currentRoom.owner_id) === String(me)) return true;
+  // Own upload: path contains my user id (not anon guest rows attributed to owner)
+  const path = f.storage_path || "";
+  if (path.includes("/anon/")) return false;
   return String(f.user_id) === String(me);
 }
 
@@ -7687,7 +7781,7 @@ async function enterRoomByToken(token) {
       const hint = document.getElementById("room-login-hint") || document.createElement("p");
       hint.id = "room-login-hint";
       hint.className = "room-login-hint";
-      hint.innerHTML = `Fayl yuklash uchun <a href="/login/">login</a> qiling. Ko'rish bepul.`;
+      hint.innerHTML = `Anonim yuklash mumkin. Hisob bilan yuklasangiz keyin o'chira olasiz. <a href="/login/">Login</a>`;
       if (!document.getElementById("room-login-hint")) dz.appendChild(hint);
     }
   }
