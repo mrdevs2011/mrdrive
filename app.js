@@ -496,8 +496,9 @@ function setupRealtime(userId) {
 
   const scheduleReload = () => {
     // Debounce so a burst of changes (e.g. bulk upload) triggers one reload.
+    // Silent when list already painted — avoids JWT/error flash on reconnect.
     clearTimeout(realtimeDebounce);
-    realtimeDebounce = setTimeout(loadFiles, 50);
+    realtimeDebounce = setTimeout(() => loadFiles(!!filesListReady), 50);
   };
 
   realtimeChannel = sb
@@ -1546,10 +1547,15 @@ sb.auth.onAuthStateChange((event, session) => {
   if (shareToken) return;
   if (session) {
     if (appScreen) appScreen.style.display = "block";
-    loadFiles();
+    // TOKEN_REFRESHED / INITIAL_SESSION tab-focus da JWT flicker qilmasin:
+    // ro'yxat allaqachon bor bo'lsa faqat silent refresh.
+    const soft = event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION" || filesListReady;
+    loadFiles(soft);
     setupRealtime(session.user.id);
     startPolling(session.user.id);
   } else {
+    // Transient null during refresh — do not kick to login if we still have local session
+    if (event === "TOKEN_REFRESHED") return;
     setupRealtime(null);
     stopPolling();
     location.replace("/login/");
@@ -2220,18 +2226,59 @@ async function prefetchDragUrls(files) {
   }));
 }
 
+function isAuthJwtError(err) {
+  if (!err) return false;
+  const m = String(err.message || err.error_description || err || "").toLowerCase();
+  return (
+    m.includes("jwt") ||
+    m.includes("invalid claim") ||
+    m.includes("session") && m.includes("expired") ||
+    m.includes("not authenticated") ||
+    err.status === 401 ||
+    err.code === "PGRST301"
+  );
+}
+
 async function loadFiles(silent) {
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) return;
+  // getSession = local only (no network). getUser() hits Auth API and races
+  // with tab-focus token refresh → brief "Invalid JWT" flashes.
+  let session = (await sb.auth.getSession()).data?.session;
+  if (!session?.user) {
+    if (!silent && !filesListReady) {
+      // genuine no-session on first paint — let onAuthStateChange handle redirect
+    }
+    return;
+  }
+  let user = session.user;
 
   // Only MY rows. Without this filter the "anyone can read public files" policy
   // also returns other accounts' public files, which then show up (undeletable) in this drive.
-  const [filesRes, foldersRes] = await Promise.all([
+  let [filesRes, foldersRes] = await Promise.all([
     sb.from(TABLE).select("*").eq("user_id", user.id).order("uploaded_at", { ascending: false }),
     sb.from(FOLDERS_TABLE).select("*").eq("user_id", user.id).order("created_at", { ascending: true })
   ]);
 
+  // Mid-refresh JWT blip: try one quiet refresh + retry, never wipe the list
+  if (filesRes.error && isAuthJwtError(filesRes.error)) {
+    try {
+      const { data, error: refErr } = await sb.auth.refreshSession();
+      if (!refErr && data?.session) {
+        session = data.session;
+        user = session.user;
+        [filesRes, foldersRes] = await Promise.all([
+          sb.from(TABLE).select("*").eq("user_id", user.id).order("uploaded_at", { ascending: false }),
+          sb.from(FOLDERS_TABLE).select("*").eq("user_id", user.id).order("created_at", { ascending: true })
+        ]);
+      }
+    } catch (_) { /* keep going */ }
+  }
+
   if (filesRes.error) {
+    if (isAuthJwtError(filesRes.error)) {
+      // Keep existing UI; next poll will succeed after token settles
+      console.warn("loadFiles auth blip (ignored):", filesRes.error.message);
+      return;
+    }
     if (!silent) fileListEl.innerHTML = `<p>Error: ${filesRes.error.message}</p>`;
     return;
   }
