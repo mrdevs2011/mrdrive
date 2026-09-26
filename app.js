@@ -480,7 +480,8 @@ const POLL_MS = 2000; // fallback refresh interval, no Supabase config needed
 //      polling still covers you. Safe to leave in either way.
 function startPolling(userId) {
   stopPolling();
-  if (!userId) return;
+  // userId yoki room token — roomda anonim ham poll qiladi
+  if (!userId && !(roomMode && currentRoom)) return;
   pollTimer = setInterval(() => {
     if (document.visibilityState === "visible") loadFiles(true);
   }, POLL_MS);
@@ -498,7 +499,6 @@ function setupRealtime(userId) {
     sb.removeChannel(realtimeChannel);
     realtimeChannel = null;
   }
-  if (!userId) return;
 
   const scheduleReload = () => {
     // Debounce so a burst of changes (e.g. bulk upload) triggers one reload.
@@ -506,6 +506,28 @@ function setupRealtime(userId) {
     clearTimeout(realtimeDebounce);
     realtimeDebounce = setTimeout(() => loadFiles(!!filesListReady), 50);
   };
+
+  // Public room: listen by room_id (works for owner + guests when publication enabled)
+  if (roomMode && currentRoom) {
+    const chName = `mrdrive-room-${currentRoom.id}`;
+    let ch = sb.channel(chName).on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: TABLE, filter: `room_id=eq.${currentRoom.id}` },
+      scheduleReload
+    );
+    // Owner also gets personal folder updates if logged in
+    if (userId) {
+      ch = ch.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: FOLDERS_TABLE, filter: `user_id=eq.${userId}` },
+        scheduleReload
+      );
+    }
+    realtimeChannel = ch.subscribe();
+    return;
+  }
+
+  if (!userId) return;
 
   realtimeChannel = sb
     .channel(`mrdrive-changes-${userId}`)
@@ -1982,6 +2004,16 @@ async function runUpload(file, fileId, targetFolder, ui) {
       if (ui.isCancelled()) return;
       ui.setSaving();
       markLocalUpload(file.name, file.size);
+      // Optimistic: API returned the row — show immediately, then soft-refresh
+      if (result && result.file && result.file.id) {
+        const row = result.file;
+        if (!allFiles.some((f) => String(f.id) === String(row.id))) {
+          allFiles = [row, ...allFiles];
+          filesListReady = true;
+          renderToolbar();
+          renderFiles();
+        }
+      }
       ui.setDone();
       keepBlocked = true;
       batchStats.ok++;
@@ -2391,6 +2423,12 @@ function isAuthJwtError(err) {
 }
 
 async function loadFiles(silent) {
+  // Public room: session optional — always refresh via RPC
+  if (roomMode && currentRoom) {
+    await loadRoomFiles(silent);
+    return;
+  }
+
   // getSession = local only (no network). getUser() hits Auth API and races
   // with tab-focus token refresh → brief "Invalid JWT" flashes.
   let session = (await sb.auth.getSession()).data?.session;
@@ -2401,13 +2439,6 @@ async function loadFiles(silent) {
     return;
   }
   let user = session.user;
-
-  // Only MY rows. Without this filter the "anyone can read public files" policy
-  // also returns other accounts' public files, which then show up (undeletable) in this drive.
-  if (roomMode && currentRoom) {
-    await loadRoomFiles();
-    return;
-  }
 
   let [filesRes, foldersRes] = await Promise.all([
     sb.from(TABLE).select("*").eq("user_id", user.id).is("room_id", null).order("uploaded_at", { ascending: false }),
@@ -7772,10 +7803,11 @@ async function enterRoomByToken(token) {
   await refreshSessionUserId();
   updateRoomHeader();
   await loadRoomFiles();
-  // If logged in, still allow upload via dropzone
+  // Live updates for everyone in the room (incl. anonymous)
   const session = (await sb.auth.getSession()).data?.session;
+  setupRealtime(session?.user?.id || null);
+  startPolling(session?.user?.id || currentRoom.public_token);
   if (!session) {
-    // Show subtle hint: login to upload
     const dz = document.getElementById("dropzone");
     if (dz) {
       const hint = document.getElementById("room-login-hint") || document.createElement("p");
@@ -7819,14 +7851,19 @@ function updateRoomHeader() {
   `;
 }
 
-async function loadRoomFiles() {
+async function loadRoomFiles(silent) {
   if (!currentRoom) return;
   const { data, error } = await sb.rpc("list_room_files", { p_token: currentRoom.public_token });
   if (error) {
-    fileListEl.innerHTML = `<p class="empty">Xato: ${escapeHtml(error.message)}</p>`;
+    if (!silent) fileListEl.innerHTML = `<p class="empty">Xato: ${escapeHtml(error.message)}</p>`;
     return;
   }
-  allFiles = data || [];
+  const newFiles = data || [];
+  if (silent && filesListReady) {
+    const same = JSON.stringify(newFiles) === JSON.stringify(allFiles);
+    if (same) return;
+  }
+  allFiles = newFiles;
   allFolders = [];
   filesListReady = true;
   await refreshSessionUserId();
