@@ -465,6 +465,8 @@ function applyPathAfterLoad(opts) {
 let realtimeChannel = null;
 let realtimeDebounce = null;
 let pollTimer = null;
+let roomLifeChannel = null;
+let roomGoneLeaving = false;
 const POLL_MS = 2000; // fallback refresh interval, no Supabase config needed
 
 // ==========================================
@@ -483,7 +485,9 @@ function startPolling(userId) {
   // userId yoki room token — roomda anonim ham poll qiladi
   if (!userId && !(roomMode && currentRoom)) return;
   pollTimer = setInterval(() => {
-    if (document.visibilityState === "visible") loadFiles(true);
+    if (document.visibilityState !== "visible") return;
+    if (roomMode) checkRoomStillExists();
+    loadFiles(true);
   }, POLL_MS);
 }
 
@@ -7950,6 +7954,66 @@ async function refreshSessionUserId() {
   return session;
 }
 
+
+function leaveDeletedRoom() {
+  if (roomGoneLeaving) return;
+  roomGoneLeaving = true;
+  stopPolling();
+  try { if (roomLifeChannel) sb.removeChannel(roomLifeChannel); } catch (_) {}
+  roomLifeChannel = null;
+  currentRoom = null;
+  roomMode = false;
+  try { showToast("Room o'chirildi", "warning", "Bosh sahifaga qaytildi"); } catch (_) {}
+  location.replace("./");
+}
+
+async function checkRoomStillExists() {
+  if (!roomMode || !currentRoom?.public_token || roomGoneLeaving) return;
+  try {
+    const { data, error } = await sb.rpc("get_room_by_token", { p_token: currentRoom.public_token });
+    const room = Array.isArray(data) ? data[0] : data;
+    if (error || !room) leaveDeletedRoom();
+  } catch (_) {
+    leaveDeletedRoom();
+  }
+}
+
+function subscribeRoomLife(token, roomId) {
+  if (roomLifeChannel) {
+    try { sb.removeChannel(roomLifeChannel); } catch (_) {}
+    roomLifeChannel = null;
+  }
+  if (!token) return;
+  let ch = sb.channel("mrdrive-room-life-" + token);
+  ch = ch.on("broadcast", { event: "room_deleted" }, () => leaveDeletedRoom());
+  if (roomId) {
+    ch = ch.on(
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: ROOMS_TABLE, filter: "id=eq." + roomId },
+      () => leaveDeletedRoom()
+    );
+  }
+  roomLifeChannel = ch.subscribe();
+}
+
+async function broadcastRoomDeleted(token) {
+  if (!token) return;
+  try {
+    const ch = sb.channel("mrdrive-room-life-" + token);
+    await new Promise((resolve) => {
+      const t = setTimeout(resolve, 700);
+      ch.subscribe((status) => {
+        if (status === "SUBSCRIBED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          clearTimeout(t);
+          resolve();
+        }
+      });
+    });
+    await ch.send({ type: "broadcast", event: "room_deleted", payload: { at: Date.now() } });
+    try { sb.removeChannel(ch); } catch (_) {}
+  } catch (_) {}
+}
+
 async function enterRoomByToken(token) {
   roomMode = true;
   currentFolder = null;
@@ -7958,10 +8022,10 @@ async function enterRoomByToken(token) {
   const { data, error } = await sb.rpc("get_room_by_token", { p_token: token });
   const room = Array.isArray(data) ? data[0] : data;
   if (error || !room) {
-    fileListEl.innerHTML = `<p class="empty">Room topilmadi yoki o'chirilgan.</p>`;
-    currentRoom = null;
+    leaveDeletedRoom();
     return;
   }
+  roomGoneLeaving = false;
   currentRoom = room;
   await refreshSessionUserId();
   applyTheme(getTheme());
@@ -7971,6 +8035,7 @@ async function enterRoomByToken(token) {
   // Live updates for everyone in the room (incl. anonymous)
   const session = (await sb.auth.getSession()).data?.session;
   setupRealtime(session?.user?.id || null);
+  subscribeRoomLife(currentRoom.public_token, currentRoom.id);
   startPolling(session?.user?.id || currentRoom.public_token);
   if (!session) {
     const dz = document.getElementById("dropzone");
@@ -8039,6 +8104,11 @@ async function loadRoomFiles(silent) {
   if (!currentRoom) return;
   const { data, error } = await sb.rpc("list_room_files", { p_token: currentRoom.public_token });
   if (error) {
+    const msg = String(error.message || "").toLowerCase();
+    if (msg.includes("not found") || msg.includes("o'chir") || msg.includes("deleted") || msg.includes("does not exist")) {
+      leaveDeletedRoom();
+      return;
+    }
     if (!silent) fileListEl.innerHTML = `<p class="empty">Xato: ${escapeHtml(error.message)}</p>`;
     return;
   }
@@ -8129,6 +8199,8 @@ async function copyRoomLinkByToken(token) {
 async function deleteRoomFromSettings(id, name) {
   const ok = await showConfirm(`"${name}" roomini o'chirasizmi?`, "O'chirish");
   if (!ok) return;
+  const doomed = myRooms.find((r) => String(r.id) === String(id));
+  await broadcastRoomDeleted(doomed?.public_token || (currentRoom && String(currentRoom.id) === String(id) ? currentRoom.public_token : null));
   const { error } = await sb.from(ROOMS_TABLE).delete().eq("id", id);
   if (error) {
     showAlert("Xato: " + error.message);
@@ -8137,7 +8209,7 @@ async function deleteRoomFromSettings(id, name) {
   showToast("Room o'chirildi");
   await loadMyRooms();
   if (currentRoom && String(currentRoom.id) === String(id)) {
-    location.href = "/";
+    leaveDeletedRoom();
   }
 }
 
@@ -8208,13 +8280,14 @@ async function deleteCurrentRoom() {
       }
     }
   } catch (_) {}
+  const token = currentRoom.public_token;
+  await broadcastRoomDeleted(token);
   const { error } = await sb.from(ROOMS_TABLE).delete().eq("id", currentRoom.id);
   if (error) {
     showAlert("Xato: " + error.message);
     return;
   }
-  showToast("Room o'chirildi");
-  location.href = "/";
+  leaveDeletedRoom();
 }
 
 // Hide folder tabs in room mode; show simple label
