@@ -257,10 +257,17 @@
   .agent-tabs {
     display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap;
   }
+  /* Dark logos: black pad in light mode; invert to light in dark mode */
   .agent-tab.dark-icon img {
     background: #0a0a0a;
     border-radius: 5px;
     padding: 2px;
+  }
+  html[data-theme="dark"] .agent-tab.dark-icon img,
+  html.theme-dark .agent-tab.dark-icon img {
+    filter: invert(1) brightness(1.15);
+    background: transparent;
+    padding: 0;
   }
   .agent-tab {
     display: inline-flex; align-items: center; gap: 7px;
@@ -407,7 +414,7 @@
             <img src="/assets/tab-grok.png" alt="Grok">
             Grok
           </button>
-          <button type="button" class="agent-tab cursor" data-agent="cursor" role="tab" aria-selected="false">
+          <button type="button" class="agent-tab cursor dark-icon" data-agent="cursor" role="tab" aria-selected="false">
             <img src="/assets/cursor-tab.png" alt="Cursor">
             Cursor
           </button>
