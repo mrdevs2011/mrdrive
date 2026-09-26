@@ -1426,7 +1426,7 @@ function renderStorageUsage(u, note) {
   const STORAGE_LIMIT_BYTES = Number(u.limit) > 0 ? Number(u.limit) : DEFAULT_STORAGE_LIMIT_BYTES;
   const total = (u.video || 0) + (u.image || 0) + (u.file || 0);
   const pct = (total / STORAGE_LIMIT_BYTES) * 100;
-  const pctText = total > 0 && pct < 0.1 ? "<0.1%" : (pct >= 10 ? Math.round(pct) : pct.toFixed(1)) + "%";
+  const pctText = (pct > 0 && pct < 0.1 ? 0.1 : (pct >= 10 ? Math.round(pct) : Number(pct.toFixed(1)))) + "%";
   const $ = (id) => document.getElementById(id);
 
   const pctEl = $("usage-pct");
