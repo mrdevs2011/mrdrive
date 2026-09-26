@@ -3356,10 +3356,11 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   max-width: 860px;
   margin: 0 auto;
 }
-/* Never show a second chrome bar inside public MD */
+/* Never show a second chrome bar (subheader) inside public previews */
 .public-preview.is-markdown .md-header,
 .public-preview.is-markdown .code-header,
-.public-preview.is-markdown .public-code-meta {
+.public-preview.is-markdown .public-code-meta,
+.public-preview.is-code .public-code-meta {
   display: none !important;
 }
 .public-modal-box.has-preview .public-preview.is-markdown {

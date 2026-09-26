@@ -963,8 +963,6 @@ async function renderPublicCode(url, previewWrap, filename) {
   const res = await fetch(url);
   const text = await res.text();
   const extLower = (filename.split(".").pop() || "").toLowerCase();
-  const ext = extLower.toUpperCase() || "TXT";
-  const lines = text.split("\n").length;
   const tooBig = text.length > CODE_HIGHLIGHT_MAX_CHARS;
 
   const wrap = document.createElement("div");
@@ -973,20 +971,12 @@ async function renderPublicCode(url, previewWrap, filename) {
   const body = document.createElement("div");
   body.className = "public-code-wrap";
 
-  const meta = document.createElement("div");
-  meta.className = "public-code-meta";
-  meta.innerHTML =
-    '<span class="code-lang-badge">' + escapeHtml(ext) + '</span>' +
-    '<span class="code-lines">' + lines + ' qator</span>' +
-    (tooBig ? '<span class="code-lines">rang ochirilgan - katta fayl</span>' : '');
-
   const pre = document.createElement("pre");
   const codeEl = document.createElement("code");
   const lang = (typeof CODE_LANG_MAP !== "undefined" && CODE_LANG_MAP[extLower]) || null;
   if (lang) codeEl.className = "language-" + lang;
   codeEl.textContent = text;
   pre.appendChild(codeEl);
-  body.appendChild(meta);
   body.appendChild(pre);
   wrap.appendChild(body);
 
