@@ -781,7 +781,7 @@ body.is-dragging-file .folder-tab-wrap {
   padding: 0;
   border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--neutral-soft, #f4f4f5);
+  background: var(--neutral-soft);
   color: var(--text-muted);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -2740,7 +2740,8 @@ header, .toolbar {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .file-context-menu .ctx-item:hover {
-  background: var(--neutral-soft, #f4f4f5);
+  background: var(--neutral-soft);
+  color: var(--text);
 }
 .file-context-menu .ctx-item.ctx-danger {
   color: var(--danger);
@@ -2787,17 +2788,19 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .ts-thumb {
   position: absolute;
   border-radius: 999px;
-  background: rgba(113, 113, 122, .55);
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
   transition: background .15s ease, width .15s ease, height .15s ease;
   touch-action: none;
 }
 /* resting = 3px hair line hugging the edge, hover/drag = 6px */
 .ts-y .ts-thumb { right: 0; width: 3px; }
 .ts-x .ts-thumb { bottom: 0; height: 3px; }
-.ts-track:hover .ts-thumb, .ts-track.ts-drag .ts-thumb { background: rgba(82, 82, 91, .8); }
+.ts-track:hover .ts-thumb, .ts-track.ts-drag .ts-thumb {
+  background: color-mix(in srgb, var(--text-muted) 75%, transparent);
+}
 .ts-y:hover .ts-thumb, .ts-y.ts-drag .ts-thumb { width: 6px; }
 .ts-x:hover .ts-thumb, .ts-x.ts-drag .ts-thumb { height: 6px; }
-/* on dark surfaces (code / pdf viewer) */
+/* stronger contrast on dark chrome surfaces */
 .ts-dark .ts-thumb { background: rgba(255, 255, 255, .28); }
 .ts-dark:hover .ts-thumb, .ts-dark.ts-drag .ts-thumb { background: rgba(255, 255, 255, .55); }
 
@@ -3539,8 +3542,8 @@ body.public-dark {
 .public-modal-box.is-dark-preview .public-download-btn:hover:not(:disabled),
 .public-modal-box.is-dark-preview .public-fs-btn:hover:not(:disabled),
 .public-modal-box.is-dark-preview .public-edit-btn:hover:not(.active) {
-  background: #334155 !important;
-  color: #fff !important;
+  background: var(--border-strong) !important;
+  color: var(--preview-text) !important;
 }
 .public-modal-box.is-dark-preview .public-modal-icon {
   background: var(--preview-btn) !important;
