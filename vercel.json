@@ -10,6 +10,7 @@
   "rewrites": [
     { "source": "/video", "destination": "/video/index.html" },
     { "source": "/video/", "destination": "/video/index.html" },
-    { "source": "/f/(.*)", "destination": "/index.html" }
+    { "source": "/f/(.*)", "destination": "/index.html" },
+    { "source": "/r/(.*)", "destination": "/index.html" }
   ]
 }

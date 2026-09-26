@@ -248,6 +248,12 @@ let allFolders = [];
 let newlyCreatedFolderId = null; // for appear animation
 let currentSearch = "";
 let currentFolder = null;
+
+// Public Rooms
+const ROOMS_TABLE = "rooms";
+let currentRoom = null; // { id, name, public_token, owner_id, ... } when in room view
+let myRooms = []; // rooms owned by current user
+let roomMode = false; // true when viewing /r/TOKEN
 let selectedFileIds = new Set(); // ids currently selected via click/marquee
 let lastClickedFileId = null; // for shift-click range select
 let kbCursorId = null; // card the arrow keys are standing on (keyboard shortcuts)
@@ -523,6 +529,12 @@ function setupRealtime(userId) {
 const urlParams = new URLSearchParams(window.location.search);
 const shareToken = urlParams.get("share");
 
+function parseRoomTokenFromPath() {
+  const m = (window.location.pathname || "").match(/^\/r\/([a-f0-9]{32})\/?$/i);
+  return m ? m[1].toLowerCase() : null;
+}
+const roomTokenFromUrl = parseRoomTokenFromPath();
+
 /** Splash (3s) davomida orqa fonda yuklab qo'yiladigan statik narsalar:
  * ikonlar, Claude logo, PDF worker. Fayl ro'yxati va rasm thumbnaillari
  * loadFiles() ichida yuklanadi (prefetchThumbUrls / prefetchDragUrls). */
@@ -545,6 +557,12 @@ if (shareToken) {
   if (window.MRSplash) window.MRSplash.skip(); else bootLoader.style.display = "none";
   if (appScreen) appScreen.style.display = "none";
   showPublicDownloadModal(shareToken);
+} else if (roomTokenFromUrl) {
+  // Public room: show app UI in room mode (login optional for view; required for upload)
+  if (window.MRSplash) window.MRSplash.skip(); else bootLoader.style.display = "none";
+  if (appScreen) appScreen.style.display = "block";
+  roomMode = true;
+  enterRoomByToken(roomTokenFromUrl);
 } else {
   sb.auth.getSession().then(({ data: { session } }) => {
     if (session) {
@@ -1536,9 +1554,26 @@ sb.auth.onAuthStateChange((event, session) => {
   // Splash paytida boot oqimi hamma narsani o'zi yuklaydi — takror yuklamaymiz
   // (lekin sign-out bo'lsa baribir login'ga o'tamiz).
   if (splashActive() && session) return;
-  // Public share link — login majburiy emas
+  // Public share / room — login majburiy emas (ko'rish uchun)
   if (shareToken) return;
+  if (roomMode || roomTokenFromUrl) {
+    if (session) {
+      window.__mrSessionUserId = session.user.id;
+      if (currentRoom) {
+        updateRoomHeader();
+        loadRoomFiles();
+      }
+    } else {
+      window.__mrSessionUserId = null;
+      if (currentRoom) {
+        updateRoomHeader();
+        loadRoomFiles();
+      }
+    }
+    return;
+  }
   if (session) {
+    window.__mrSessionUserId = session.user.id;
     if (appScreen) appScreen.style.display = "block";
     // TOKEN_REFRESHED / INITIAL_SESSION tab-focus da JWT flicker qilmasin:
     // ro'yxat allaqachon bor bo'lsa faqat silent refresh.
@@ -1850,7 +1885,11 @@ async function runUpload(file, fileId, targetFolder, ui) {
     // Unique even for same-named files added in the same millisecond.
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const rand = Math.random().toString(36).slice(2, 8);
-    path = `${user.id}/${Date.now()}_${rand}_${safeName}`;
+    if (roomMode && currentRoom) {
+      path = `rooms/${currentRoom.public_token}/${user.id}/${Date.now()}_${rand}_${safeName}`;
+    } else {
+      path = `${user.id}/${Date.now()}_${rand}_${safeName}`;
+    }
 
     ui.setPercent(0);
     for (let attempt = 1; ; attempt++) {
@@ -1885,7 +1924,13 @@ async function runUpload(file, fileId, targetFolder, ui) {
       storage_path: path,
       size: file.size
     };
-    if (targetFolder) insertData.folder = targetFolder;
+    if (roomMode && currentRoom) {
+      insertData.room_id = currentRoom.id;
+      insertData.uploader_username =
+        user.user_metadata?.username || user.user_metadata?.name || "user";
+    } else if (targetFolder) {
+      insertData.folder = targetFolder;
+    }
 
     const { error: dbError } = await sb.from(TABLE).insert(insertData);
     if (dbError) {
@@ -2246,8 +2291,13 @@ async function loadFiles(silent) {
 
   // Only MY rows. Without this filter the "anyone can read public files" policy
   // also returns other accounts' public files, which then show up (undeletable) in this drive.
+  if (roomMode && currentRoom) {
+    await loadRoomFiles();
+    return;
+  }
+
   let [filesRes, foldersRes] = await Promise.all([
-    sb.from(TABLE).select("*").eq("user_id", user.id).order("uploaded_at", { ascending: false }),
+    sb.from(TABLE).select("*").eq("user_id", user.id).is("room_id", null).order("uploaded_at", { ascending: false }),
     sb.from(FOLDERS_TABLE).select("*").eq("user_id", user.id).order("created_at", { ascending: true })
   ]);
 
@@ -2259,7 +2309,7 @@ async function loadFiles(silent) {
         session = data.session;
         user = session.user;
         [filesRes, foldersRes] = await Promise.all([
-          sb.from(TABLE).select("*").eq("user_id", user.id).order("uploaded_at", { ascending: false }),
+          sb.from(TABLE).select("*").eq("user_id", user.id).is("room_id", null).order("uploaded_at", { ascending: false }),
           sb.from(FOLDERS_TABLE).select("*").eq("user_id", user.id).order("created_at", { ascending: true })
         ]);
       }
@@ -2328,6 +2378,34 @@ async function loadFiles(silent) {
 }
 
 function renderToolbar() {
+  if (roomMode && currentRoom) {
+    let toolbar = document.getElementById("toolbar");
+    if (!toolbar) {
+      toolbar = document.createElement("div");
+      toolbar.id = "toolbar";
+      toolbar.className = "toolbar";
+      const dz = document.getElementById("dropzone");
+      if (dz && dz.parentNode) dz.parentNode.insertBefore(toolbar, dz.nextSibling);
+    }
+    toolbar.innerHTML = `
+      <div class="search-wrap">
+        <span class="search-icon">${ICON_SEARCH}</span>
+        <input type="text" id="search-input" placeholder="Roomdan qidirish..." value="${escapeHtml(currentSearch)}" />
+      </div>
+      <div class="folder-tabs">
+        <span class="room-files-label">Room fayllari · hamma ko'radi · faqat o'zingiznikini o'chirasiz</span>
+      </div>
+    `;
+    const searchInput = document.getElementById("search-input");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        currentSearch = e.target.value;
+        renderFiles();
+      });
+    }
+    return;
+  }
+
   let toolbar = document.getElementById("toolbar");
   if (!toolbar) {
     toolbar = document.createElement("div");
@@ -2356,6 +2434,7 @@ function renderToolbar() {
         </div>
       `).join("")}
       <button class="folder-tab new-folder-btn" onclick="createFolder()">+ Folder</button>
+      <button class="folder-tab new-room-btn" onclick="createRoom()" title="Public room yaratish">+ Room</button>
     </div>
   `;
 
@@ -2853,6 +2932,9 @@ function renderFiles() {
     const isExpired = f.expires_at && new Date(f.expires_at) < new Date();
 
     let meta = `${formatSize(f.size)} · ${formatDate(f.uploaded_at)}`;
+    if (f.uploader_username) {
+      meta += ` · <span class="uploader-badge">@${escapeHtml(f.uploader_username)}</span>`;
+    }
     if (f.download_count > 0) {
       meta += ` · ${f.download_count} ${f.download_count === 1 ? "download" : "downloads"}`;
     }
@@ -2882,16 +2964,16 @@ function renderFiles() {
       </div>
       <div class="file-actions">
         <div class="file-actions-more">
-          ${isPublic
+          ${roomMode ? "" : (isPublic
             ? `<div class="toggle-group">
                  <button class="toggle-btn copy-btn" onclick="copyPublicLink(${f.id}, this)" title="Havolani nusxalash">${ICON_COPY}</button>
                  <button class="toggle-btn refresh-btn" onclick="refreshPublicLink(${f.id})" title="Yangi havola (eski ishlamay qoladi)">${ICON_REFRESH}</button>
                  <button class="toggle-btn unlink-btn" onclick="unpublishFile(${f.id})" title="Ommaviydan o'chirish">${ICON_UNLINK}</button>
                </div>`
             : `<button class="link-btn" onclick="createPublicLink(${f.id})" title="Ommaviy havola yaratish">${ICON_LINK}</button>`
-          }
+          )}
           <button onclick="downloadFile(${f.id}, '${escapeJs(f.storage_path)}', '${escapeJs(f.filename)}')" title="Yuklab olish">${ICON_DOWNLOAD}</button>
-          <button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}', event)" title="O'chirish">${ICON_DELETE}</button>
+          ${canDeleteFile(f) ? `<button onclick="deleteFile(${f.id}, '${escapeJs(f.storage_path)}', event)" title="O'chirish">${ICON_DELETE}</button>` : ""}
         </div>
       </div>
     </div>
@@ -7536,3 +7618,169 @@ document.getElementById("settings-shortcuts-btn")?.addEventListener("click", (e)
   if (gear && menu && !menu.hidden) gear.click(); // close the settings menu first
   showShortcutsHelp();
 });
+
+
+// ==========================================
+// PUBLIC ROOMS
+// ==========================================
+
+function canDeleteFile(f) {
+  // Personal drive: list is already own files. Room: only the uploader.
+  if (!f) return false;
+  if (!roomMode) return true;
+  const me = window.__mrSessionUserId;
+  if (!me) return false;
+  return String(f.user_id) === String(me);
+}
+
+async function refreshSessionUserId() {
+  const { data: { session } } = await sb.auth.getSession();
+  window.__mrSessionUserId = session?.user?.id || null;
+  return session;
+}
+
+async function enterRoomByToken(token) {
+  roomMode = true;
+  currentFolder = null;
+  fileListEl.innerHTML = `<p class="empty">Room yuklanmoqda…</p>`;
+
+  const { data, error } = await sb.rpc("get_room_by_token", { p_token: token });
+  const room = Array.isArray(data) ? data[0] : data;
+  if (error || !room) {
+    fileListEl.innerHTML = `<p class="empty">Room topilmadi yoki o'chirilgan.</p>`;
+    currentRoom = null;
+    return;
+  }
+  currentRoom = room;
+  await refreshSessionUserId();
+  updateRoomHeader();
+  await loadRoomFiles();
+  // If logged in, still allow upload via dropzone
+  const session = (await sb.auth.getSession()).data?.session;
+  if (!session) {
+    // Show subtle hint: login to upload
+    const dz = document.getElementById("dropzone");
+    if (dz) {
+      const hint = document.getElementById("room-login-hint") || document.createElement("p");
+      hint.id = "room-login-hint";
+      hint.className = "room-login-hint";
+      hint.innerHTML = `Fayl yuklash uchun <a href="/login/">login</a> qiling. Ko'rish bepul.`;
+      if (!document.getElementById("room-login-hint")) dz.appendChild(hint);
+    }
+  }
+}
+
+function updateRoomHeader() {
+  if (!currentRoom) return;
+  const brand = document.querySelector(".brand h1");
+  if (brand) brand.textContent = currentRoom.name || "Room";
+  // Ensure room bar exists
+  let bar = document.getElementById("room-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "room-bar";
+    bar.className = "room-bar";
+    const app = document.getElementById("app");
+    const header = app && app.querySelector("header");
+    if (header && header.nextSibling) {
+      app.insertBefore(bar, header.nextSibling);
+    } else if (app) {
+      app.prepend(bar);
+    }
+  }
+  const isOwner = window.__mrSessionUserId && String(currentRoom.owner_id) === String(window.__mrSessionUserId);
+  bar.innerHTML = `
+    <div class="room-bar-main">
+      <span class="room-bar-label">Public room</span>
+      <strong class="room-bar-name">${escapeHtml(currentRoom.name || "Room")}</strong>
+    </div>
+    <div class="room-bar-actions">
+      <button type="button" class="room-bar-btn" onclick="copyRoomLink()" title="Linkni nusxalash">${ICON_COPY} Link</button>
+      ${isOwner ? `<button type="button" class="room-bar-btn room-bar-danger" onclick="deleteCurrentRoom()" title="Roomni o'chirish">${ICON_DELETE}</button>` : ""}
+      <a class="room-bar-btn" href="/" title="MRdrive">← Drive</a>
+    </div>
+  `;
+}
+
+async function loadRoomFiles() {
+  if (!currentRoom) return;
+  const { data, error } = await sb.rpc("list_room_files", { p_token: currentRoom.public_token });
+  if (error) {
+    fileListEl.innerHTML = `<p class="empty">Xato: ${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  allFiles = data || [];
+  allFolders = [];
+  filesListReady = true;
+  await refreshSessionUserId();
+  renderToolbar();
+  renderFiles();
+}
+
+async function createRoom() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session?.user) {
+    showAlert("Room yaratish uchun login qiling.");
+    return;
+  }
+  const name = (prompt("Room nomi:", "Room") || "").trim() || "Room";
+  const token = generateToken();
+  const { data, error } = await sb.from(ROOMS_TABLE).insert({
+    owner_id: session.user.id,
+    name,
+    public_token: token
+  }).select().single();
+
+  if (error) {
+    showAlert("Xato: " + error.message);
+    return;
+  }
+  const url = `${window.location.origin}/r/${token}`;
+  await copyToClipboard(url);
+  showToast("Room yaratildi — link nusxalandi");
+  // Navigate into the new room
+  history.pushState({}, "", `/r/${token}`);
+  roomMode = true;
+  currentRoom = data;
+  window.__mrSessionUserId = session.user.id;
+  updateRoomHeader();
+  await loadRoomFiles();
+}
+
+async function copyRoomLink() {
+  if (!currentRoom) return;
+  const url = `${window.location.origin}/r/${currentRoom.public_token}`;
+  await copyToClipboard(url);
+  showToast("Room linki nusxalandi");
+}
+
+async function deleteCurrentRoom() {
+  if (!currentRoom) return;
+  if (!confirm(`"${currentRoom.name}" roomini o'chirasizmi? Ichidagi barcha fayllar ham o'chadi.`)) return;
+  // Best-effort: remove storage objects we can (owner may not own others' room paths)
+  try {
+    const files = allFiles || [];
+    const paths = files.map((f) => f.storage_path).filter(Boolean);
+    if (paths.length) {
+      // delete in chunks
+      for (let i = 0; i < paths.length; i += 50) {
+        await sb.storage.from(BUCKET).remove(paths.slice(i, i + 50)).catch(() => {});
+      }
+    }
+  } catch (_) {}
+  const { error } = await sb.from(ROOMS_TABLE).delete().eq("id", currentRoom.id);
+  if (error) {
+    showAlert("Xato: " + error.message);
+    return;
+  }
+  showToast("Room o'chirildi");
+  location.href = "/";
+}
+
+// Hide folder tabs in room mode; show simple label
+const _origRenderToolbar = typeof renderToolbar === "function" ? renderToolbar : null;
+
+window.createRoom = createRoom;
+window.copyRoomLink = copyRoomLink;
+window.deleteCurrentRoom = deleteCurrentRoom;
+window.enterRoomByToken = enterRoomByToken;

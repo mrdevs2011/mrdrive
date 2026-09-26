@@ -3812,3 +3812,94 @@ html[data-theme="light"] .annot-viewer.kind-video .annot-workspace,
 html[data-theme="light"] .annot-viewer.kind-audio .annot-workspace {
   background: var(--bg);
 }
+
+
+/* ===== Public Rooms ===== */
+.room-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  margin: 0 0 8px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+.room-bar-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.room-bar-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #64748b);
+  font-weight: 600;
+}
+.room-bar-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text, #0f172a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.room-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.room-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: var(--bg, #f8fafc);
+  color: var(--text, #0f172a);
+  cursor: pointer;
+  text-decoration: none;
+}
+.room-bar-btn:hover {
+  background: var(--surface-hover, #f1f5f9);
+}
+.room-bar-btn.room-bar-danger {
+  color: #b91c1c;
+}
+.room-bar-btn.room-bar-danger:hover {
+  background: #fef2f2;
+}
+.room-files-label {
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+  padding: 6px 4px;
+}
+.uploader-badge {
+  color: var(--accent, #3b82f6);
+  font-weight: 500;
+}
+.room-login-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+}
+.room-login-hint a {
+  color: var(--accent, #3b82f6);
+  font-weight: 600;
+}
+.new-room-btn {
+  border-style: dashed !important;
+}
+html[data-theme=dark] .room-bar,
+html.theme-dark .room-bar {
+  background: var(--surface);
+  border-color: var(--border);
+}
