@@ -7808,7 +7808,8 @@ async function copyRoomLinkByToken(token) {
 }
 
 async function deleteRoomFromSettings(id, name) {
-  if (!confirm(`"${name}" roomini o'chirasizmi?`)) return;
+  const ok = await showConfirm(`"${name}" roomini o'chirasizmi?`, "O'chirish");
+  if (!ok) return;
   const { error } = await sb.from(ROOMS_TABLE).delete().eq("id", id);
   if (error) {
     showAlert("Xato: " + error.message);
@@ -7827,7 +7828,14 @@ async function createRoom() {
     showAlert("Room yaratish uchun login qiling.");
     return;
   }
-  const name = (prompt("Room nomi:", "Room") || "").trim() || "Room";
+  const raw = await showPrompt("Room nomi", {
+    okLabel: "Yaratish",
+    cancelLabel: "Bekor qilish",
+    placeholder: "Masalan: Loyiha team",
+    defaultValue: "Room"
+  });
+  if (raw == null) return; // cancelled
+  const name = String(raw).trim() || "Room";
   const token = generateToken();
   const { data, error } = await sb.from(ROOMS_TABLE).insert({
     owner_id: session.user.id,
@@ -7864,7 +7872,11 @@ async function copyRoomLink() {
 
 async function deleteCurrentRoom() {
   if (!currentRoom) return;
-  if (!confirm(`"${currentRoom.name}" roomini o'chirasizmi? Ichidagi barcha fayllar ham o'chadi.`)) return;
+  const ok = await showConfirm(
+    `"${currentRoom.name}" roomini o'chirasizmi? Ichidagi barcha fayllar ham o'chadi.`,
+    "O'chirish"
+  );
+  if (!ok) return;
   // Best-effort: remove storage objects we can (owner may not own others' room paths)
   try {
     const files = allFiles || [];
