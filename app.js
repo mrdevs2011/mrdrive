@@ -1504,8 +1504,88 @@ function applyTheme(theme) {
   if (cb) cb.checked = t === "dark";
   document.documentElement.classList.toggle("public-dark", t === "dark");
   if (document.body) document.body.classList.toggle("public-dark", t === "dark");
+  const guestToggle = document.getElementById("theme-toggle-btn");
+  if (guestToggle && typeof paintGuestThemeToggle === "function") paintGuestThemeToggle(guestToggle);
 }
 applyTheme(getTheme());
+
+(function bindBrandHome() {
+  function goHome(e) {
+    if (e) e.preventDefault();
+    try {
+      if (annotState && annotState.open && typeof closeAnnotationViewer === "function") {
+        closeAnnotationViewer({ skipUrl: true });
+      }
+    } catch (_) {}
+    location.assign("/");
+  }
+  function wire(el) {
+    if (!el || el.dataset.homeWired) return;
+    el.dataset.homeWired = "1";
+    el.setAttribute("role", "link");
+    el.setAttribute("title", "MRdrive — bosh sahifa");
+    el.style.cursor = "pointer";
+    el.addEventListener("click", goHome);
+  }
+  wire(document.querySelector("#app .brand"));
+  document.querySelectorAll("header .brand-logo, .brand .brand-logo").forEach(wire);
+})();
+
+/** Ro'yxatdan o'tmagan / sessiyasiz user: gear UI ham, console orqali ham yopiq. */
+function isRegisteredSession() {
+  return !!(window.__mrSessionUserId);
+}
+
+const ICON_THEME_SUN = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
+const ICON_THEME_MOON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 14.3A8.5 8.5 0 0 1 9.7 3 7 7 0 1 0 21 14.3z"/></svg>`;
+
+function paintGuestThemeToggle(btn) {
+  if (!btn) return;
+  const dark = getTheme() === "dark";
+  btn.innerHTML = dark ? ICON_THEME_SUN : ICON_THEME_MOON;
+  btn.title = dark ? "Yorug' rejim" : "Qorong'u rejim";
+  btn.setAttribute("aria-label", btn.title);
+}
+
+function stripGuestSettingsDom() {
+  const modal = document.getElementById("settings-modal");
+  if (modal) modal.remove();
+
+  const gearBtn = document.getElementById("gear-btn");
+  let btn = document.getElementById("theme-toggle-btn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "theme-toggle-btn";
+    btn.className = "gear-btn theme-toggle-btn";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      applyTheme(getTheme() === "dark" ? "light" : "dark");
+    });
+    if (gearBtn) gearBtn.replaceWith(btn);
+    else {
+      const wrap = document.querySelector(".settings-wrap") || document.querySelector(".header-right");
+      if (wrap) wrap.appendChild(btn);
+    }
+  } else if (gearBtn) {
+    gearBtn.remove();
+  }
+  paintGuestThemeToggle(btn);
+}
+
+function applyGuestRestrictions() {
+  if (isRegisteredSession()) return;
+  stripGuestSettingsDom();
+  window.__mrGuestLocked = true;
+}
+
+function requireRegistered(action) {
+  if (isRegisteredSession()) return true;
+  applyGuestRestrictions();
+  showToast("Faqat hisob bilan", "warning", "Bu amal uchun ro'yxatdan o'ting.");
+  return false;
+}
 
 // Gear icon → sozlamalar modal (Claude ga ulang + Account + Log out)
 (function initSettingsMenu() {
@@ -1532,6 +1612,10 @@ applyTheme(getTheme());
   if (darkCb) darkCb.checked = getTheme() === "dark";
 
   function openSettings() {
+    if (!isRegisteredSession()) {
+      applyGuestRestrictions();
+      return;
+    }
     if (skipDeleteCb) skipDeleteCb.checked = isSkipDeleteConfirm();
     if (darkCb) darkCb.checked = getTheme() === "dark";
     modal.hidden = false;
@@ -1611,6 +1695,7 @@ sb.auth.onAuthStateChange((event, session) => {
       }
     } else {
       window.__mrSessionUserId = null;
+      if (roomMode || roomTokenFromUrl || shareToken) applyGuestRestrictions();
       if (currentRoom) {
         updateRoomHeader();
         loadRoomFiles();
@@ -2074,7 +2159,8 @@ async function runUpload(file, fileId, targetFolder, ui) {
       insertData.room_id = currentRoom.id;
       insertData.uploader_username =
         user.user_metadata?.username || user.user_metadata?.name || "user";
-    } else if (targetFolder) {
+    }
+    if (targetFolder) {
       insertData.folder = targetFolder;
     }
 
@@ -2328,15 +2414,15 @@ async function ensureFolderExists(name) {
     id: "temp-" + Date.now(),
     name,
     user_id: user.id,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    room_id: (roomMode && currentRoom) ? currentRoom.id : null
   };
   allFolders.push(optimisticFolder);
   renderToolbar();
 
-  const { data, error } = await sb.from(FOLDERS_TABLE).insert({
-    user_id: user.id,
-    name
-  }).select().single();
+  const insertFolder = { user_id: user.id, name };
+  if (roomMode && currentRoom) insertFolder.room_id = currentRoom.id;
+  const { data, error } = await sb.from(FOLDERS_TABLE).insert(insertFolder).select().single();
 
   if (error) {
     allFolders = allFolders.filter(f => f.id !== optimisticFolder.id);
@@ -2523,46 +2609,25 @@ async function loadFiles(silent) {
 }
 
 function renderToolbar() {
-  if (roomMode && currentRoom) {
-    let toolbar = document.getElementById("toolbar");
-    if (!toolbar) {
-      toolbar = document.createElement("div");
-      toolbar.id = "toolbar";
-      toolbar.className = "toolbar";
-      const dz = document.getElementById("dropzone");
-      if (dz && dz.parentNode) dz.parentNode.insertBefore(toolbar, dz.nextSibling);
-    }
-    toolbar.innerHTML = `
-      <div class="search-wrap">
-        <span class="search-icon">${ICON_SEARCH}</span>
-        <input type="text" id="search-input" placeholder="Roomdan qidirish..." value="${escapeHtml(currentSearch)}" />
-      </div>
-      <div class="folder-tabs">
-        <span class="room-files-label">Room fayllari · hamma ko'radi · faqat o'zingiznikini o'chirasiz</span>
-      </div>
-    `;
-    const searchInput = document.getElementById("search-input");
-    if (searchInput) {
-      searchInput.addEventListener("input", (e) => {
-        currentSearch = e.target.value;
-        renderFiles();
-      });
-    }
-    return;
-  }
+  const canManageFolders = !roomMode || isRegisteredSession();
+  const searchPlaceholder = (roomMode && currentRoom)
+    ? "Roomdan qidirish..."
+    : "Fayllarni qidirish...";
 
   let toolbar = document.getElementById("toolbar");
   if (!toolbar) {
     toolbar = document.createElement("div");
     toolbar.id = "toolbar";
     toolbar.className = "toolbar";
-    dropzone.parentNode.insertBefore(toolbar, dropzone.nextSibling);
+    const dz = document.getElementById("dropzone") || dropzone;
+    if (dz && dz.parentNode) dz.parentNode.insertBefore(toolbar, dz.nextSibling);
+    else document.getElementById("app")?.appendChild(toolbar);
   }
 
   toolbar.innerHTML = `
     <div class="search-wrap">
       <span class="search-icon">${ICON_SEARCH}</span>
-      <input type="text" id="search-input" placeholder="Fayllarni qidirish..." value="${escapeHtml(currentSearch)}" />
+      <input type="text" id="search-input" placeholder="${escapeHtml(searchPlaceholder)}" value="${escapeHtml(currentSearch)}" />
     </div>
     <div class="folder-tabs">
       <button class="folder-tab ${currentFolder === null ? 'active' : ''}" data-folder="" onclick="setFolder(null)" title="Faylni papkadan chiqarish uchun shu yerga tashlang">
@@ -2573,12 +2638,12 @@ function renderToolbar() {
           <button class="folder-tab ${currentFolder === f.name ? 'active' : ''}" data-folder="${escapeHtml(f.name)}" onclick="setFolder('${escapeJs(f.name)}')" title="Faylni shu papkaga tashlang">
             ${ICON_FOLDER} ${escapeHtml(f.name)}
           </button>
-          <button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}', event)" title="Papkani o'chir">
+          ${canManageFolders ? `<button class="folder-del-btn" onclick="deleteFolder(${f.id}, '${escapeJs(f.name)}', event)" title="Papkani o'chir">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
+          </button>` : ""}
         </div>
       `).join("")}
-      <button class="folder-tab new-folder-btn" onclick="createFolder()">+ Folder</button>
+      ${canManageFolders ? `<button class="folder-tab new-folder-btn" onclick="createFolder()">+ Folder</button>` : ""}
     </div>
   `;
 
@@ -2912,6 +2977,7 @@ window.addEventListener("popstate", (e) => {
 });
 
 async function createFolder(fileIds, opts) {
+  if (!requireRegistered("folder")) return;
   const dropIds = Array.isArray(fileIds) ? fileIds.map(String) : null; // set when files were dropped on "+ Folder"
   const name = await showPrompt(dropIds ? "Papka nomini kiriting" : "Yangi papka", {
     okLabel: dropIds ? "Yaratish va ko'chirish" : "Yaratish",
@@ -2933,7 +2999,8 @@ async function createFolder(fileIds, opts) {
     id: "temp-" + Date.now(),
     name: trimmed,
     user_id: user.id,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    room_id: (roomMode && currentRoom) ? currentRoom.id : null
   };
   allFolders.push(optimisticFolder);
   newlyCreatedFolderId = optimisticFolder.id;
@@ -2953,10 +3020,9 @@ async function createFolder(fileIds, opts) {
   }
 
   // Background sync to database
-  const { data, error } = await sb.from(FOLDERS_TABLE).insert({
-    user_id: user.id,
-    name: trimmed
-  }).select().single();
+  const insertFolder = { user_id: user.id, name: trimmed };
+  if (roomMode && currentRoom) insertFolder.room_id = currentRoom.id;
+  const { data, error } = await sb.from(FOLDERS_TABLE).insert(insertFolder).select().single();
 
   if (error) {
     // Revert optimistic update on error
@@ -2984,6 +3050,7 @@ async function createFolder(fileIds, opts) {
 }
 
 async function deleteFolder(id, name, evt) {
+  if (!requireRegistered("folder")) return;
   const filesInFolder = allFiles.filter(f => f.folder === name);
   let msg = `"${name}" papkasini o'chirishni xohlaysizmi?`;
   if (filesInFolder.length > 0) {
@@ -3006,7 +3073,10 @@ async function deleteFolder(id, name, evt) {
   markLocalDeleteFolder(id, name);
 
   if (filesInFolder.length > 0) {
-    await sb.from(TABLE).update({ folder: null }).eq("folder", name);
+    let q = sb.from(TABLE).update({ folder: null }).eq("folder", name);
+    if (roomMode && currentRoom) q = q.eq("room_id", currentRoom.id);
+    else q = q.is("room_id", null);
+    await q;
   }
 
   const { error } = await sb.from(FOLDERS_TABLE).delete().eq("id", id);
@@ -7828,6 +7898,8 @@ async function enterRoomByToken(token) {
   }
   currentRoom = room;
   await refreshSessionUserId();
+  applyTheme(getTheme());
+  if (!window.__mrSessionUserId) applyGuestRestrictions();
   updateRoomHeader();
   await loadRoomFiles();
   // Live updates for everyone in the room (incl. anonymous)
@@ -7878,6 +7950,25 @@ function updateRoomHeader() {
   `;
 }
 
+async function loadRoomFolders() {
+  if (!currentRoom) return [];
+  // 1) folders.room_id (yangi schema)
+  let res = await sb.from(FOLDERS_TABLE).select("*").eq("room_id", currentRoom.id).order("created_at", { ascending: true });
+  if (!res.error) return res.data || [];
+  // 2) fallback: room fayllaridagi folder nomlari + owner papkalari
+  const fromFiles = [...new Set((allFiles || []).map((f) => f.folder).filter(Boolean))];
+  const ownerRes = await sb.from(FOLDERS_TABLE).select("*").eq("user_id", currentRoom.owner_id).order("created_at", { ascending: true });
+  const ownerFolders = (!ownerRes.error && ownerRes.data) ? ownerRes.data : [];
+  const byName = new Map();
+  for (const f of ownerFolders) {
+    if (fromFiles.includes(f.name) || String(f.room_id || "") === String(currentRoom.id)) byName.set(f.name, f);
+  }
+  fromFiles.forEach((name) => {
+    if (!byName.has(name)) byName.set(name, { id: "file-" + name, name, user_id: currentRoom.owner_id });
+  });
+  return [...byName.values()];
+}
+
 async function loadRoomFiles(silent) {
   if (!currentRoom) return;
   const { data, error } = await sb.rpc("list_room_files", { p_token: currentRoom.public_token });
@@ -7891,9 +7982,11 @@ async function loadRoomFiles(silent) {
     if (same) return;
   }
   allFiles = newFiles;
-  allFolders = [];
+  allFolders = await loadRoomFolders();
   filesListReady = true;
   await refreshSessionUserId();
+  if (!window.__mrSessionUserId) applyGuestRestrictions();
+  applyTheme(getTheme());
   renderToolbar();
   renderFiles();
   // Square image previews in the list (same as personal drive)
@@ -7983,6 +8076,7 @@ async function deleteRoomFromSettings(id, name) {
 }
 
 async function createRoom() {
+  if (!requireRegistered("room")) return;
   const { data: { session } } = await sb.auth.getSession();
   if (!session?.user) {
     showAlert("Room yaratish uchun login qiling.");
