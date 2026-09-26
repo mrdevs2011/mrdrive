@@ -7,16 +7,40 @@
 <link rel="icon" type="image/png" href="/assets/logo.png">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0b0e14;--surface:#111827;--text:#e2e8f0;--muted:#94a3b8;--accent:#3b82f6;--primary:#2563eb;--soft:rgba(59,130,246,.12);--border:rgba(255,255,255,.08)}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+:root{
+  /* MRdrive dark mode — same tokens as style.css */
+  --primary: #2563eb;
+  --accent: #3b82f6;
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, #0b0e14);
+  --accent-strong: #93c5fd;
+  --primary-soft: color-mix(in srgb, var(--primary) 18%, #0b0e14);
+  --bg: #0b0e14;
+  --surface: #111827;
+  --border: #1e293b;
+  --border-strong: #334155;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --muted: #94a3b8;
+  --neutral-soft: #1e293b;
+  --neutral-text: #cbd5e1;
+  --preview-bg: #0b0e14;
+  --preview-chrome: #0f1419;
+  --preview-text: #e6edf3;
+  --preview-muted: #94a3b8;
+  --preview-border: rgba(255,255,255,0.08);
+  --preview-code: #161b22;
+  --preview-btn: #1e293b;
+  --soft: color-mix(in srgb, var(--accent) 20%, #0b0e14);
+}
+html,body{height:100%;color-scheme:dark;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
 .stage{position:relative;width:100vw;height:100vh;overflow:hidden;background:radial-gradient(ellipse 80% 60% at 50% 20%,rgba(37,99,235,.18),transparent 60%),radial-gradient(ellipse 50% 40% at 80% 80%,rgba(59,130,246,.08),transparent 50%),var(--bg)}
-.progress{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--primary),#60a5fa);z-index:100;box-shadow:0 0 12px rgba(37,99,235,.6)}
+.progress{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--primary),var(--accent-strong));z-index:100;box-shadow:0 0 12px rgba(37,99,235,.6)}
 .scene{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;opacity:0;pointer-events:none;transform:translateY(18px) scale(.98);transition:opacity .28s ease,transform .28s cubic-bezier(.22,.61,.36,1)}
 .scene.active{opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}
 .scene.exit{opacity:0;transform:translateY(-12px) scale(.99)}
 .eyebrow{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;opacity:0;transform:translateY(8px)}
 .title{font-size:clamp(28px,5.5vw,52px);font-weight:700;letter-spacing:-.03em;line-height:1.15;text-align:center;max-width:820px;opacity:0;transform:translateY(14px)}
-.subtitle{margin-top:16px;font-size:clamp(15px,2.2vw,19px);color:var(--muted);text-align:center;max-width:560px;line-height:1.5;opacity:0;transform:translateY(12px)}
+.subtitle{margin-top:16px;font-size:clamp(15px,2.2vw,19px);color:var(--text-muted);text-align:center;max-width:560px;line-height:1.5;opacity:0;transform:translateY(12px)}
 .scene.active .eyebrow,.scene.active .title,.scene.active .subtitle{animation:rise .4s cubic-bezier(.22,.61,.36,1) forwards}
 .scene.active .title{animation-delay:.06s}
 .scene.active .subtitle{animation-delay:.1s}
@@ -26,9 +50,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .scene.active .logo-mark{animation:logoIn .45s cubic-bezier(.22,.61,.36,1) forwards}
 @keyframes logoIn{to{opacity:1;transform:scale(1)}}
 .logo-mark img{width:48px;height:48px;border-radius:10px}
-.brand-name{font-size:clamp(36px,7vw,64px);font-weight:800;letter-spacing:-.04em;background:linear-gradient(180deg,#fff 30%,#93c5fd);-webkit-background-clip:text;background-clip:text;color:transparent;opacity:0;transform:translateY(10px)}
+.brand-name{font-size:clamp(36px,7vw,64px);font-weight:800;letter-spacing:-.04em;background:linear-gradient(180deg,var(--text) 20%,var(--accent-strong));-webkit-background-clip:text;background-clip:text;color:transparent;opacity:0;transform:translateY(10px)}
 .scene.active .brand-name{animation:rise .4s .1s cubic-bezier(.22,.61,.36,1) forwards}
-.tagline{font-size:16px;color:var(--muted);opacity:0}
+.tagline{font-size:16px;color:var(--text-muted);opacity:0}
 .scene.active .tagline{animation:rise .35s .2s ease forwards}
 .visual{margin-top:36px;width:min(520px,92vw);opacity:0;transform:translateY(20px) scale(.96)}
 .scene.active .visual{animation:riseScale .4s .12s cubic-bezier(.22,.61,.36,1) forwards}
@@ -36,7 +60,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 24px 60px rgba(0,0,0,.4)}
 .drop-zone{border:1.5px dashed rgba(59,130,246,.35);border-radius:12px;padding:28px 20px;text-align:center;background:var(--soft)}
 .drop-zone .dz-icon{width:40px;height:40px;margin:0 auto 10px;color:var(--accent)}
-.drop-zone p{font-size:14px;color:var(--muted)}
+.drop-zone p{font-size:14px;color:var(--text-muted)}
 .file-row{display:flex;align-items:center;gap:12px;margin-top:12px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;opacity:0;transform:translateX(-12px)}
 .scene.active .file-row:nth-child(2){animation:slideIn .3s .25s ease forwards}
 .scene.active .file-row:nth-child(3){animation:slideIn .3s .35s ease forwards}
@@ -46,17 +70,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .file-chip svg{width:16px;height:16px}
 .file-meta{flex:1;min-width:0}
 .file-meta strong{display:block;font-size:13px;font-weight:550}
-.file-meta span{font-size:11px;color:var(--muted)}
+.file-meta span{font-size:11px;color:var(--text-muted)}
 .bar{height:3px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:6px;overflow:hidden}
-.bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--primary),#60a5fa);border-radius:2px}
+.bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--primary),var(--accent-strong));border-radius:2px}
 .scene.active .bar>i{animation:fillBar .7s .35s ease forwards}
 @keyframes fillBar{to{width:100%}}
-.preview-window{border-radius:14px;overflow:hidden;border:1px solid var(--border);background:#0f1419}
-.pw-top{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#161b22;border-bottom:1px solid var(--border)}
-.pw-dot{width:8px;height:8px;border-radius:50%;background:#334155}
-.pw-name{font-size:12px;color:var(--muted);margin-left:6px}
-.pw-body{padding:18px 20px;font-family:"SF Mono","JetBrains Mono",Menlo,monospace;font-size:12.5px;line-height:1.65;color:#cbd5e1}
-.pw-body .kw{color:#93c5fd}.pw-body .str{color:#86efac}.pw-body .cm{color:#64748b}.pw-body .fn{color:#c4b5fd}
+.preview-window{border-radius:14px;overflow:hidden;border:1px solid var(--border);background:var(--preview-chrome)}
+.pw-top{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--preview-code);border-bottom:1px solid var(--border)}
+.pw-dot{width:8px;height:8px;border-radius:50%;background:var(--border-strong)}
+.pw-name{font-size:12px;color:var(--text-muted);margin-left:6px}
+.pw-body{padding:18px 20px;font-family:"SF Mono","JetBrains Mono",Menlo,monospace;font-size:12.5px;line-height:1.65;color:var(--neutral-text)}
+.pw-body .kw{color:var(--accent-strong)}.pw-body .str{color:#86efac}.pw-body .cm{color:var(--text-muted)}.pw-body .fn{color:#c4b5fd}
 .line{opacity:0;transform:translateY(6px)}
 .scene.active .line:nth-child(1){animation:rise .25s .15s ease forwards}
 .scene.active .line:nth-child(2){animation:rise .25s .22s ease forwards}
@@ -66,7 +90,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .share-link{display:flex;align-items:center;gap:10px;margin-top:14px;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--accent);font-family:ui-monospace,monospace}
 .share-link button{margin-left:auto;border:none;background:var(--primary);color:#fff;font-size:12px;font-weight:600;padding:6px 12px;border-radius:7px;cursor:default}
 .share-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
-.pill{font-size:12px;padding:6px 11px;border-radius:999px;background:var(--soft);color:#93c5fd;border:1px solid rgba(59,130,246,.2);opacity:0;transform:scale(.9)}
+.pill{font-size:12px;padding:6px 11px;border-radius:999px;background:var(--soft);color:var(--accent-strong);border:1px solid rgba(59,130,246,.2);opacity:0;transform:scale(.9)}
 .scene.active .pill:nth-child(1){animation:pop .25s .2s ease forwards}
 .scene.active .pill:nth-child(2){animation:pop .25s .28s ease forwards}
 .scene.active .pill:nth-child(3){animation:pop .25s .36s ease forwards}
@@ -81,16 +105,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .scene.active .mcp-line{animation:rise .25s .22s ease forwards}
 .mcp-line::after{content:"";position:absolute;top:-3px;left:0;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:pulseMove 1.4s .8s ease-in-out infinite}
 @keyframes pulseMove{0%{left:0;opacity:0}20%{opacity:1}80%{opacity:1}100%{left:calc(100% - 8px);opacity:0}}
-.cta-url{margin-top:28px;font-size:clamp(18px,3.5vw,28px);font-weight:600;letter-spacing:-.02em;color:#93c5fd;opacity:0}
+.cta-url{margin-top:28px;font-size:clamp(18px,3.5vw,28px);font-weight:600;letter-spacing:-.02em;color:var(--accent-strong);opacity:0}
 .scene.active .cta-url{animation:rise .35s .15s ease forwards}
-.cta-hint{margin-top:10px;font-size:14px;color:var(--muted);opacity:0}
+.cta-hint{margin-top:10px;font-size:14px;color:var(--text-muted);opacity:0}
 .scene.active .cta-hint{animation:rise .3s .25s ease forwards}
-.replay{position:fixed;bottom:24px;right:24px;z-index:50;border:1px solid var(--border);background:rgba(17,24,39,.85);backdrop-filter:blur(8px);color:var(--text);font-size:13px;font-weight:500;padding:10px 16px;border-radius:999px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s,background .2s}
+.replay{position:fixed;bottom:24px;right:24px;z-index:50;border:1px solid var(--border);background:color-mix(in srgb, var(--surface) 90%, transparent);backdrop-filter:blur(8px);color:var(--text);font-size:13px;font-weight:500;padding:10px 16px;border-radius:999px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s,background .2s}
 .replay.show{opacity:1;pointer-events:auto}
 .replay:hover{background:var(--surface)}
 .orb{position:absolute;border-radius:50%;filter:blur(60px);pointer-events:none;opacity:.4}
-.orb-1{width:280px;height:280px;background:#1e3a8a;top:-80px;left:-60px;animation:drift 12s ease-in-out infinite alternate}
-.orb-2{width:200px;height:200px;background:#1e40af;bottom:-40px;right:-40px;animation:drift 15s ease-in-out infinite alternate-reverse}
+.orb-1{width:280px;height:280px;background:var(--primary);top:-80px;left:-60px;animation:drift 12s ease-in-out infinite alternate}
+.orb-2{width:200px;height:200px;background:var(--accent);bottom:-40px;right:-40px;animation:drift 15s ease-in-out infinite alternate-reverse}
 @keyframes drift{from{transform:translate(0,0)}to{transform:translate(30px,20px)}}
 @media(max-width:520px){.mcp-row{gap:12px}.mcp-node{width:60px;height:60px;border-radius:14px}.mcp-line{width:40px}.visual{margin-top:24px}}
 
@@ -296,7 +320,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
     <h2 class="title">Bitta havola — hammaga</h2>
     <p class="subtitle">Ommaviy link yarating. Ochganda fayl ko‘rinadi yoki yuklab olinadi.</p>
     <div class="visual"><div class="card">
-      <div style="font-size:13px;color:var(--muted)">Ommaviy havola</div>
+      <div style="font-size:13px;color:var(--text-muted)">Ommaviy havola</div>
       <div class="share-link"><span>mrdrive.vercel.app/f/…</span><button type="button">Nusxa</button></div>
       <div class="share-pills"><span class="pill">Rasm</span><span class="pill">Video</span><span class="pill">PDF</span><span class="pill">Markdown</span></div>
     </div></div>
