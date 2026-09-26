@@ -8020,7 +8020,12 @@ async function enterRoomByToken(token) {
   currentFolder = null;
   fileListEl.innerHTML = `<p class="empty">Room yuklanmoqda…</p>`;
 
-  const { data, error } = await sb.rpc("get_room_by_token", { p_token: token });
+  let data, error;
+  try {
+    ({ data, error } = await sb.rpc("get_room_by_token", { p_token: token }));
+  } catch (e) {
+    error = e;
+  }
   const room = Array.isArray(data) ? data[0] : data;
   if (error || !room) {
     leaveDeletedRoom();
@@ -8028,11 +8033,27 @@ async function enterRoomByToken(token) {
   }
   roomGoneLeaving = false;
   currentRoom = room;
-  await refreshSessionUserId();
-  applyTheme(getTheme());
-  if (!window.__mrSessionUserId) applyGuestRestrictions();
+  // Session/theme setup best-effort: agar bittasi xato bersa ham header
+  // (updateRoomHeader) baribir chizilishi kerak — shuning uchun try/catch.
+  try {
+    await refreshSessionUserId();
+    applyTheme(getTheme());
+  } catch (e) {
+    console.error("enterRoomByToken: session/theme init failed", e);
+  }
+  // onAuthStateChange qachon otilishiga (race) tayanmasdan, chrome holatini
+  // shu yerda aniq belgilaymiz — logged-in bo'lsa gear/room-bar darhol tiklansin.
+  if (window.__mrSessionUserId) {
+    restoreRegisteredChrome();
+  } else {
+    applyGuestRestrictions();
+  }
   updateRoomHeader();
-  await loadRoomFiles();
+  try {
+    await loadRoomFiles();
+  } catch (e) {
+    console.error("enterRoomByToken: loadRoomFiles failed", e);
+  }
   // Live updates for everyone in the room (incl. anonymous)
   const session = (await sb.auth.getSession()).data?.session;
   setupRealtime(session?.user?.id || null);
