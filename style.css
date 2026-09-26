@@ -2462,6 +2462,32 @@ body.is-dragging-file .folder-tab-wrap {
 .public-brand-link:hover { color: var(--text); text-decoration: none; }
 .public-topbar-text .public-brand-link { display: block; width: fit-content; margin-top: 2px; font-size: 12px; }
 .public-modal-box:not(.has-preview) .public-topbar-text .public-brand-link { margin: 8px auto 0; font-size: 13px; }
+.public-brand-footer {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin: 12px 0 16px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+.public-brand-footer:hover {
+  color: var(--text);
+  opacity: 1;
+  text-decoration: none;
+}
+.public-modal-box.has-preview .public-brand-footer {
+  margin: 8px 0 12px;
+  font-size: 12.5px;
+}
+.public-modal-box.is-error .public-brand-footer {
+  margin-top: 20px;
+}
+
 
 /* Not found / expired: no download button, only the MRdrive link */
 .public-modal-box.is-error .public-actions { display: none; }
@@ -3416,10 +3442,18 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   border-bottom-color: var(--preview-border) !important;
   flex-shrink: 0;
 }
-/* One-line topbar for ALL file types: hide size/date + brand under the filename */
-.public-modal-box.has-preview .public-meta,
+/* One-line topbar: keep meta (created/expiry) visible; old topbar brand is gone */
 .public-modal-box.has-preview .public-topbar-text .public-brand-link {
   display: none !important;
+}
+.public-modal-box.has-preview .public-meta {
+  display: block !important;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.9;
+  white-space: normal;
+  line-height: 1.35;
 }
 .public-modal-box.has-preview:has(.public-preview.is-markdown) .public-topbar h2,
 .public-modal-box.has-preview:has(.public-preview.is-markdown) #public-filename,
@@ -3564,9 +3598,13 @@ body.public-dark {
 .public-modal-box.is-dark-preview .public-brand-link {
   color: var(--preview-text) !important;
 }
-.public-modal-box.is-dark-preview .public-meta,
 .public-modal-box.is-dark-preview .public-topbar-text .public-brand-link {
   display: none !important;
+}
+.public-modal-box.is-dark-preview .public-meta {
+  display: block !important;
+  color: var(--preview-text) !important;
+  opacity: 0.85;
 }
 .public-modal-box.is-dark-preview #public-preview-wrap {
   background: var(--preview-bg) !important;

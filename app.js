@@ -602,7 +602,6 @@ function showPublicDownloadModal(token) {
             <div class="public-topbar-text">
               <h2 id="public-filename">Loading…</h2>
               <p id="public-meta" class="public-meta"></p>
-              <a class="public-brand-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer" title="MRdrive">MRdrive</a>
             </div>
           </div>
           <div class="public-actions">
@@ -615,6 +614,7 @@ function showPublicDownloadModal(token) {
           <p id="public-status" class="public-status"></p>
         </div>
         <div id="public-preview-wrap"></div>
+        <a class="public-brand-link public-brand-footer" href="https://mrdrive.vercel.app" rel="noopener noreferrer" title="MRdrive">MRdrive</a>
       </div>
     </div>
   `;
@@ -661,10 +661,13 @@ function showPublicDownloadModal(token) {
       }
 
       filenameEl.textContent = data.filename;
-      let meta = `${formatSize(data.size)} · ${formatDate(data.uploaded_at)}`;
+      let meta = `Yaratilgan: ${formatDate(data.uploaded_at)}`;
       if (data.expires_at) {
-        meta += ` · <span class="public-expiry-inline">amal qilish: ${formatDate(data.expires_at)}</span>`;
+        meta += ` · <span class="public-expiry-inline">Amal qiladi: ${formatDate(data.expires_at)}</span>`;
+      } else {
+        meta += ` · <span class="public-expiry-inline">Amal qiladi: muddatsiz</span>`;
       }
+      meta += ` · ${formatSize(data.size)}`;
       metaEl.innerHTML = meta;
 
       downloadBtn.disabled = false;
