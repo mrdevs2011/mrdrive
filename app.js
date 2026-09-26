@@ -3666,14 +3666,16 @@ function __dissolveDomToCanvas(el, dprOverride) {
         b.style.setProperty("visibility", "hidden");
       });
     }
-    // Solid fallbacks so snapshot never depends on CSS variables
+    // Solid fallbacks so snapshot never depends on CSS variables (theme-aware)
+    var dark = document.documentElement.getAttribute("data-theme") === "dark"
+      || document.documentElement.classList.contains("theme-dark");
     if (!clone.style.background || clone.style.background.includes("var(")) {
-      clone.style.background = "#ffffff";
+      clone.style.background = dark ? "#111827" : "#ffffff";
     }
     if (!clone.style.color || clone.style.color.includes("var(")) {
-      clone.style.color = "#18181b";
+      clone.style.color = dark ? "#e2e8f0" : "#18181b";
     }
-    clone.style.border = "1px solid #e4e4e7";
+    clone.style.border = dark ? "1px solid #1e293b" : "1px solid #e4e4e7";
     clone.style.borderRadius = clone.classList.contains("folder-tab-wrap") ? "8px" : "12px";
 
     const markup =

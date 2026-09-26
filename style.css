@@ -2401,7 +2401,7 @@ body.is-dragging-file .folder-tab-wrap {
   text-align: center;
   font-size: 12px;
   font-weight: 600;
-  color: #a1a1aa;
+  color: var(--text-muted);
   user-select: none;
 }
 .annot-page {
@@ -2955,7 +2955,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .mr-audio-card-meta p,
 .mr-audio-sub {
   margin: 4px 0 0;
-  color: #8e8e93;
+  color: var(--text-muted);
   font-size: 13px;
 }
 .mr-audio-player.is-playing .mr-audio-card-meta {
@@ -2991,7 +2991,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .mr-audio-bar { display: none; }
 .mr-audio-time {
   font-size: 12px;
-  color: #8e8e93;
+  color: var(--text-muted);
   text-align: right;
   margin-bottom: 8px;
   font-variant-numeric: tabular-nums;
@@ -3005,7 +3005,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
   position: relative;
   width: 100%;
   height: 4px;
-  background: rgba(148, 163, 184, 0.28);
+  background: color-mix(in srgb, var(--text-muted) 28%, transparent);
   border-radius: 999px;
   margin-bottom: 28px;
   cursor: pointer;
@@ -3190,16 +3190,16 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 .md-preview h2 { font-size: 1.45em; border-bottom: 1px solid var(--border); padding-bottom: 0.25em; }
 .md-preview h3 { font-size: 1.2em; }
 .md-preview p { margin: 0.75em 0; }
-.md-preview a { color: #7dd3fc; text-decoration: none; }
+.md-preview a { color: var(--accent-strong, var(--primary)); text-decoration: none; }
 .md-preview a:hover { text-decoration: underline; }
 .md-preview ul, .md-preview ol { padding-left: 1.5em; margin: 0.7em 0; }
 .md-preview li { margin: 0.25em 0; }
 .md-preview blockquote {
   margin: 1em 0;
   padding: 0.4em 1em;
-  border-left: 3px solid #38bdf8;
-  color: #94a3b8;
-  background: rgba(56, 189, 248, 0.06);
+  border-left: 3px solid var(--accent);
+  color: var(--text-muted);
+  background: var(--accent-soft);
   border-radius: 0 8px 8px 0;
 }
 .md-preview code {
@@ -3503,7 +3503,7 @@ html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 html.public-dark,
 body.public-dark {
   background: var(--preview-bg) !important;
-  color: #e2e8f0;
+  color: var(--preview-text);
 }
 .public-modal-box.is-dark-preview,
 .public-modal-box.is-dark-preview.has-preview,
