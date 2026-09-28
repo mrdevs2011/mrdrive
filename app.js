@@ -586,7 +586,8 @@ function getFileKind(filename) {
   if (PDF_EXTENSIONS.includes(ext)) return "pdf";
   if (ext === "md" || ext === "markdown") return "markdown";
   // Same text/code set as isViewable() — public share gets dark text preview
-  if (["txt","json","js","mjs","cjs","jsx","ts","tsx","css","html","xml","py","java","c","cpp","h","go","rs","sh","yml","yaml","toml","ini","log","csv"].includes(ext)) return "code";
+  if (["txt","json","js","mjs","cjs","jsx","ts","tsx","css","html","xml","py","java","c","cpp","h","go","rs","sh","yml","yaml","toml","ini","log","csv","php","rb","sql","kt","swift","vue","env","bat","ps1","lua","dart","jsonl","conf","cfg"].includes(ext)) return "code";
+  if (window.OfficePreview && OfficePreview.type(filename)) return "office";
   return "other";
 }
 
@@ -600,7 +601,7 @@ function showPublicDownloadModal(token) {
           <div class="public-topbar-main">
             <div class="public-modal-icon is-loading" id="public-modal-icon">${ICON_SPINNER}</div>
             <div class="public-topbar-text">
-              <h2 id="public-filename">Loading…</h2>
+              <h2 id="public-filename">Yuklanmoqda…</h2>
               <p id="public-meta" class="public-meta"></p>
               <a class="public-brand-link" href="https://mrdrive.vercel.app" target="_blank" rel="noopener noreferrer" title="MRdrive">MRdrive</a>
             </div>
@@ -610,7 +611,7 @@ function showPublicDownloadModal(token) {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 20H21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             </button>
             <button id="public-download-btn" class="public-download-btn" disabled title="Yuklab olish" aria-label="Yuklab olish">${ICON_DOWNLOAD}</button>
-            <button id="public-fs-btn" class="public-fs-btn" title="Fullscreen" aria-label="Fullscreen" style="display:none;">${ICON_FULLSCREEN}</button>
+            <button id="public-fs-btn" class="public-fs-btn" title="To'liq ekran" aria-label="To'liq ekran" style="display:none;">${ICON_FULLSCREEN}</button>
           </div>
           <p id="public-status" class="public-status"></p>
         </div>
@@ -676,15 +677,15 @@ function showPublicDownloadModal(token) {
       // while the signed URL / media loads.
       const loaderEl = document.createElement("div");
       loaderEl.className = "public-loading";
-      loaderEl.innerHTML = `${ICON_SPINNER}<span>Loading preview…</span>`;
+      loaderEl.innerHTML = `${ICON_SPINNER}<span>Ko'rinish yuklanmoqda…</span>`;
       const hideLoader = () => {
         loaderEl.classList.add("is-hiding");
         setTimeout(() => loaderEl.remove(), 220);
       };
-      if (kind === "image" || kind === "video" || kind === "audio" || kind === "pdf" || kind === "markdown" || kind === "code") {
+      if (kind === "image" || kind === "video" || kind === "audio" || kind === "pdf" || kind === "markdown" || kind === "code" || kind === "office") {
         modalIcon.style.display = "none";
         modalBox.classList.add("has-preview");
-        if (kind === "markdown" || kind === "code") {
+        if (kind === "markdown" || kind === "code" || kind === "office") {
           applyTheme(getTheme());
           if (getTheme() === "dark") {
             modalBox.classList.add("is-dark-preview");
@@ -849,6 +850,30 @@ function showPublicDownloadModal(token) {
             statusEl.textContent = "Matn ko'rib bo'lmadi";
           }
         }
+      } else if (kind === "office") {
+        const { data: previewUrlData, error: previewUrlError } = await sb.storage
+          .from(BUCKET)
+          .createSignedUrl(data.storage_path, 3600);
+        if (previewUrlError || !previewUrlData) {
+          hideLoader();
+          modalBox.classList.remove("has-preview", "is-dark-preview"); document.documentElement.classList.remove("public-dark"); document.body.classList.remove("public-dark");
+          modalIcon.style.display = "";
+          modalIcon.classList.remove("is-loading");
+          modalIcon.innerHTML = ICON_DOWNLOAD;
+        } else {
+          try {
+            await renderPublicOffice(previewUrlData.signedUrl, previewWrap, data.filename);
+            hideLoader();
+            statusEl.textContent = "";
+            setupPublicControlsFade(modalBox, previewWrap, true);
+            fsBtn.style.display = "flex";
+            setupPublicFullscreen(fsBtn, modalBox, previewWrap);
+          } catch (err) {
+            console.error(err);
+            hideLoader();
+            statusEl.textContent = "Faylni ko'rib bo'lmadi";
+          }
+        }
       }
 
       downloadBtn.onclick = async () => {
@@ -908,7 +933,7 @@ function showPublicDownloadModal(token) {
           statusEl.textContent = "Yuklab olindi";
         } catch (err) {
           console.error(err);
-          statusEl.textContent = "Xato: " + (err.message || "download failed");
+          statusEl.textContent = "Xato: " + (err.message || "yuklab bo'lmadi");
         } finally {
           downloadBtn.disabled = false;
         }
@@ -953,6 +978,19 @@ async function renderPublicMarkdown(url, previewWrap, filename) {
     }
   }
   wrap.appendChild(body);
+  Array.from(previewWrap.children).forEach((c) => {
+    if (!c.classList.contains("public-loading")) c.remove();
+  });
+  previewWrap.appendChild(wrap);
+}
+
+async function renderPublicOffice(url, previewWrap, filename) {
+  const wrap = document.createElement("div");
+  wrap.className = "public-preview is-markdown is-office";
+  const root = document.createElement("div");
+  root.className = "office-root";
+  wrap.appendChild(root);
+  await OfficePreview.render(url, filename, root);
   Array.from(previewWrap.children).forEach((c) => {
     if (!c.classList.contains("public-loading")) c.remove();
   });
@@ -1686,7 +1724,7 @@ function createProgressItem(filename) {
       item.classList.add("error");
       fill.style.width = "100%";
       status.textContent = message || "Error";
-      item.title = "Click to dismiss";
+      item.title = "Yopish uchun bosing";
       item.addEventListener("click", () => item.remove());
       setTimeout(() => item.remove(), 10000);
     }
@@ -1720,9 +1758,9 @@ function uploadToStorage(path, file, accessToken, onProgress, upsert) {
       err.retryable = xhr.status >= 500 || xhr.status === 429 || xhr.status === 408;
       reject(err);
     };
-    xhr.onerror = () => { const e = new Error("Network error"); e.retryable = true; reject(e); };
+    xhr.onerror = () => { const e = new Error("Tarmoq xatosi"); e.retryable = true; reject(e); };
     xhr.onabort = () => {
-      const e = new Error("Upload cancelled");
+      const e = new Error("Yuklash bekor qilindi");
       e.cancelled = true;
       reject(e);
     };
@@ -1776,9 +1814,9 @@ function finishBatch() {
   if (ok + fail + skipped <= 1) return;   // single file: the row itself is feedback
   clearTimeout(reloadTimer);
   loadFiles();
-  const detail = [fail ? `${fail} failed` : "", skipped ? `${skipped} duplicates skipped` : ""]
+  const detail = [fail ? `${fail} ta xato` : "", skipped ? `${skipped} ta takror o'tkazib yuborildi` : ""]
     .filter(Boolean).join(" · ");
-  showToast(`${ok} files uploaded`, fail ? "warning" : "success", detail);
+  showToast(`${ok} ta fayl yuklandi`, fail ? "warning" : "success", detail);
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1841,7 +1879,7 @@ async function runUpload(file, fileId, targetFolder, ui) {
     if (ui.isCancelled()) return;
 
     const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error("Not logged in");
+    if (!session) throw new Error("Tizimga kirilmagan");
     const user = session.user;
 
     // Unique even for same-named files added in the same millisecond.
@@ -1888,7 +1926,7 @@ async function runUpload(file, fileId, targetFolder, ui) {
     if (dbError) {
       // Don't leave an orphan in the bucket that no row points to
       await sb.storage.from(BUCKET).remove([path]).catch(() => {});
-      throw new Error(`DB error: ${dbError.message}`);
+      throw new Error(`Baza xatosi: ${dbError.message}`);
     }
 
     if (ui.isCancelled()) {
@@ -2269,7 +2307,7 @@ async function loadFiles(silent) {
       console.warn("loadFiles auth blip (ignored):", filesRes.error.message);
       return;
     }
-    if (!silent) fileListEl.innerHTML = `<p>Error: ${filesRes.error.message}</p>`;
+    if (!silent) fileListEl.innerHTML = `<p>Xato: ${filesRes.error.message}</p>`;
     return;
   }
 
@@ -2352,7 +2390,7 @@ function renderToolbar() {
           </button>
         </div>
       `).join("")}
-      <button class="folder-tab new-folder-btn" onclick="createFolder()">+ Folder</button>
+      <button class="folder-tab new-folder-btn" onclick="createFolder()">+ Papka</button>
     </div>
   `;
 
@@ -2641,7 +2679,7 @@ async function moveFilesToFolder(fileIds, targetFolder, opts) {
 
   toMove.forEach((f) => { f.folder = next; });
   const label = next ? `"${next}"` : "All";
-  showToast(toMove.length === 1 ? `Moved to ${label}` : `Moved ${toMove.length} files to ${label}`);
+  showToast(toMove.length === 1 ? `${label} ga ko'chirildi` : `${toMove.length} ta fayl ${label} ga ko'chirildi`);
   setFolder(next);
   // Keep the moved files highlighted for a beat so the drop feels
   // confirmed, then fade the selection back to the default look.
@@ -2689,7 +2727,7 @@ async function createFolder(fileIds, opts) {
   const dropIds = Array.isArray(fileIds) ? fileIds.map(String) : null; // set when files were dropped on "+ Folder"
   const name = await showPrompt(dropIds ? "Papka nomini kiriting" : "Yangi papka", {
     okLabel: dropIds ? "Yaratish va ko'chirish" : "Yaratish",
-    placeholder: "Folder name"
+    placeholder: "Papka nomi"
   });
   if (name == null || !String(name).trim()) return;
   const trimmed = String(name).trim();
@@ -2736,7 +2774,7 @@ async function createFolder(fileIds, opts) {
     // Revert optimistic update on error
     allFolders = allFolders.filter(f => f.id !== optimisticFolder.id);
     renderToolbar();
-    showAlert("Error creating folder: " + error.message);
+    showAlert("Papka yaratishda xato: " + error.message);
     return;
   }
 
@@ -2854,22 +2892,22 @@ function renderFiles() {
       meta += ` · ${f.download_count} ${f.download_count === 1 ? "download" : "downloads"}`;
     }
     if (isPublic && !isExpired) {
-      meta += ` · <span class="public-badge">Public</span>`;
+      meta += ` · <span class="public-badge">Ommaviy</span>`;
       if (f.expires_at) {
-        meta += ` · <span class="expiry-badge">Until ${formatDate(f.expires_at)}</span>`;
+        meta += ` · <span class="expiry-badge">Gacha: ${formatDate(f.expires_at)}</span>`;
       } else {
-        meta += ` · <span class="expiry-badge">Unlimited</span>`;
+        meta += ` · <span class="expiry-badge">Cheksiz</span>`;
       }
     }
     if (isExpired) {
-      meta += ` · <span class="expired-badge">Expired</span>`;
+      meta += ` · <span class="expired-badge">Muddati tugagan</span>`;
     }
     if (f.folder) {
       meta += ` · <span class="folder-badge">${escapeHtml(f.folder)}</span>`;
     }
 
     return `
-    <div class="file-card${selectedFileIds.has(String(f.id)) ? ' selected' : ''}" data-file-id="${f.id}" draggable="true" title="Drag to a folder">
+    <div class="file-card${selectedFileIds.has(String(f.id)) ? ' selected' : ''}" data-file-id="${f.id}" draggable="true" title="Papkaga tortib olib boring">
       <div class="file-lead">
         ${fileLeadIconHtml(f)}
         <div class="file-info">
@@ -3005,7 +3043,7 @@ async function saveSelectedToFolder() {
       await w.write(it.blob);
       await w.close();
     }
-    showToast(`Saved ${items.length} file(s)`);
+    showToast(`${items.length} ta fayl saqlandi`);
   } catch (err) {
     if (err && err.name === "AbortError") return;
     showAlert("Xato: " + (err.message || err));
@@ -3583,13 +3621,13 @@ async function downloadFile(id, path, filename) {
 async function explainDeleteFailure(id) {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) {
-    return { message: "Error: your session is gone. Log out, log in again, then retry." };
+    return { message: "Xato: sessiya tugagan. Chiqib, qayta kiring va yana urinib ko'ring." };
   }
 
   const { data: row } = await sb.from(TABLE).select("user_id, is_public").eq("id", id).maybeSingle();
 
   if (!row) {
-    return { refresh: true, message: "This file record no longer exists (already deleted?). The list was refreshed." };
+    return { refresh: true, message: "Bu fayl yozuvi endi mavjud emas (allaqachon o'chirilganmi?). Ro'yxat yangilandi." };
   }
 
   const me = user.user_metadata?.username || user.user_metadata?.name || "this account";
@@ -3597,17 +3635,17 @@ async function explainDeleteFailure(id) {
   if (row.user_id !== user.id) {
     return {
       message:
-        "Error: this file belongs to a DIFFERENT account, so you can't delete it.\n\n" +
-        `You are logged in as "${me}". It only shows up here because it is public. ` +
-        "Log in with the account that uploaded it."
+        "Xato: bu fayl BOSHQA akkauntga tegishli, shuning uchun uni o'chira olmaysiz.\n\n" +
+        `Siz "${me}" sifatida kirgansiz. U bu yerda faqat ommaviy bo'lgani uchun ko'rinyapti. ` +
+        "Uni yuklagan akkaunt bilan kiring."
     };
   }
 
   return {
     message:
-      "Error: you own this file, but the database still refuses the delete.\n\n" +
-      "The delete policy on the \"files\" table is missing or different. " +
-      "It has to be fixed in the Supabase dashboard (fix-delete.sql)."
+      "Xato: bu fayl sizniki, lekin ma'lumotlar bazasi baribir o'chirishga ruxsat bermayapti.\n\n" +
+      "\"files\" jadvalidagi o'chirish siyosati yo'q yoki boshqacha. " +
+      "Buni Supabase panelida tuzatish kerak (fix-delete.sql)."
   };
 }
 
@@ -4181,8 +4219,8 @@ function showFileContextMenu(clientX, clientY, ids) {
     <button type="button" class="ctx-item" role="menuitem" data-action="download">
       ${ICON_DOWNLOAD}<span>${dlLabel}</span>
     </button>
-    <button type="button" class="ctx-item" role="menuitem" data-action="move" title="Drag to a folder tab">
-      ${ICON_FOLDER}<span>${n === 1 ? "Drag to folder" : `Drag ${n} files to folder`}</span>
+    <button type="button" class="ctx-item" role="menuitem" data-action="move" title="Papka tabiga tortib olib boring">
+      ${ICON_FOLDER}<span>${n === 1 ? "Papkaga tortish" : `${n} ta faylni papkaga tortish`}</span>
     </button>
     ${getFilteredFiles().length > n ? `<button type="button" class="ctx-item" role="menuitem" data-action="selectall">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg><span>Hammasini tanlash</span>
@@ -4210,7 +4248,7 @@ function showFileContextMenu(clientX, clientY, ids) {
   menu.querySelector('[data-action="download"]').addEventListener("click", async (e) => {
     e.stopPropagation();
     hideFileContextMenu();
-    showToast(n === 1 ? "Yuklab olinmoqda…" : `Preparing ${n} files…`);
+    showToast(n === 1 ? "Yuklab olinmoqda…" : `${n} ta fayl tayyorlanmoqda…`);
     await downloadSelectedZip(ids);
   });
 
@@ -4225,7 +4263,7 @@ function showFileContextMenu(clientX, clientY, ids) {
     hideFileContextMenu();
     selectedFileIds = new Set(getFilteredFiles().map((f) => String(f.id)));
     updateSelectionClasses();
-    showToast(`${selectedFileIds.size} files selected`);
+    showToast(`${selectedFileIds.size} ta fayl tanlandi`);
   });
 
   menu.querySelector('[data-action="delete"]').addEventListener("click", async (e) => {
@@ -4269,7 +4307,7 @@ function showFolderPicker(fileIds) {
       <div class="modal-box folder-picker-box">
         <h3 class="prompt-title"></h3>
         <div class="folder-picker-list"></div>
-        <button type="button" class="prompt-btn prompt-btn-cancel folder-picker-cancel">Cancel</button>
+        <button type="button" class="prompt-btn prompt-btn-cancel folder-picker-cancel">Bekor qilish</button>
       </div>
     </div>`;
   modal.querySelector(".prompt-title").textContent =
@@ -4291,9 +4329,9 @@ function showFolderPicker(fileIds) {
     list.appendChild(b);
   };
 
-  addItem("All (no folder)", allIn(null), () => moveFilesToFolder(ids, null, { animate: true }));
+  addItem("Hammasi (papkasiz)", allIn(null), () => moveFilesToFolder(ids, null, { animate: true }));
   allFolders.forEach((f) => addItem(f.name, allIn(f.name), () => moveFilesToFolder(ids, f.name, { animate: true })));
-  addItem("+ New folder", false, () => createFolder(ids, { animate: true }), "folder-picker-new");
+  addItem("+ Yangi papka", false, () => createFolder(ids, { animate: true }), "folder-picker-new");
 
   modal.querySelector(".folder-picker-cancel").addEventListener("click", close);
   modal.querySelector(".modal-backdrop").addEventListener("click", (e) => {
@@ -4351,15 +4389,15 @@ async function deleteSelectedFiles(ids, clickX, clickY, opts) {
     const { error: storageError } = await sb.storage.from(BUCKET).remove(paths);
     if (storageError) {
       showToast(
-        list.length === 1 ? "Fayl o'chirildi" : `${list.length} files deleted`,
+        list.length === 1 ? "Fayl o'chirildi" : `${list.length} ta fayl o'chirildi`,
         "warning",
         "Xotirani tozalashda xato: " + storageError.message
       );
     } else {
-      showToast(list.length === 1 ? "Fayl o'chirildi" : `${list.length} files deleted`);
+      showToast(list.length === 1 ? "Fayl o'chirildi" : `${list.length} ta fayl o'chirildi`);
     }
   } else {
-    showToast(list.length === 1 ? "Fayl o'chirildi" : `${list.length} files deleted`);
+    showToast(list.length === 1 ? "Fayl o'chirildi" : `${list.length} ta fayl o'chirildi`);
   }
 
   const gone = new Set((deletedRows || []).map((r) => String(r.id)));
@@ -4397,7 +4435,7 @@ async function createPublicLink(fileId) {
     .single();
 
   if (error || !file) {
-    showAlert("Error: file not found.");
+    showAlert("Xato: fayl topilmadi.");
     return;
   }
 
@@ -4435,7 +4473,7 @@ async function copyPublicLink(fileId, btn) {
     .single();
 
   if (error || !file || !file.public_token) {
-    showAlert("Error: link not found.");
+    showAlert("Xato: havola topilmadi.");
     return;
   }
 
@@ -4466,7 +4504,7 @@ async function refreshPublicLink(fileId) {
     .single();
 
   if (error || !file) {
-    showAlert("Error: file not found.");
+    showAlert("Xato: fayl topilmadi.");
     return;
   }
 
@@ -4528,7 +4566,7 @@ function showConfirm(message, okLabel = "OK", opts = {}) {
           <p class="confirm-msg"></p>
           ${skippable ? `<label class="confirm-skip"><input type="checkbox" class="confirm-skip-cb"><span>O'chirishdan oldin so'ramaslik.</span></label>` : ""}
           <div class="confirm-actions">
-            <button type="button" class="confirm-cancel">Cancel</button>
+            <button type="button" class="confirm-cancel">Bekor qilish</button>
             <button type="button" class="confirm-ok"></button>
           </div>
         </div>
@@ -4662,15 +4700,15 @@ function showDurationPicker(onSelect) {
   modal.innerHTML = `
     <div class="modal-backdrop">
       <div class="modal-box">
-        <h3>Link expiry</h3>
-        <p class="modal-desc">How long should the link work?</p>
+        <h3>Havola muddati</h3>
+        <p class="modal-desc">Havola qancha vaqt ishlasin?</p>
         <div class="duration-options">
-          <button data-value="1">1 day</button>
-          <button data-value="7">7 days</button>
-          <button data-value="30">30 days</button>
-          <button data-value="unlimited" class="default-opt">Unlimited</button>
+          <button data-value="1">1 kun</button>
+          <button data-value="7">7 kun</button>
+          <button data-value="30">30 kun</button>
+          <button data-value="unlimited" class="default-opt">Cheksiz</button>
         </div>
-        <button class="modal-cancel" onclick="document.getElementById('duration-modal').remove()">Cancel</button>
+        <button class="modal-cancel" onclick="document.getElementById('duration-modal').remove()">Bekor qilish</button>
       </div>
     </div>
   `;
@@ -4874,7 +4912,8 @@ function isViewable(filename) {
   if (/\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|weba)$/i.test(lower)) return "audio";
   if (/\.pdf$/i.test(lower)) return "pdf";
   if (/\.(md|markdown)$/i.test(lower)) return "markdown";
-  if (/\.(txt|json|js|ts|css|html|xml|py|java|c|cpp|h|go|rs|sh|yml|yaml|toml|ini|log|csv)$/i.test(lower)) return "code";
+  if (/\.(txt|json|js|ts|css|html|xml|py|java|c|cpp|h|go|rs|sh|yml|yaml|toml|ini|log|csv|jsx|tsx|mjs|cjs|php|rb|sql|kt|swift|vue|env|bat|ps1|lua|dart|jsonl|conf|cfg)$/i.test(lower)) return "code";
+  if (window.OfficePreview && OfficePreview.type(filename)) return "office";
   return null;
 }
 
@@ -4886,7 +4925,9 @@ const CODE_LANG_MAP = {
   py: "python", java: "java", c: "c", h: "c", cpp: "cpp",
   go: "go", rs: "rust", sh: "bash", yml: "yaml", yaml: "yaml",
   toml: "ini", ini: "ini", md: "markdown", log: "plaintext",
-  csv: "plaintext", txt: "plaintext"
+  csv: "plaintext", txt: "plaintext",
+  php: "php", rb: "ruby", sql: "sql", kt: "kotlin", swift: "swift", vue: "xml", lua: "lua",
+  jsonl: "json", conf: "ini", cfg: "ini", env: "ini"
 };
 
 // Above this size, skip syntax coloring (plain dark text stays instant and
@@ -4987,11 +5028,13 @@ async function openAnnotationViewer(file, kind, opts) {
   // stay dark. Toggled via a class so CSS owns the actual colors.
   // Kind class is also on the viewer so topbar / status / toolbar can match.
   const workspaceEl = document.getElementById("annot-workspace");
-  const kindClasses = ["kind-image", "kind-video", "kind-audio", "kind-pdf", "kind-code", "kind-markdown"];
+  const kindClasses = ["kind-image", "kind-video", "kind-audio", "kind-pdf", "kind-code", "kind-markdown", "kind-office"];
   workspaceEl.classList.remove(...kindClasses);
   workspaceEl.classList.add("kind-" + kind);
+  if (kind === "office") workspaceEl.classList.add("kind-markdown");
   viewer.classList.remove(...kindClasses);
   viewer.classList.add("kind-" + kind);
+  if (kind === "office") viewer.classList.add("kind-markdown");
 
   // View-only by default (drawing off). Pen toggles drawing on/off like
   // the public share preview. Save/download stays visible for image/pdf.
@@ -4999,7 +5042,7 @@ async function openAnnotationViewer(file, kind, opts) {
   const editBtn = document.getElementById("annot-edit");
   const saveBtn = document.getElementById("annot-save");
   toolbar.style.display = "none";
-  const isReadOnly = kind === "code" || kind === "markdown" || kind === "video" || kind === "audio";
+  const isReadOnly = kind === "code" || kind === "markdown" || kind === "office" || kind === "video" || kind === "audio";
   if (saveBtn) saveBtn.style.display = isReadOnly ? "none" : "";
   editBtn.classList.remove("is-edit", "is-save", "active");
   editBtn.title = "Tahrirlash";
@@ -5036,7 +5079,7 @@ async function openAnnotationViewer(file, kind, opts) {
       const { data: urlData, error } = await sb.storage
         .from(BUCKET)
         .createSignedUrl(file.storage_path, 3600);
-      if (error || !urlData) throw error || new Error("Could not get file URL");
+      if (error || !urlData) throw error || new Error("Fayl manzilini olib bo'lmadi");
       signedUrl = urlData.signedUrl;
       if (kind === "image") {
         // Cache it so the next open (and the list thumbnail) reuses this same URL.
@@ -5046,28 +5089,32 @@ async function openAnnotationViewer(file, kind, opts) {
 
     if (kind === "image") {
       await loadImageForAnnot(signedUrl, scroll, loader);
-      statusHint.textContent = "1 barmoq = chizish · 2 barmoq = surish · Pinch = zoom";
+      statusHint.textContent = "1 barmoq = chizish · 2 barmoq = surish · Chimchilash = zoom";
     } else if (kind === "pdf") {
       await loadPdfForAnnot(signedUrl, scroll, loader);
       statusHint.textContent = "Chizmalar sahifaga yopishadi · 1 barmoq chizish · 2 barmoq surish";
     } else if (kind === "code") {
       scroll.classList.add("is-text");
       await loadCodeForAnnot(signedUrl, scroll, loader, file.filename);
-      statusHint.textContent = "Dark mode kod ko'rinishi · Faqat o'qish";
+      statusHint.textContent = "Qorong'i rejimdagi kod ko'rinishi · Faqat o'qish";
       // Hide drawing tools for code
       toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
     } else if (kind === "markdown") {
       scroll.classList.add("is-text", "is-markdown");
       await loadMarkdownForAnnot(signedUrl, scroll, loader, file.filename);
-      statusHint.textContent = "Markdown preview · Preview / Manba";
+      statusHint.textContent = "Markdown ko'rinishi · Ko'rinish / Manba";
       toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
+    } else if (kind === "office") {
+      scroll.classList.add("is-text", "is-markdown");
+      await loadOfficeForAnnot(signedUrl, scroll, loader, file.filename);
+      statusHint.textContent = "Office ko'rinishi · Faqat o'qish";
     } else if (kind === "video") {
       await loadVideoForAnnot(signedUrl, scroll);
       statusHint.textContent = "Video ko'rish · Faqat o'qish";
       toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
     } else if (kind === "audio") {
       await loadAudioForAnnot(signedUrl, scroll, file);
-      statusHint.textContent = "Tinglash · Play / pauza · Takrorlash";
+      statusHint.textContent = "Tinglash · Ijro / pauza · Takrorlash";
       toolbar.querySelectorAll(".annot-tool-group.draw-tools").forEach(g => g.style.display = "none");
     }
   } catch (err) {
@@ -5386,7 +5433,7 @@ function buildAnnotToolbar(toolbar) {
     <button class="annot-tool" id="annot-zoom-in" data-tip="Kattalashtirish" title="Kattalashtirish">
       <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21L16.5 16.5M11 8V14M8 11H14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
-    <button class="annot-tool" id="annot-zoom-reset" data-tip="100% ga qaytarish" title="Reset">
+    <button class="annot-tool" id="annot-zoom-reset" data-tip="100% ga qaytarish" title="Asliga qaytarish">
       <svg viewBox="0 0 24 24" fill="none"><path d="M4 12C4 7.58172 7.58172 4 12 4C16.4183 4 20 7.58172 20 12C20 16.4183 16.4183 20 12 20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 12L7 9M4 12L7 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
   `;
@@ -5616,7 +5663,7 @@ async function loadImageForAnnot(url, scroll, loader) {
 
 async function loadPdfForAnnot(url, scroll, loader) {
   if (!window.pdfjsLib) {
-    loader.innerHTML = `<span style="color:#64748b">PDF.js failed to load</span>`;
+    loader.innerHTML = `<span style="color:#64748b">PDF.js yuklanmadi</span>`;
     return;
   }
   const loadingTask = pdfjsLib.getDocument(url);
@@ -5702,11 +5749,11 @@ function mountMrAudioPlayer(host, opts) {
       <canvas class="mr-audio-wave-canvas"></canvas>
     </div>
     <div class="mr-audio-time">00:00 / 00:00</div>
-    <div class="mr-audio-progress" role="slider" aria-label="Progress">
+    <div class="mr-audio-progress" role="slider" aria-label="Jarayon">
       <div class="mr-audio-progress-fill"></div>
     </div>
     <div class="mr-audio-controls">
-      <button type="button" class="mr-audio-btn mr-audio-play" data-act="play" title="Play">${svgIcon(MR_AUDIO_ICONS.play)}</button>
+      <button type="button" class="mr-audio-btn mr-audio-play" data-act="play" title="Ijro etish">${svgIcon(MR_AUDIO_ICONS.play)}</button>
     </div>
   `;
   root.querySelector(".mr-audio-title").textContent = audioDisplayName(filename);
@@ -6364,6 +6411,17 @@ async function loadVideoForAnnot(url, scroll) {
   scroll.appendChild(page);
 }
 
+async function loadOfficeForAnnot(url, scroll, loader, filename) {
+  const wrap = document.createElement("div");
+  wrap.className = "annot-md-wrap office-wrap";
+  const root = document.createElement("div");
+  root.className = "office-root";
+  wrap.appendChild(root);
+  await OfficePreview.render(url, filename, root);
+  scroll.innerHTML = "";
+  scroll.appendChild(wrap);
+}
+
 async function loadCodeForAnnot(url, scroll, loader, filename) {
   const res = await fetch(url);
   const text = await res.text();
@@ -6507,7 +6565,7 @@ function mountMdTopbarControls(lines, preview, sourceWrap, codeEl) {
       preview.style.display = "none";
       sourceWrap.style.display = "";
       btn.dataset.mode = "source";
-      btn.textContent = "Preview";
+      btn.textContent = "Ko'rinish";
       if (window.hljs && !codeEl.dataset.hl) {
         try { hljs.highlightElement(codeEl); codeEl.dataset.hl = "1"; } catch (_) {}
       }

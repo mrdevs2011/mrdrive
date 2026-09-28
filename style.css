@@ -3774,3 +3774,54 @@ html[data-theme="light"] .annot-viewer.kind-video .annot-workspace,
 html[data-theme="light"] .annot-viewer.kind-audio .annot-workspace {
   background: var(--bg);
 }
+
+/* ── Office preview (xlsx / docx / pptx / zip / ipynb) — follows light/dark theme ── */
+.annot-md-wrap.office-wrap { max-width: none; padding: 16px 16px 48px; }
+.public-preview.is-office { padding: 12px 12px 40px; }
+.office-root {
+  --o-text: var(--preview-text, var(--text));
+  --o-bg: var(--preview-bg, var(--bg));
+  color: var(--o-text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.office-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 10px; }
+.office-tab {
+  flex: none; border: 1px solid var(--border); background: transparent; color: inherit;
+  padding: 6px 12px; border-radius: 8px; font: inherit; cursor: pointer;
+}
+.office-tab.on { background: var(--neutral-soft); font-weight: 600; }
+.office-pane { overflow: auto; max-height: calc(100vh - 150px); border: 1px solid var(--border); border-radius: 8px; }
+.office-table { border-collapse: collapse; table-layout: fixed; font-size: 13px; background: transparent; }
+.office-table td, .office-table th {
+  border: 1px solid var(--border); padding: 4px 8px; vertical-align: middle;
+  overflow-wrap: anywhere; background: transparent;
+}
+.office-table thead th, .office-table tbody th {
+  position: sticky; background: var(--o-bg); font-weight: 400;
+  color: color-mix(in srgb, currentColor 55%, transparent);
+}
+.office-table thead th { top: 0; z-index: 2; }
+.office-table tbody th { left: 0; z-index: 1; }
+.office-table .office-rn { width: 44px; }
+.office-table td.num, .office-list td.num { text-align: right; }
+.office-table td img {
+  display: block; max-width: 100%; max-height: 360px; margin: 0 auto 4px;
+  object-fit: contain; border-radius: 4px;
+}
+.office-note { opacity: .6; font-size: 13px; }
+.office-doc { max-width: 860px; margin: 0 auto; line-height: 1.7; font-size: 15.5px; overflow-wrap: anywhere; }
+.office-doc h1, .office-doc h2, .office-doc h3 { line-height: 1.3; margin: 1.2em 0 .5em; }
+.office-doc table { border-collapse: collapse; margin: 1em 0; max-width: 100%; }
+.office-doc td, .office-doc th { border: 1px solid var(--border); padding: 6px 10px; }
+.office-doc img { max-width: 100%; height: auto; }
+.office-doc a { color: var(--accent-strong, var(--primary)); }
+.office-slide { max-width: 860px; margin: 0 auto 16px; padding: 18px 24px; border: 1px solid var(--border); border-radius: 10px; }
+.office-slide-n { font-size: 12px; opacity: .55; margin-bottom: 8px; }
+.office-slide p { margin: .4em 0; }
+.office-slide img { display: block; max-width: 100%; margin: 10px 0; border-radius: 6px; }
+.office-list { width: 100%; max-width: 860px; margin: 0 auto; border-collapse: collapse; font-size: 13px; }
+.office-list td { border-bottom: 1px solid var(--border); padding: 6px 8px; overflow-wrap: anywhere; }
+.office-cell { max-width: 900px; margin: 0 auto 12px; }
+.office-cell pre { margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; overflow: auto; font-size: 13px; }
+.office-out { margin-top: 6px; opacity: .9; }
+.office-out img { max-width: 100%; }
